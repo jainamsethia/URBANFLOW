@@ -1,0 +1,13 @@
+UrbanFlow
+Copyright 2026 UrbanFlow contributors
+
+This product is original software licensed under the Apache License, Version 2.0.
+
+Acknowledgement
+---------------
+UrbanFlow's feature set and terminology were informed by studying the behaviour and
+architecture of CityFlow (https://github.com/cityflow-project/CityFlow, Apache License 2.0),
+a multi-agent reinforcement-learning environment for large-scale city traffic scenarios.
+No CityFlow source code is included in or derived into UrbanFlow; CityFlow was used as a
+behavioural and architectural reference only. The optional CityFlow importer reads CityFlow's
+public JSON file formats.

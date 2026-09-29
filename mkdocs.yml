@@ -1,0 +1,47 @@
+site_name: UrbanFlow
+site_description: Python-first microscopic city traffic simulation and research workbench
+repo_name: urbanflow
+docs_dir: docs
+strict: true
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+  palette:
+    - scheme: default
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.arithmatex:
+      generic: true
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - Scenario format: scenario-format.md
+  - Road network: road-network.md
+  - Vehicle model: vehicle-model.md
+  - Simulation model: simulation-model.md
+  - Python API: python-api.md
+  - Command line: cli.md
+  - Contributing: contributing.md

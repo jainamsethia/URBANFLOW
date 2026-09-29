@@ -1,0 +1,1694 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:urbanflow:scenario:1.0",
+  "title": "UrbanFlow scenario 1.0",
+  "$defs": {
+    "ConnectionSpec": {
+      "additionalProperties": false,
+      "description": "A lane-to-lane connector through an intersection.",
+      "properties": {
+        "from_lane": {
+          "description": "Lane index on the incoming road.",
+          "minimum": 0,
+          "title": "From Lane",
+          "type": "integer"
+        },
+        "to_lane": {
+          "description": "Lane index on the outgoing road.",
+          "minimum": 0,
+          "title": "To Lane",
+          "type": "integer"
+        },
+        "shape": {
+          "anyOf": [
+            {
+              "items": {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "maximum": 10000000.0,
+                    "minimum": -10000000.0,
+                    "type": "number"
+                  },
+                  {
+                    "maximum": 10000000.0,
+                    "minimum": -10000000.0,
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              "minItems": 2,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Explicit connector polyline [[x, y], ...]; null = cubic Bezier from the lane ends.",
+          "title": "Shape"
+        }
+      },
+      "required": [
+        "from_lane",
+        "to_lane"
+      ],
+      "title": "ConnectionSpec",
+      "type": "object"
+    },
+    "ControllerSpec": {
+      "additionalProperties": false,
+      "description": "Signal controller: a registry name plus its parameters.",
+      "properties": {
+        "type": {
+          "default": "fixed_time",
+          "description": "Registered controller (fixed_time, actuated, max_pressure, webster, external, ...).",
+          "minLength": 1,
+          "title": "Type",
+          "type": "string"
+        },
+        "params": {
+          "additionalProperties": true,
+          "description": "Controller parameters, checked against the controller's Params model (deep check).",
+          "title": "Params",
+          "type": "object"
+        }
+      },
+      "title": "ControllerSpec",
+      "type": "object"
+    },
+    "DemandSpec": {
+      "additionalProperties": false,
+      "description": "Traffic demand. Flow, trip and transit ids share one namespace.",
+      "properties": {
+        "flows": {
+          "default": [],
+          "description": "Vehicle flows.",
+          "items": {
+            "$ref": "#/$defs/FlowSpec"
+          },
+          "title": "Flows",
+          "type": "array"
+        },
+        "trips": {
+          "default": [],
+          "description": "Individual trips.",
+          "items": {
+            "$ref": "#/$defs/TripSpec"
+          },
+          "title": "Trips",
+          "type": "array"
+        },
+        "transit": {
+          "default": [],
+          "description": "Transit lines.",
+          "items": {
+            "$ref": "#/$defs/TransitLineSpec"
+          },
+          "title": "Transit",
+          "type": "array"
+        }
+      },
+      "title": "DemandSpec",
+      "type": "object"
+    },
+    "DriveSide": {
+      "description": "Side of the road vehicles drive on; lanes stack from the median toward this side.",
+      "enum": [
+        "right",
+        "left"
+      ],
+      "title": "DriveSide",
+      "type": "string"
+    },
+    "FlowSpec": {
+      "additionalProperties": false,
+      "description": "A stream of vehicles.",
+      "properties": {
+        "id": {
+          "description": "Flow id; vehicles are \"{flow}.{k}\".",
+          "pattern": "^[A-Za-z0-9_.:>\\-]{1,128}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "vehicle_type": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9_.:>\\-]{1,128}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Vehicle type; \"car\" when neither this nor type_mix is given.",
+          "title": "Vehicle Type"
+        },
+        "type_mix": {
+          "anyOf": [
+            {
+              "minProperties": 1,
+              "patternProperties": {
+                "^[A-Za-z0-9_.:>\\-]{1,128}$": {
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                }
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "type id -> weight, sampled per vehicle (mutually exclusive with vehicle_type).",
+          "title": "Type Mix"
+        },
+        "route": {
+          "anyOf": [
+            {
+              "items": {
+                "pattern": "^[A-Za-z0-9_.:>\\-]{1,128}$",
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Fixed road sequence.",
+          "title": "Route"
+        },
+        "routes": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/RouteChoiceSpec"
+              },
+              "maxItems": 64,
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Route distribution; one entry is drawn per vehicle at spawn.",
+          "title": "Routes"
+        },
+        "origin": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9_.:>\\-]{1,128}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Origin road (the router resolves the path at departure).",
+          "title": "Origin"
+        },
+        "destination": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9_.:>\\-]{1,128}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Destination road.",
+          "title": "Destination"
+        },
+        "via": {
+          "default": [],
+          "description": "Ordered waypoint roads (origin/destination mode only).",
+          "items": {
+            "pattern": "^[A-Za-z0-9_.:>\\-]{1,128}$",
+            "type": "string"
+          },
+          "title": "Via",
+          "type": "array"
+        },
+        "rate": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Vehicles per hour.",
+          "title": "Rate"
+        },
+        "period": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Seconds between vehicles (instead of rate).",
+          "title": "Period"
+        },
+        "arrival": {
+          "default": "uniform",
+          "description": "Arrival process: uniform, poisson or binomial.",
+          "enum": [
+            "uniform",
+            "poisson",
+            "binomial"
+          ],
+          "title": "Arrival",
+          "type": "string"
+        },
+        "begin": {
+          "default": 0.0,
+          "description": "First possible departure, s.",
+          "minimum": 0,
+          "title": "Begin",
+          "type": "number"
+        },
+        "end": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "End of the half-open window [begin, end), s; null = until the simulation ends.",
+          "title": "End"
+        },
+        "count": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Maximum number of vehicles.",
+          "title": "Count"
+        },
+        "depart_lane": {
+          "anyOf": [
+            {
+              "enum": [
+                "best",
+                "random",
+                "first"
+              ],
+              "type": "string"
+            },
+            {
+              "minimum": 0,
+              "type": "integer"
+            }
+          ],
+          "default": "best",
+          "description": "best, random, first or a lane index.",
+          "title": "Depart Lane"
+        },
+        "depart_speed": {
+          "anyOf": [
+            {
+              "const": "max",
+              "type": "string"
+            },
+            {
+              "minimum": 0,
+              "type": "number"
+            }
+          ],
+          "default": "max",
+          "description": "max (insertion-safe) or a speed in m/s.",
+          "title": "Depart Speed"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "FlowSpec",
+      "type": "object"
+    },
+    "GeneratorInfo": {
+      "additionalProperties": false,
+      "description": "Provenance written by generators and importers.",
+      "properties": {
+        "name": {
+          "description": "Generator or importer name.",
+          "title": "Name",
+          "type": "string"
+        },
+        "params": {
+          "additionalProperties": true,
+          "description": "Parameters it was called with.",
+          "title": "Params",
+          "type": "object"
+        },
+        "urbanflow_version": {
+          "description": "UrbanFlow version that produced the file.",
+          "title": "Urbanflow Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "urbanflow_version"
+      ],
+      "title": "GeneratorInfo",
+      "type": "object"
+    },
+    "IntersectionKind": {
+      "description": "Control kind of an intersection (``int_kind``).",
+      "enum": [
+        "signalized",
+        "priority",
+        "uncontrolled",
+        "boundary"
+      ],
+      "title": "IntersectionKind",
+      "type": "string"
+    },
+    "IntersectionSpec": {
+      "additionalProperties": false,
+      "description": "A node of the road network.",
+      "properties": {
+        "id": {
+          "description": "Intersection id.",
+          "pattern": "^[A-Za-z0-9_.:>\\-]{1,128}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "point": {
+          "description": "Centre [x, y], m.",
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "maximum": 10000000.0,
+              "minimum": -10000000.0,
+              "type": "number"
+            },
+            {
+              "maximum": 10000000.0,
+              "minimum": -10000000.0,
+              "type": "number"
+            }
+          ],
+          "title": "Point",
+          "type": "array"
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IntersectionKind"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "signalized, priority, uncontrolled or boundary; derived from topology."
+        },
+        "radius": {
+          "anyOf": [
+            {
+              "maximum": 200.0,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Stop-line distance from point, m; derived: widest incident road + 2 m.",
+          "title": "Radius"
+        },
+        "major_roads": {
+          "anyOf": [
+            {
+              "items": {
+                "pattern": "^[A-Za-z0-9_.:>\\-]{1,128}$",
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Incoming roads with right of way (priority kind); derived.",
+          "title": "Major Roads"
+        },
+        "movements": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/MovementSpec"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Movements; when present the list is authoritative (all or nothing).",
+          "title": "Movements"
+        },
+        "signal": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SignalSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Signal (signalized only); derived for signalized intersections."
+        }
+      },
+      "required": [
+        "id",
+        "point"
+      ],
+      "title": "IntersectionSpec",
+      "type": "object"
+    },
+    "LaneSpec": {
+      "additionalProperties": false,
+      "description": "One lane; lane 0 is the median (innermost) lane.",
+      "properties": {
+        "width": {
+          "anyOf": [
+            {
+              "maximum": 5.0,
+              "minimum": 2.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Lane width, m (2-5); derived: the road's lane_width.",
+          "title": "Width"
+        },
+        "speed_limit": {
+          "anyOf": [
+            {
+              "maximum": 70.0,
+              "minimum": 1.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Speed limit, m/s (1-70); derived: the road's speed_limit.",
+          "title": "Speed Limit"
+        }
+      },
+      "title": "LaneSpec",
+      "type": "object"
+    },
+    "MetaSpec": {
+      "additionalProperties": false,
+      "description": "Descriptive metadata; excluded from the content hash.",
+      "properties": {
+        "name": {
+          "description": "Scenario name.",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "description": "Free-text description.",
+          "maxLength": 10000,
+          "title": "Description",
+          "type": "string"
+        },
+        "tags": {
+          "default": [],
+          "description": "Free-form tags.",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Tags",
+          "type": "array"
+        },
+        "authors": {
+          "default": [],
+          "description": "Authors.",
+          "items": {
+            "type": "string"
+          },
+          "title": "Authors",
+          "type": "array"
+        },
+        "generator": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GeneratorInfo"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Provenance (set by generators and importers)."
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "MetaSpec",
+      "type": "object"
+    },
+    "MovementSpec": {
+      "additionalProperties": false,
+      "description": "A road-to-road turn at an intersection.",
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9_.:>\\-]{1,128}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Movement id; derived: \"{from_road}->{to_road}\".",
+          "title": "Id"
+        },
+        "from_road": {
+          "description": "Incoming road (ends at this intersection).",
+          "pattern": "^[A-Za-z0-9_.:>\\-]{1,128}$",
+          "title": "From Road",
+          "type": "string"
+        },
+        "to_road": {
+          "description": "Outgoing road (starts at this intersection).",
+          "pattern": "^[A-Za-z0-9_.:>\\-]{1,128}$",
+          "title": "To Road",
+          "type": "string"
+        },
+        "turn": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TurnKind"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "straight, left, right or uturn; derived from geometry."
+        },
+        "priority": {
+          "anyOf": [
+            {
+              "enum": [
+                "major",
+                "minor"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Right of way at priority intersections; derived from major_roads.",
+          "title": "Priority"
+        },
+        "connections": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ConnectionSpec"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Lane connections; derived from the lane mapping rules.",
+          "title": "Connections"
+        }
+      },
+      "required": [
+        "from_road",
+        "to_road"
+      ],
+      "title": "MovementSpec",
+      "type": "object"
+    },
+    "NetworkSpec": {
+      "additionalProperties": false,
+      "description": "The road network.",
+      "properties": {
+        "drive_side": {
+          "$ref": "#/$defs/DriveSide",
+          "default": "right",
+          "description": "Side of the road vehicles drive on (right or left)."
+        },
+        "lane_width": {
+          "default": 3.2,
+          "description": "Default lane width, m.",
+          "maximum": 5.0,
+          "minimum": 2.0,
+          "title": "Lane Width",
+          "type": "number"
+        },
+        "speed_limit": {
+          "default": 13.89,
+          "description": "Default speed limit, m/s.",
+          "maximum": 70.0,
+          "minimum": 1.0,
+          "title": "Speed Limit",
+          "type": "number"
+        },
+        "allow_uturns": {
+          "default": false,
+          "description": "Also derive U-turn movements.",
+          "title": "Allow Uturns",
+          "type": "boolean"
+        },
+        "intersections": {
+          "description": "Intersections (nodes).",
+          "items": {
+            "$ref": "#/$defs/IntersectionSpec"
+          },
+          "maxItems": 200000,
+          "minItems": 1,
+          "title": "Intersections",
+          "type": "array"
+        },
+        "roads": {
+          "description": "Roads (directed edges).",
+          "items": {
+            "$ref": "#/$defs/RoadSpec"
+          },
+          "maxItems": 500000,
+          "minItems": 1,
+          "title": "Roads",
+          "type": "array"
+        }
+      },
+      "required": [
+        "intersections",
+        "roads"
+      ],
+      "title": "NetworkSpec",
+      "type": "object"
+    },
+    "PhaseSpec": {
+      "additionalProperties": false,
+      "description": "A signal phase: the movements that have green.",
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9_.:>\\-]{1,128}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Phase id; derived: \"p{k}\".",
+          "title": "Id"
+        },
+        "green": {
+          "description": "movement id -> \"G\" (protected) or \"g\" (permissive); unlisted movements are red.",
+          "minProperties": 1,
+          "patternProperties": {
+            "^[A-Za-z0-9_.:>\\-]{1,128}$": {
+              "enum": [
+                "G",
+                "g"
+              ],
+              "type": "string"
+            }
+          },
+          "title": "Green",
+          "type": "object"
+        },
+        "duration": {
+          "default": 30.0,
+          "description": "Fixed-time green, s.",
+          "exclusiveMinimum": 0,
+          "maximum": 600.0,
+          "title": "Duration",
+          "type": "number"
+        },
+        "min_green": {
+          "anyOf": [
+            {
+              "maximum": 120.0,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Minimum green, s; inherits the signal's min_green.",
+          "title": "Min Green"
+        },
+        "max_green": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 600.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Maximum green, s; inherits the signal's max_green.",
+          "title": "Max Green"
+        }
+      },
+      "required": [
+        "green"
+      ],
+      "title": "PhaseSpec",
+      "type": "object"
+    },
+    "RoadSpec": {
+      "additionalProperties": false,
+      "description": "A one-way road from one intersection to another.",
+      "properties": {
+        "id": {
+          "description": "Road id.",
+          "pattern": "^[A-Za-z0-9_.:>\\-]{1,128}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "from": {
+          "description": "Start intersection.",
+          "pattern": "^[A-Za-z0-9_.:>\\-]{1,128}$",
+          "title": "From",
+          "type": "string"
+        },
+        "to": {
+          "description": "End intersection.",
+          "pattern": "^[A-Za-z0-9_.:>\\-]{1,128}$",
+          "title": "To",
+          "type": "string"
+        },
+        "points": {
+          "anyOf": [
+            {
+              "items": {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "maximum": 10000000.0,
+                    "minimum": -10000000.0,
+                    "type": "number"
+                  },
+                  {
+                    "maximum": 10000000.0,
+                    "minimum": -10000000.0,
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              "maxItems": 10000,
+              "minItems": 2,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Median-edge polyline [[x, y], ...], m; derived: straight between the intersections.",
+          "title": "Points"
+        },
+        "lanes": {
+          "description": "Lanes from the median outward; [{}, {}] is two default lanes.",
+          "items": {
+            "$ref": "#/$defs/LaneSpec"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Lanes",
+          "type": "array"
+        },
+        "speed_limit": {
+          "anyOf": [
+            {
+              "maximum": 70.0,
+              "minimum": 1.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Default lane speed limit, m/s; derived: network.speed_limit.",
+          "title": "Speed Limit"
+        },
+        "lane_width": {
+          "anyOf": [
+            {
+              "maximum": 5.0,
+              "minimum": 2.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Default lane width, m; derived: network.lane_width.",
+          "title": "Lane Width"
+        },
+        "name": {
+          "default": "",
+          "description": "Street name for display.",
+          "maxLength": 200,
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "from",
+        "to",
+        "lanes"
+      ],
+      "title": "RoadSpec",
+      "type": "object"
+    },
+    "RouteChoiceSpec": {
+      "additionalProperties": false,
+      "description": "One entry of a flow's route distribution.",
+      "properties": {
+        "roads": {
+          "description": "Fully connected road sequence.",
+          "items": {
+            "pattern": "^[A-Za-z0-9_.:>\\-]{1,128}$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Roads",
+          "type": "array"
+        },
+        "weight": {
+          "description": "Relative weight (normalised over the distribution).",
+          "exclusiveMinimum": 0,
+          "title": "Weight",
+          "type": "number"
+        }
+      },
+      "required": [
+        "roads",
+        "weight"
+      ],
+      "title": "RouteChoiceSpec",
+      "type": "object"
+    },
+    "SignalSpec": {
+      "additionalProperties": false,
+      "description": "Traffic signal of a signalized intersection.",
+      "properties": {
+        "controller": {
+          "$ref": "#/$defs/ControllerSpec",
+          "description": "Controller type and parameters."
+        },
+        "phases": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/PhaseSpec"
+              },
+              "maxItems": 32,
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Phases in cycle order; derived from template when omitted.",
+          "title": "Phases"
+        },
+        "template": {
+          "default": "auto",
+          "description": "Phase template used when phases are omitted.",
+          "enum": [
+            "auto",
+            "two_phase",
+            "protected_left",
+            "split"
+          ],
+          "title": "Template",
+          "type": "string"
+        },
+        "yellow": {
+          "default": 3.0,
+          "description": "Yellow interval, s (inserted automatically for movements losing green).",
+          "maximum": 10.0,
+          "minimum": 0,
+          "title": "Yellow",
+          "type": "number"
+        },
+        "all_red": {
+          "default": 1.0,
+          "description": "All-red interval after yellow, s.",
+          "maximum": 10.0,
+          "minimum": 0,
+          "title": "All Red",
+          "type": "number"
+        },
+        "min_green": {
+          "default": 5.0,
+          "description": "Minimum green, s.",
+          "maximum": 120.0,
+          "minimum": 0,
+          "title": "Min Green",
+          "type": "number"
+        },
+        "max_green": {
+          "default": 60.0,
+          "description": "Maximum green, s (> min_green).",
+          "exclusiveMinimum": 0,
+          "maximum": 600.0,
+          "title": "Max Green",
+          "type": "number"
+        },
+        "initial_phase": {
+          "default": 0,
+          "description": "Index of the phase active at t = 0.",
+          "minimum": 0,
+          "title": "Initial Phase",
+          "type": "integer"
+        }
+      },
+      "title": "SignalSpec",
+      "type": "object"
+    },
+    "SimulationSpec": {
+      "additionalProperties": false,
+      "description": "Scenario-level defaults of the run configuration (same fields as SimulationConfig).",
+      "properties": {
+        "dt": {
+          "default": 1.0,
+          "description": "Step length, s (W701 outside 0.2-1.0 s).",
+          "maximum": 2.0,
+          "minimum": 0.1,
+          "title": "Dt",
+          "type": "number"
+        },
+        "duration": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 3600.0,
+          "description": "Simulated time, s; null runs until demand is exhausted and the network is empty.",
+          "title": "Duration"
+        },
+        "seed": {
+          "default": 0,
+          "description": "Root seed of every random stream.",
+          "maximum": 9223372036854775807,
+          "minimum": 0,
+          "title": "Seed",
+          "type": "integer"
+        },
+        "car_following": {
+          "default": "idm",
+          "description": "Registered car-following model.",
+          "title": "Car Following",
+          "type": "string"
+        },
+        "lane_change_model": {
+          "default": "mobil",
+          "description": "Registered lane-change model.",
+          "title": "Lane Change Model",
+          "type": "string"
+        },
+        "lane_changing": {
+          "default": true,
+          "description": "Enable lane changes.",
+          "title": "Lane Changing",
+          "type": "boolean"
+        },
+        "router": {
+          "default": "shortest",
+          "description": "Registered router.",
+          "title": "Router",
+          "type": "string"
+        },
+        "routing_weight": {
+          "default": "freeflow_time",
+          "description": "Edge weight of the shortest-path router.",
+          "enum": [
+            "length",
+            "freeflow_time"
+          ],
+          "title": "Routing Weight",
+          "type": "string"
+        },
+        "halting_speed": {
+          "default": 0.1,
+          "description": "Vehicles slower than this are halting, m/s.",
+          "minimum": 0,
+          "title": "Halting Speed",
+          "type": "number"
+        },
+        "deadlock_timeout": {
+          "default": 300.0,
+          "description": "Teleport vehicles stuck this long, s; 0 turns the watchdog off.",
+          "minimum": 0,
+          "title": "Deadlock Timeout",
+          "type": "number"
+        },
+        "max_vehicles": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Cap on running vehicles; extra demand queues.",
+          "title": "Max Vehicles"
+        }
+      },
+      "title": "SimulationSpec",
+      "type": "object"
+    },
+    "SpeedFactorSpec": {
+      "additionalProperties": false,
+      "description": "Per-vehicle speed factor f ~ N(mean, std) clipped to [min, max] (min <= mean <= max).",
+      "properties": {
+        "mean": {
+          "default": 1.0,
+          "description": "Mean speed factor.",
+          "exclusiveMinimum": 0,
+          "title": "Mean",
+          "type": "number"
+        },
+        "std": {
+          "default": 0.1,
+          "description": "Standard deviation.",
+          "minimum": 0,
+          "title": "Std",
+          "type": "number"
+        },
+        "min": {
+          "default": 0.8,
+          "description": "Lower clip.",
+          "exclusiveMinimum": 0,
+          "title": "Min",
+          "type": "number"
+        },
+        "max": {
+          "default": 1.2,
+          "description": "Upper clip.",
+          "exclusiveMinimum": 0,
+          "title": "Max",
+          "type": "number"
+        }
+      },
+      "title": "SpeedFactorSpec",
+      "type": "object"
+    },
+    "StopSpec": {
+      "additionalProperties": false,
+      "description": "A transit stop on one of the line's roads.",
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9_.:>\\-]{1,128}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Stop id; derived: \"{line}.{k}\".",
+          "title": "Id"
+        },
+        "road": {
+          "description": "Road on the line's route.",
+          "pattern": "^[A-Za-z0-9_.:>\\-]{1,128}$",
+          "title": "Road",
+          "type": "string"
+        },
+        "position": {
+          "description": "Where the bus front stops, m along the trimmed lane.",
+          "minimum": 0,
+          "title": "Position",
+          "type": "number"
+        },
+        "lane": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Lane index; derived: the curb lane (n-1).",
+          "title": "Lane"
+        },
+        "dwell": {
+          "default": 20.0,
+          "description": "Dwell time, s.",
+          "minimum": 0,
+          "title": "Dwell",
+          "type": "number"
+        }
+      },
+      "required": [
+        "road",
+        "position"
+      ],
+      "title": "StopSpec",
+      "type": "object"
+    },
+    "TransitLineSpec": {
+      "additionalProperties": false,
+      "description": "A bus line with scheduled departures and stops.",
+      "properties": {
+        "id": {
+          "description": "Line id; vehicles are \"{line}.{k}\".",
+          "pattern": "^[A-Za-z0-9_.:>\\-]{1,128}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "vehicle_type": {
+          "default": "bus",
+          "description": "Vehicle type.",
+          "pattern": "^[A-Za-z0-9_.:>\\-]{1,128}$",
+          "title": "Vehicle Type",
+          "type": "string"
+        },
+        "route": {
+          "description": "Road sequence (always explicit).",
+          "items": {
+            "pattern": "^[A-Za-z0-9_.:>\\-]{1,128}$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Route",
+          "type": "array"
+        },
+        "stops": {
+          "description": "Stops in route order.",
+          "items": {
+            "$ref": "#/$defs/StopSpec"
+          },
+          "minItems": 1,
+          "title": "Stops",
+          "type": "array"
+        },
+        "headway": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Seconds between departures.",
+          "title": "Headway"
+        },
+        "departures": {
+          "anyOf": [
+            {
+              "items": {
+                "minimum": 0,
+                "type": "number"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Explicit departure times, s (sorted).",
+          "title": "Departures"
+        },
+        "begin": {
+          "default": 0.0,
+          "description": "First departure, s.",
+          "minimum": 0,
+          "title": "Begin",
+          "type": "number"
+        },
+        "end": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "No departures at or after this time, s.",
+          "title": "End"
+        },
+        "depart_lane": {
+          "anyOf": [
+            {
+              "enum": [
+                "best",
+                "random",
+                "first"
+              ],
+              "type": "string"
+            },
+            {
+              "minimum": 0,
+              "type": "integer"
+            }
+          ],
+          "default": "best",
+          "description": "best, random, first or a lane index.",
+          "title": "Depart Lane"
+        }
+      },
+      "required": [
+        "id",
+        "route",
+        "stops"
+      ],
+      "title": "TransitLineSpec",
+      "type": "object"
+    },
+    "TripSpec": {
+      "additionalProperties": false,
+      "description": "A single vehicle with a fixed departure time.",
+      "properties": {
+        "id": {
+          "description": "Trip id (also the vehicle id).",
+          "pattern": "^[A-Za-z0-9_.:>\\-]{1,128}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "depart": {
+          "description": "Departure time, s.",
+          "minimum": 0,
+          "title": "Depart",
+          "type": "number"
+        },
+        "vehicle_type": {
+          "default": "car",
+          "description": "Vehicle type.",
+          "pattern": "^[A-Za-z0-9_.:>\\-]{1,128}$",
+          "title": "Vehicle Type",
+          "type": "string"
+        },
+        "route": {
+          "anyOf": [
+            {
+              "items": {
+                "pattern": "^[A-Za-z0-9_.:>\\-]{1,128}$",
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Fixed road sequence.",
+          "title": "Route"
+        },
+        "origin": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9_.:>\\-]{1,128}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Origin road.",
+          "title": "Origin"
+        },
+        "destination": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9_.:>\\-]{1,128}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Destination road.",
+          "title": "Destination"
+        },
+        "via": {
+          "default": [],
+          "description": "Ordered waypoint roads (origin/destination mode only).",
+          "items": {
+            "pattern": "^[A-Za-z0-9_.:>\\-]{1,128}$",
+            "type": "string"
+          },
+          "title": "Via",
+          "type": "array"
+        },
+        "depart_lane": {
+          "anyOf": [
+            {
+              "enum": [
+                "best",
+                "random",
+                "first"
+              ],
+              "type": "string"
+            },
+            {
+              "minimum": 0,
+              "type": "integer"
+            }
+          ],
+          "default": "best",
+          "description": "best, random, first or a lane index.",
+          "title": "Depart Lane"
+        },
+        "depart_speed": {
+          "anyOf": [
+            {
+              "const": "max",
+              "type": "string"
+            },
+            {
+              "minimum": 0,
+              "type": "number"
+            }
+          ],
+          "default": "max",
+          "description": "max (insertion-safe) or a speed in m/s.",
+          "title": "Depart Speed"
+        }
+      },
+      "required": [
+        "id",
+        "depart"
+      ],
+      "title": "TripSpec",
+      "type": "object"
+    },
+    "TurnKind": {
+      "description": "Turn of a movement (``mov_turn``).",
+      "enum": [
+        "straight",
+        "left",
+        "right",
+        "uturn"
+      ],
+      "title": "TurnKind",
+      "type": "string"
+    },
+    "VehicleClass": {
+      "description": "Vehicle class (``VehicleTypeSpec.vclass``); selects energy and palette defaults.",
+      "enum": [
+        "car",
+        "bus",
+        "truck",
+        "emergency"
+      ],
+      "title": "VehicleClass",
+      "type": "string"
+    },
+    "VehicleTypeSpec": {
+      "additionalProperties": false,
+      "description": "A vehicle type; fields you set override the built-in type with the same id.",
+      "properties": {
+        "id": {
+          "description": "Type id (car, bus, truck and emergency are built in).",
+          "pattern": "^[A-Za-z0-9_.:>\\-]{1,128}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "vclass": {
+          "$ref": "#/$defs/VehicleClass",
+          "default": "car",
+          "description": "car, bus, truck or emergency."
+        },
+        "length": {
+          "default": 5.0,
+          "description": "Length, m.",
+          "exclusiveMinimum": 0,
+          "maximum": 30.0,
+          "title": "Length",
+          "type": "number"
+        },
+        "width": {
+          "default": 1.8,
+          "description": "Width, m.",
+          "exclusiveMinimum": 0,
+          "maximum": 4.0,
+          "title": "Width",
+          "type": "number"
+        },
+        "max_speed": {
+          "default": 36.1,
+          "description": "Maximum speed, m/s; effective v0 = min(max_speed, limit x speed_factor).",
+          "exclusiveMinimum": 0,
+          "maximum": 70.0,
+          "title": "Max Speed",
+          "type": "number"
+        },
+        "accel": {
+          "default": 1.5,
+          "description": "IDM maximum acceleration a, m/s^2.",
+          "exclusiveMinimum": 0,
+          "maximum": 10.0,
+          "title": "Accel",
+          "type": "number"
+        },
+        "decel": {
+          "default": 2.0,
+          "description": "IDM comfortable deceleration b, m/s^2.",
+          "exclusiveMinimum": 0,
+          "maximum": 10.0,
+          "title": "Decel",
+          "type": "number"
+        },
+        "emergency_decel": {
+          "default": 6.0,
+          "description": "Physical braking bound, m/s^2 (>= decel).",
+          "exclusiveMinimum": 0,
+          "maximum": 15.0,
+          "title": "Emergency Decel",
+          "type": "number"
+        },
+        "min_gap": {
+          "default": 2.0,
+          "description": "Jam distance s0, m.",
+          "maximum": 20.0,
+          "minimum": 0,
+          "title": "Min Gap",
+          "type": "number"
+        },
+        "headway": {
+          "default": 1.5,
+          "description": "Desired time headway T, s.",
+          "exclusiveMinimum": 0,
+          "maximum": 10.0,
+          "title": "Headway",
+          "type": "number"
+        },
+        "speed_factor": {
+          "$ref": "#/$defs/SpeedFactorSpec",
+          "description": "Speed factor distribution, sampled per vehicle from the spawning flow's stream."
+        },
+        "politeness": {
+          "default": 0.2,
+          "description": "MOBIL politeness p.",
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Politeness",
+          "type": "number"
+        },
+        "lc_threshold": {
+          "default": 0.1,
+          "description": "MOBIL threshold a_th, m/s^2.",
+          "maximum": 5.0,
+          "minimum": 0,
+          "title": "Lc Threshold",
+          "type": "number"
+        },
+        "lc_safe_decel": {
+          "default": 4.0,
+          "description": "MOBIL safe deceleration b_safe, m/s^2.",
+          "exclusiveMinimum": 0,
+          "maximum": 15.0,
+          "title": "Lc Safe Decel",
+          "type": "number"
+        },
+        "model_params": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "description": "Model-specific extras such as delta (checked by the deep validation).",
+          "title": "Model Params",
+          "type": "object"
+        },
+        "color": {
+          "anyOf": [
+            {
+              "pattern": "^#[0-9A-Fa-f]{6}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "#RRGGBB; null uses the per-class palette.",
+          "title": "Color"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "VehicleTypeSpec",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "An UrbanFlow scenario (format urbanflow.scenario, version 1.0).",
+  "properties": {
+    "$schema": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Ignored; an editor hint only.",
+      "title": "$Schema"
+    },
+    "format": {
+      "const": "urbanflow.scenario",
+      "description": "Always \"urbanflow.scenario\".",
+      "title": "Format",
+      "type": "string"
+    },
+    "version": {
+      "description": "Format version \"MAJOR.MINOR\".",
+      "pattern": "^\\d+\\.\\d+$",
+      "title": "Version",
+      "type": "string"
+    },
+    "meta": {
+      "$ref": "#/$defs/MetaSpec",
+      "description": "Name, description, tags and provenance."
+    },
+    "simulation": {
+      "$ref": "#/$defs/SimulationSpec",
+      "description": "Scenario-level simulation defaults."
+    },
+    "network": {
+      "$ref": "#/$defs/NetworkSpec",
+      "description": "Road network."
+    },
+    "vehicle_types": {
+      "default": [],
+      "description": "Vehicle types, merged over the built-ins by id.",
+      "items": {
+        "$ref": "#/$defs/VehicleTypeSpec"
+      },
+      "maxItems": 256,
+      "title": "Vehicle Types",
+      "type": "array"
+    },
+    "demand": {
+      "$ref": "#/$defs/DemandSpec",
+      "description": "Flows, trips and transit lines."
+    }
+  },
+  "required": [
+    "format",
+    "version",
+    "meta",
+    "network"
+  ],
+  "type": "object"
+}

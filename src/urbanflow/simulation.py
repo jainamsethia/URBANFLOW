@@ -1,0 +1,484 @@
+"""The :class:`Simulation` facade: load, deep-check, compile, build and drive a run (AA 5.3).
+
+Thin composition only: the engine owns the state and the step pipeline; the facade adds
+the lifecycle (``done``, ``reset``, ``close``), ``run()`` with progress, per-step caches
+of the read views and the run summary. Control calls made between steps take effect in
+the next step (AA 5.5).
+"""
+
+from __future__ import annotations
+
+import contextlib
+import logging
+import math
+import os
+import time as wall_clock
+from collections.abc import Callable, Iterator, Mapping
+from dataclasses import dataclass
+from typing import Any, Self, Unpack
+
+import numpy as np
+
+from urbanflow.checks import deep_check
+from urbanflow.core import constants as C
+from urbanflow.core.config import ConfigOverrides, SimulationConfig, resolve_config
+from urbanflow.core.errors import ConfigError, SimulationError
+from urbanflow.core.events import EventType
+from urbanflow.core.rng import RngStreams
+from urbanflow.core.types import FloatArray, IntArray
+from urbanflow.engine import Engine
+from urbanflow.results import SimulationResult, provenance
+from urbanflow.routing import Router, router_registry
+from urbanflow.scenario.scenario import Scenario
+from urbanflow.scenario.schema import ScenarioSpec
+from urbanflow.vehicles import VehicleTypes, car_following_registry
+from urbanflow.views import (
+    LaneCollection,
+    NetworkInfo,
+    RoadCollection,
+    StateArrays,
+    StepCache,
+    VehicleCollection,
+)
+
+__all__ = ["MetricsAPI", "ProgressCallback", "ProgressInfo", "Simulation"]
+
+_log = logging.getLogger("urbanflow.simulation")
+_ARRIVED = EventType.vehicle_arrived.code
+_INSERTED = EventType.vehicle_inserted.code
+
+
+@dataclass(frozen=True, slots=True)
+class ProgressInfo:
+    """What a ``run(progress=callback)`` callback receives (about every 0.1 s, and last)."""
+
+    time: float
+    end_time: float | None
+    """Time at which this ``run()`` stops; None when it runs until the network drains."""
+    step_count: int
+    running: int
+    arrived: int
+    steps_per_s: float
+    """Steps per wall-clock second in this ``run()`` call."""
+
+
+ProgressCallback = Callable[[ProgressInfo], None]
+
+
+class MetricsAPI:
+    """``sim.metrics``: the run summary, accumulated from each step's events.
+
+    ponytail: summary only (counts and arrived-trip travel times); the metrics subsystem
+    replaces it with timeseries, lane and trip tables behind the same ``summary()``.
+    """
+
+    def __init__(self, engine: Engine) -> None:
+        self._engine = engine
+        self.reset()
+
+    def reset(self) -> None:
+        """Forget everything (called on simulation reset)."""
+        self._counts = np.zeros(len(EventType), dtype=np.int64)
+        self._uids: list[IntArray] = []
+        self._depart: list[FloatArray] = []
+        self._insert: list[FloatArray] = []
+        self._arrive: list[FloatArray] = []
+
+    def update(self) -> None:
+        """Account the events of the step that just finished."""
+        events, veh = self._engine.events, self._engine.vehicles
+        kind = events.type
+        self._counts += np.bincount(kind, minlength=len(EventType))[: len(EventType)]
+        arrived = kind == _ARRIVED
+        if arrived.any():
+            h = events.handle[arrived].astype(np.intp)  # rows stay intact until next step
+            self._uids.append(events.uid[arrived].astype(np.int64))
+            self._depart.append(veh.depart_time[h])
+            self._insert.append(veh.insert_time[h])
+            self._arrive.append(events.time[arrived].copy())
+
+    def arrived_uids(self) -> IntArray:
+        """Uids of the arrived vehicles, in arrival order."""
+        return np.concatenate(self._uids) if self._uids else np.zeros(0, dtype=np.int64)
+
+    def event_counts(self) -> dict[str, int]:
+        """Events per type name, cumulative since reset."""
+        return {t.value: int(n) for t, n in zip(EventType, self._counts.tolist(), strict=True)}
+
+    def summary(self) -> dict[str, float]:
+        """Flattened summary (B.2 #13): vehicle counts, travel time over arrived trips
+        (``arrive - insert``) and network throughput. Trips departing before
+        ``metrics.warmup`` and arrivals before it are excluded from the travel-time and
+        throughput figures (J.1)."""
+        eng = self._engine
+        warmup = eng.config.metrics.warmup
+        depart = np.concatenate(self._depart) if self._depart else np.zeros(0)
+        arrive = np.concatenate(self._arrive) if self._arrive else np.zeros(0)
+        insert = np.concatenate(self._insert) if self._insert else np.zeros(0)
+        travel = (arrive - insert)[depart >= warmup]
+        window = eng.time - warmup
+        nan = math.nan
+        return {
+            "vehicles.generated": eng.generated,
+            "vehicles.inserted": int(self._counts[_INSERTED]),
+            "vehicles.arrived": eng.arrived,
+            "vehicles.en_route": int(np.count_nonzero(eng.vehicles.active)),
+            "vehicles.backlog": eng.backlog,
+            "vehicles.removed": eng.removed,
+            "vehicles.teleported": eng.teleported,
+            "travel_time.mean": float(travel.mean()) if travel.size else nan,
+            "travel_time.median": float(np.median(travel)) if travel.size else nan,
+            "travel_time.p95": (
+                float(np.percentile(travel, C.SUMMARY_PERCENTILE)) if travel.size else nan
+            ),
+            "travel_time.std": float(travel.std()) if travel.size else nan,
+            "throughput_vph": (
+                C.SECONDS_PER_HOUR * int(np.count_nonzero(arrive >= warmup)) / window
+                if window > 0
+                else nan
+            ),
+        }
+
+
+def _as_scenario(
+    source: Scenario | ScenarioSpec | Mapping[str, Any] | str | os.PathLike[str],
+) -> Scenario:
+    if isinstance(source, Scenario):
+        return source
+    if isinstance(source, ScenarioSpec):
+        return Scenario.from_spec(source)
+    if isinstance(source, Mapping):
+        return Scenario.from_dict(source)
+    return Scenario.load(source)
+
+
+def _check_supported(config: SimulationConfig) -> None:
+    """Config features scheduled for later versions fail by name instead of being ignored."""
+    if config.record.enabled:
+        raise ConfigError("recording replays (record.enabled) is not available in this version")
+    if config.metrics.collectors != ("default",):
+        names = ", ".join(config.metrics.collectors)
+        raise ConfigError(
+            f"custom metric collectors ({names}) are not available in this version; "
+            'use metrics.collectors = ["default"]'
+        )
+
+
+class Simulation:
+    """One simulation run: scenario + config + engine + read views (plan AA 5.3).
+
+    ``scenario`` is a :class:`Scenario`, a ``ScenarioSpec``, a scenario mapping or a file
+    path. The config is resolved as defaults < ``scenario.simulation`` < ``config`` (its set
+    fields) < ``router`` < ``**overrides``; ``router`` may also be a :class:`Router`
+    instance. The constructor deep-checks the scenario (``urbanflow.check``; errors raise
+    ``ScenarioValidationError``), compiles the network, builds the engine and resets to
+    ``config.seed``.
+    """
+
+    # mypy flags the `router` key of ConfigOverrides as overlapping the explicit parameter;
+    # the parameter wins for callers, who are still type-checked against ConfigOverrides.
+    def __init__(  # type: ignore[misc]
+        self,
+        scenario: Scenario | ScenarioSpec | Mapping[str, Any] | str | os.PathLike[str],
+        config: SimulationConfig | None = None,
+        *,
+        router: str | Router | None = None,
+        **overrides: Unpack[ConfigOverrides],
+    ) -> None:
+        self.scenario = _as_scenario(scenario)
+        name = (
+            router
+            if router is None or isinstance(router, str)
+            else getattr(type(router), "name", type(router).__name__)
+        )
+        self.config: SimulationConfig = resolve_config(
+            ("scenario", self.scenario.spec.simulation),
+            ("config", config),
+            ("router", None if name is None else {"router": name}),
+            ("overrides", dict(overrides)),
+        )
+        _check_supported(self.config)
+        report, network = deep_check(
+            self.scenario, self.config, check_router=router is None or isinstance(router, str)
+        )
+        source = str(self.scenario.path) if self.scenario.path else self.scenario.name
+        report.raise_for_errors(source=source)
+        if network is None:  # pragma: no cover - a network that fails to compile has errors
+            raise SimulationError("the network did not compile")
+        for warning in report.warnings:
+            if warning not in self.scenario.issues:
+                _log.warning("%s: %s: %s", source, warning.path, warning.message)
+        cfg = self.config
+        model = car_following_registry.get(cfg.car_following)
+        if router is None or isinstance(router, str):
+            router_obj: Router = router_registry.get(cfg.router)()
+        else:
+            router_obj = router
+        self._engine = Engine(
+            network,
+            cfg,
+            rng=RngStreams(cfg.seed),
+            router=router_obj,
+            car_following=model(),
+            types=VehicleTypes.from_specs(
+                network.vehicle_types, model.Params, model=cfg.car_following
+            ),
+            demand=self.scenario.resolved.demand,
+        )
+        dt, duration = cfg.dt, cfg.duration
+        self._n_steps = None if duration is None else math.floor(duration / dt + C.TIME_EPS)
+        self._cache: StepCache = {}
+        self.metrics = MetricsAPI(self._engine)
+        """Run summary (``sim.metrics.summary()``)."""
+        self.network = NetworkInfo(network, self._engine.graph)
+        self.vehicles = VehicleCollection(self._engine, self._cache, self.metrics.arrived_uids)
+        self.lanes = LaneCollection(self._engine, self._cache)
+        self.roads = RoadCollection(self._engine, self._cache)
+        self.state = StateArrays(self._engine, self._cache)
+        self._closed = False
+        self._clear(cfg.seed)
+        _log.info(
+            "simulation initialised",
+            extra={
+                "scenario": self.scenario.name,
+                "seed": cfg.seed,
+                "dt": cfg.dt,
+                "duration": cfg.duration,
+                "accel": cfg.accel,
+            },
+        )
+
+    @classmethod
+    def from_scenario(cls, source: Scenario | str | os.PathLike[str], **kwargs: Any) -> Simulation:
+        """Same as ``Simulation(source, **kwargs)`` (e.g. with ``urbanflow.bundled(name)``)."""
+        return cls(source, **kwargs)
+
+    # ------------------------------------------------------------------ read-only state
+    @property
+    def seed(self) -> int:
+        """Root seed of the current run (``reset(seed)`` changes it)."""
+        return self._seed
+
+    @property
+    def dt(self) -> float:
+        return self.config.dt
+
+    @property
+    def time(self) -> float:
+        """Simulated time, s: ``step_count * dt``."""
+        return self._engine.time
+
+    @property
+    def step_count(self) -> int:
+        return self._engine.step_count
+
+    @property
+    def end_time(self) -> float | None:
+        """``floor(duration / dt) * dt``; None when the run lasts until the network drains."""
+        return None if self._n_steps is None else self._n_steps * self.config.dt
+
+    @property
+    def done(self) -> bool:
+        """The time limit is reached, or (``duration=None``) the network has drained."""
+        if self._n_steps is None:
+            return self.is_drained()
+        return self.step_count >= self._n_steps
+
+    def is_done(self) -> bool:
+        """Same as :attr:`done`."""
+        return self.done
+
+    def is_drained(self) -> bool:
+        """Demand is exhausted and no vehicle is running or waiting (ignores the limit)."""
+        eng = self._engine
+        return eng.demand_exhausted and not eng.vehicles.active.any()
+
+    # ------------------------------------------------------------------ lifecycle
+    def _clear(self, seed: int) -> None:
+        self._seed = seed
+        self._corrupted = False
+        self._interrupted = False
+        self._wall = 0.0
+        self._cache.clear()
+        self.metrics.reset()
+        _log.debug("simulation reset", extra={"seed": seed, "dt": self.config.dt})
+
+    def reset(self, seed: int | None = None) -> None:
+        """Fresh runtime from the cached network; ``seed=None`` reuses the current seed.
+
+        Re-seeds every random stream and clears vehicles, counters and the summary, so
+        repeated ``reset()`` reproduces the run.
+        """
+        if self._closed:
+            raise SimulationError("the simulation is closed")
+        seed = self._seed if seed is None else seed
+        if seed < 0:
+            raise ConfigError(f"seed must be >= 0 (got {seed})")
+        self._engine.reset(seed)
+        self._clear(seed)
+
+    def _check_steppable(self) -> None:
+        if self._closed:
+            raise SimulationError("the simulation is closed")
+        if self._corrupted:
+            raise SimulationError(
+                "the simulation state is corrupted (an exception interrupted a step); "
+                "call reset() before stepping again"
+            )
+
+    def _step_once(self) -> None:
+        start = wall_clock.perf_counter()
+        try:
+            self._engine.step()
+            self.metrics.update()
+        except BaseException as exc:  # e.g. Ctrl-C mid-kernel: must reset()
+            self._corrupted = True
+            self._interrupted = isinstance(exc, KeyboardInterrupt)
+            raise
+        finally:
+            self._wall += wall_clock.perf_counter() - start
+            self._cache.clear()
+
+    def step(self, n: int = 1) -> None:
+        """Advance ``n`` steps (stopping early once :attr:`done`).
+
+        Raises ``SimulationError`` if the simulation is already done, closed or corrupted.
+        """
+        self._check_steppable()
+        if self.done:
+            raise SimulationError(
+                f"the simulation is done (t={self.time:g} s); call reset() to run again"
+            )
+        if n < 1:
+            raise SimulationError(f"n must be >= 1 (got {n})")
+        for _ in range(n):
+            self._step_once()
+            if self.done:
+                break
+
+    def run(
+        self,
+        until: float | None = None,
+        *,
+        duration: float | None = None,
+        progress: bool | ProgressCallback = False,
+    ) -> SimulationResult:
+        """Step until the absolute time ``until``, for ``duration`` more seconds, or (both
+        None) until :attr:`done`; never past the time limit. Returns :meth:`get_results`.
+
+        ``progress=True`` draws a progress bar on stderr; a callable receives a
+        :class:`ProgressInfo` about every 0.1 s and once at the end.
+        """
+        self._check_steppable()
+        if until is not None and duration is not None:
+            raise ConfigError("run() takes until or duration, not both")
+        target = until if duration is None else self.time + duration
+        if target is not None and not math.isfinite(target):
+            raise ConfigError(f"run() needs a finite time (got {target})")
+        dt = self.config.dt
+        stop = None if target is None else max(self.step_count, math.ceil(target / dt - C.TIME_EPS))
+        if self._n_steps is not None:
+            stop = self._n_steps if stop is None else min(stop, self._n_steps)
+        first, start = self.step_count, wall_clock.perf_counter()
+
+        def info() -> ProgressInfo:
+            elapsed = wall_clock.perf_counter() - start
+            eng = self._engine
+            return ProgressInfo(
+                time=self.time,
+                end_time=None if stop is None else stop * dt,
+                step_count=self.step_count,
+                running=int(np.count_nonzero(eng.vehicles.active)),
+                arrived=eng.arrived,
+                steps_per_s=(self.step_count - first) / elapsed if elapsed > 0 else 0.0,
+            )
+
+        try:
+            with _reporter(progress, None if stop is None else stop * dt) as report:
+                shown = start
+                while not self.done and (stop is None or self.step_count < stop):
+                    self._step_once()
+                    now = wall_clock.perf_counter()
+                    if report is not None and now - shown >= C.PROGRESS_REFRESH_S:
+                        report(info())
+                        shown = now
+                if report is not None:
+                    report(info())
+        except KeyboardInterrupt:  # between steps too (progress, callbacks)
+            self._interrupted = True
+            raise
+        result = self.get_results()
+        _log.info(
+            "run finished",
+            extra={
+                "sim_time": result.sim_time,
+                "wall_s": round(result.wall_time, 3),
+                "steps_per_s": round(info().steps_per_s),
+                "arrived": self._engine.arrived,
+            },
+        )
+        return result
+
+    def close(self) -> None:
+        """Release the simulation; later ``step``/``run``/``reset`` raise. Idempotent."""
+        self._closed = True
+        self._cache.clear()
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
+
+    # ------------------------------------------------------------------ results
+    def get_results(self) -> SimulationResult:
+        """Results so far (partial if not done; ``interrupted`` after Ctrl-C)."""
+        return SimulationResult(
+            scenario_name=self.scenario.name,
+            scenario_hash=self.scenario.content_hash,
+            config=self.config,
+            seed=self._seed,
+            sim_time=self.time,
+            steps=self.step_count,
+            wall_time=self._wall,
+            interrupted=self._interrupted,
+            summary=self.metrics.summary(),
+            event_counts=self.metrics.event_counts(),
+            provenance=provenance(),
+        )
+
+    def __repr__(self) -> str:
+        state = "closed" if self._closed else f"t={self.time:g}s"
+        return f"Simulation({self.scenario.name!r}, seed={self._seed}, {state})"
+
+
+@contextlib.contextmanager
+def _reporter(
+    progress: bool | ProgressCallback, total: float | None
+) -> Iterator[ProgressCallback | None]:
+    """The progress sink of one ``run()``: a callback, a rich bar on stderr, or None."""
+    if progress is False:
+        yield None
+        return
+    if callable(progress):
+        yield progress
+        return
+    from rich.console import Console
+    from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, TimeElapsedColumn
+
+    columns = (
+        TextColumn("Running"),
+        BarColumn(),
+        TaskProgressColumn(),
+        TextColumn("{task.fields[info]}"),
+        TimeElapsedColumn(),
+    )
+    with Progress(*columns, console=Console(stderr=True)) as bar:
+        task = bar.add_task("run", total=total, info="")
+
+        def update(p: ProgressInfo) -> None:
+            end = "" if p.end_time is None else f"/{p.end_time:g}"
+            text = f"t={p.time:g}{end} s  {p.running} veh  {p.steps_per_s:,.0f} steps/s"
+            bar.update(task, completed=p.time, info=text)
+
+        yield update

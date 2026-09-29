@@ -1,0 +1,59 @@
+{
+  "format": "urbanflow.scenario",
+  "version": "1.0",
+  "meta": {"name": "single-intersection-demo",
+           "description": "4-arm signalized junction: cars, a probe trip and a bus line.",
+           "tags": ["demo", "signalized"]},
+  "simulation": {"dt": 1.0, "duration": 3600, "seed": 42},
+  "network": {
+    "drive_side": "right", "lane_width": 3.2, "speed_limit": 13.89,
+    "intersections": [
+      {"id": "J", "kind": "signalized", "point": [0, 0],
+       "signal": {
+         "controller": {"type": "fixed_time", "params": {"offset": 0}},
+         "yellow": 3, "all_red": 1, "min_green": 5, "max_green": 60,
+         "phases": [
+           {"id": "NS", "duration": 30, "green": {
+             "N_in->S_out": "G", "N_in->W_out": "G", "N_in->E_out": "g",
+             "S_in->N_out": "G", "S_in->E_out": "G", "S_in->W_out": "g"}},
+           {"id": "EW", "duration": 25, "green": {
+             "E_in->W_out": "G", "E_in->N_out": "G", "E_in->S_out": "g",
+             "W_in->E_out": "G", "W_in->S_out": "G", "W_in->N_out": "g"}}]}},
+      {"id": "N", "kind": "boundary", "point": [0, 200]},
+      {"id": "E", "kind": "boundary", "point": [200, 0]},
+      {"id": "S", "kind": "boundary", "point": [0, -200]},
+      {"id": "W", "kind": "boundary", "point": [-200, 0]}
+    ],
+    "roads": [
+      {"id": "N_in",  "from": "N", "to": "J", "lanes": [{}, {}]},
+      {"id": "N_out", "from": "J", "to": "N", "lanes": [{}, {}]},
+      {"id": "S_in",  "from": "S", "to": "J", "lanes": [{}, {}]},
+      {"id": "S_out", "from": "J", "to": "S", "lanes": [{}, {}]},
+      {"id": "E_in",  "from": "E", "to": "J", "lanes": [{}, {}]},
+      {"id": "E_out", "from": "J", "to": "E", "lanes": [{}, {}]},
+      {"id": "W_in",  "from": "W", "to": "J", "points": [[-200, 0], [-100, 0], [0, 0]],
+       "lanes": [{}, {"speed_limit": 11.11}]},
+      {"id": "W_out", "from": "J", "to": "W", "lanes": [{}, {}]}
+    ]
+  },
+  "vehicle_types": [
+    {"id": "car", "length": 4.5},
+    {"id": "city_bus", "vclass": "bus", "length": 12.0, "width": 2.55, "max_speed": 22.0,
+     "accel": 1.0, "decel": 1.5, "min_gap": 2.5, "speed_factor": {"mean": 1.0, "std": 0.0}}
+  ],
+  "demand": {
+    "flows": [
+      {"id": "ns", "route": ["N_in", "S_out"], "rate": 450, "arrival": "poisson"},
+      {"id": "sn", "origin": "S_in", "destination": "N_out", "period": 8.0},
+      {"id": "we", "origin": "W_in", "destination": "E_out", "rate": 400, "arrival": "binomial",
+       "type_mix": {"car": 0.9, "city_bus": 0.1}, "begin": 0, "end": 3000},
+      {"id": "ew_left", "route": ["E_in", "S_out"], "rate": 120, "arrival": "poisson"}
+    ],
+    "trips": [{"id": "probe", "depart": 120, "route": ["W_in", "N_out"], "depart_speed": 0}],
+    "transit": [
+      {"id": "bus1", "vehicle_type": "city_bus", "route": ["W_in", "E_out"], "headway": 600, "begin": 60,
+       "stops": [{"road": "W_in", "position": 120, "dwell": 20},
+                 {"road": "E_out", "position": 60, "dwell": 15}]}
+    ]
+  }
+}

@@ -1,0 +1,279 @@
+{
+  "format": "urbanflow.scenario",
+  "version": "1.0",
+  "meta": {
+    "name": "single_intersection",
+    "description": "4-arm signalized intersection, 2 lane(s) per direction.",
+    "generator": {
+      "name": "single_intersection",
+      "params": {
+        "arms": 4,
+        "arm_length": 250.0,
+        "lanes": 2,
+        "speed_limit": 13.89,
+        "kind": "signalized",
+        "controller": "fixed_time",
+        "template": "two_phase",
+        "green": 30.0,
+        "yellow": 3.0,
+        "all_red": 1.0,
+        "demand_rate": 600.0,
+        "approach_rates": null,
+        "turn_ratios": {
+          "far": 0.15,
+          "straight": 0.7,
+          "near": 0.15
+        },
+        "arrival": "poisson",
+        "duration": 3600.0
+      },
+      "urbanflow_version": "0.1.0"
+    }
+  },
+  "simulation": {
+    "duration": 3600.0
+  },
+  "network": {
+    "drive_side": "right",
+    "lane_width": 3.2,
+    "speed_limit": 13.89,
+    "intersections": [
+      {
+        "id": "J",
+        "point": [
+          0.0,
+          0.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          },
+          "phases": [
+            {
+              "id": "p0",
+              "green": {
+                "E_in->N_out": "G",
+                "E_in->S_out": "g",
+                "E_in->W_out": "G",
+                "W_in->E_out": "G",
+                "W_in->N_out": "g",
+                "W_in->S_out": "G"
+              },
+              "duration": 30.0
+            },
+            {
+              "id": "p1",
+              "green": {
+                "N_in->E_out": "g",
+                "N_in->S_out": "G",
+                "N_in->W_out": "G",
+                "S_in->E_out": "G",
+                "S_in->N_out": "G",
+                "S_in->W_out": "g"
+              },
+              "duration": 30.0
+            }
+          ],
+          "template": "two_phase",
+          "yellow": 3.0,
+          "all_red": 1.0
+        }
+      },
+      {
+        "id": "E",
+        "point": [
+          250.0,
+          0.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "N",
+        "point": [
+          0.0,
+          250.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "W",
+        "point": [
+          -250.0,
+          0.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "S",
+        "point": [
+          0.0,
+          -250.0
+        ],
+        "kind": "boundary"
+      }
+    ],
+    "roads": [
+      {
+        "id": "E_in",
+        "from": "E",
+        "to": "J",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "E_out",
+        "from": "J",
+        "to": "E",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "N_in",
+        "from": "N",
+        "to": "J",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "N_out",
+        "from": "J",
+        "to": "N",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "W_in",
+        "from": "W",
+        "to": "J",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "W_out",
+        "from": "J",
+        "to": "W",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "S_in",
+        "from": "S",
+        "to": "J",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "S_out",
+        "from": "J",
+        "to": "S",
+        "lanes": [
+          {},
+          {}
+        ]
+      }
+    ]
+  },
+  "demand": {
+    "flows": [
+      {
+        "id": "E_to_S",
+        "origin": "E_in",
+        "destination": "S_out",
+        "rate": 90.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "E_to_W",
+        "origin": "E_in",
+        "destination": "W_out",
+        "rate": 420.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "E_to_N",
+        "origin": "E_in",
+        "destination": "N_out",
+        "rate": 90.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "N_to_E",
+        "origin": "N_in",
+        "destination": "E_out",
+        "rate": 90.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "N_to_S",
+        "origin": "N_in",
+        "destination": "S_out",
+        "rate": 420.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "N_to_W",
+        "origin": "N_in",
+        "destination": "W_out",
+        "rate": 90.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "W_to_N",
+        "origin": "W_in",
+        "destination": "N_out",
+        "rate": 90.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "W_to_E",
+        "origin": "W_in",
+        "destination": "E_out",
+        "rate": 420.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "W_to_S",
+        "origin": "W_in",
+        "destination": "S_out",
+        "rate": 90.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "S_to_W",
+        "origin": "S_in",
+        "destination": "W_out",
+        "rate": 90.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "S_to_N",
+        "origin": "S_in",
+        "destination": "N_out",
+        "rate": 420.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "S_to_E",
+        "origin": "S_in",
+        "destination": "E_out",
+        "rate": 90.0,
+        "arrival": "poisson"
+      }
+    ]
+  }
+}
