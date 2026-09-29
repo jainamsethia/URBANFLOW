@@ -198,9 +198,8 @@ class Simulation:
             ("overrides", dict(overrides)),
         )
         _check_supported(self.config)
-        report, network = deep_check(
-            self.scenario, self.config, check_router=router is None or isinstance(router, str)
-        )
+        instance = None if router is None or isinstance(router, str) else router
+        report, network = deep_check(self.scenario, self.config, router=instance)
         source = str(self.scenario.path) if self.scenario.path else self.scenario.name
         report.raise_for_errors(source=source)
         if network is None:  # pragma: no cover - a network that fails to compile has errors
@@ -210,10 +209,7 @@ class Simulation:
                 _log.warning("%s: %s: %s", source, warning.path, warning.message)
         cfg = self.config
         model = car_following_registry.get(cfg.car_following)
-        if router is None or isinstance(router, str):
-            router_obj: Router = router_registry.get(cfg.router)()
-        else:
-            router_obj = router
+        router_obj: Router = router_registry.get(cfg.router)() if instance is None else instance
         self._engine = Engine(
             network,
             cfg,

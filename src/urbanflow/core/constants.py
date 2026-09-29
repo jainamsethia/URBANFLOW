@@ -199,6 +199,7 @@ SUMMARY_PERCENTILE: Final = 95.0  # %; the travel_time.p95 summary statistic (J.
 PROGRESS_REFRESH_S: Final = 0.1  # s wall time between progress updates of run() (AA 5.3)
 RUN_ID_SLUG_MAX: Final = 40  # characters of the scenario-name slug in a run id (AC 7.2)
 RUN_ID_SUFFIX_BYTES: Final = 2  # random bytes -> 4 hex characters ending a run id (AC 7.2)
+LOG_MAX_IDS: Final = 5  # ids listed in aggregated per-step log lines (AB logging table)
 
 
 # --------------------------------------------------------------------------- energy proxy (G.9)

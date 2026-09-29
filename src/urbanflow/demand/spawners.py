@@ -24,7 +24,6 @@ from dataclasses import dataclass
 import numpy as np
 
 from urbanflow.core.constants import SECONDS_PER_HOUR, TIME_EPS
-from urbanflow.core.errors import UrbanFlowError
 from urbanflow.core.rng import RngStreams
 from urbanflow.core.types import FloatArray
 from urbanflow.network.compiled import CompiledNetwork
@@ -306,14 +305,8 @@ def build_spawners(
 ) -> list[Spawner]:
     """Spawners of the *resolved* ``demand``: one per flow (file order), then the trips.
 
-    Transit lines arrive in a later version and are rejected with a friendly error.
+    Transit lines are not spawned here: ``Engine`` rejects them first (a later version).
     """
-    if demand.transit:
-        ids = ", ".join(f'"{line.id}"' for line in demand.transit)
-        raise UrbanFlowError(
-            f"demand.transit: transit lines ({ids}) are not supported by this version of "
-            "the engine yet; remove them from the scenario to run it"
-        )
     spawners: list[Spawner] = [
         FlowSpawner(
             flow,

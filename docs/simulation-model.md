@@ -9,14 +9,14 @@ the order in which vehicles are stored never changes the result. Time is always
 
 | # | Sub-step | What happens | Events |
 |---|---|---|---|
-| 0 | begin | clear the event buffer; handles freed in the last step become reusable; events of commands issued since the last step | `vehicle_departed`, `vehicle_removed` (commands) |
+| 0 | begin | clear the event buffer; handles freed in the last step become reusable (handles freed by commands one step later, after their `vehicle_removed` event); events of commands issued since the last step | `vehicle_departed`, `vehicle_removed` (commands) |
 | 2 | spawn | flows and trips due in this step get a table row and wait in their first road's insertion queue | `vehicle_departed` |
 | 3 | insert | queue heads enter their lanes where the safe-speed rule allows (at most one per lane, FIFO per road, `max_vehicles` respected) | `vehicle_inserted`, `vehicle_entered_link` |
 | 4 | leaders | leader and gap of every vehicle, across links, merges and diverges | – |
 | 6 | intersections | admission at the stop lines (below) | – |
 | 7 | longitudinal | IDM against the leader and against the virtual obstacle, speed-limit anticipation, the safe-speed cap and the ballistic update ([vehicle model](vehicle-model.md)) | – |
 | 8 | advance | positions move; vehicles hop lane → connector → lane, possibly several links in one step; arrivals | `vehicle_exited_link`, `vehicle_entered_link`, `vehicle_arrived` |
-| 9 | bookkeeping | halting, waiting times, stops, distance, free-flow time; arrived vehicles are freed | `vehicle_stopped`, `vehicle_resumed` |
+| 9 | bookkeeping | halting, waiting times, stops, distance, free-flow time; the watchdog (below); arrived vehicles are freed | `vehicle_stopped`, `vehicle_resumed`, `vehicle_teleported` |
 | 10 | finish | `step_count += 1`; invariant checks | – |
 
 Sub-steps 1 (traffic signals) and 5 (lane changes) arrive with signalised intersections and
@@ -35,7 +35,9 @@ leader. Beyond the link end the search follows the planned route while the dista
 max(200 m, v²/(2b) + vT + s<sub>0</sub>) and stops at the first stop line the vehicle is not
 admitted to cross. Vehicles leaving the same lane on different connectors follow each other
 until their paths separate (diverge), and vehicles on connectors that end on the same lane
-are ordered by their distance to that lane (merge). The nearest candidate wins.
+are ordered by their distance to that lane (merge). A vehicle whose connector is shorter
+than itself still occupies the end of the lane it came from, so a lane is only free up to
+the rear of its last body. The nearest candidate wins.
 
 ## Unsignalised intersections
 
@@ -47,11 +49,13 @@ major straight or near-side turn / major far-side turn / minor at priority inter
 
 1. Farther than its decision distance v²/(2b) + v·dt + 5 m, the vehicle approaches freely.
 2. **Don't block the box**: the exit lane must have room for it, net of the space already
-   reserved by committed vehicles heading there.
+   reserved by committed vehicles heading there (a vehicle leaving the exit lane whose rear
+   still hangs back over its end takes room too).
 3. **Gaps**: for every conflict zone (crossing or merging) on its path, the time window in
    which it would occupy the zone, from an optimistic and a pessimistic arrival estimate
    widened by 1 s, must not overlap the window of any vehicle that has not cleared the
-   conflicting connector, any committed vehicle heading for it, or (only for a higher-rank
+   conflicting connector (its rear may still be in the zone after its front reached the
+   next lane), any committed vehicle heading for it, or (only for a higher-rank
    conflicting movement) the nearest uncommitted vehicle of that approach.
 4. If everything passes the vehicle commits and reserves its space on the exit lane.
    Otherwise it stops at the line (a virtual obstacle 0.5 m before it) if it still can with
@@ -60,6 +64,12 @@ major straight or near-side turn / major far-side turn / minor at priority inter
 
 A vehicle whose lane has no connector toward its next road waits at the lane end until it
 can change lanes.
+
+**Watchdog.** `stuck_time` counts continuous halting while held at a stop line or lane
+end, or while halting on a connector. With `deadlock_timeout > 0` (default 300 s; 0 turns
+it off) every vehicle stuck that long is teleported, connector vehicles first: it joins
+the back of the insertion queue of its next road (or arrives if it is on its last road),
+and each teleport is counted (`vehicles.teleported`) and emitted as `vehicle_teleported`.
 
 ## Invariants
 
@@ -90,7 +100,8 @@ and draw their speed factor from the `vehicle_params` random stream.
 
 `urbanflow.Simulation` wraps the engine (see [Python API](python-api.md)). Its constructor
 validates the scenario with `urbanflow.check` (registered model and router names, model
-parameters, the network compile diagnostics), compiles the network once, builds the engine
+parameters, the network compile diagnostics, the flow rules E506/E507 for the final `dt`
+and `duration`, integer depart lanes that cannot reach the route's next road), compiles the network once, builds the engine
 and resets it to `config.seed`.
 
 - **Time.** `time = step_count · dt`. With a `duration` the run ends after

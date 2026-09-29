@@ -46,6 +46,7 @@ from urbanflow.scenario.schema import (
     EXCLUSIVE_MESSAGES,
     ID_PATTERN,
     ConnectionSpec,
+    DemandSpec,
     FlowSpec,
     RoadSpec,
     ScenarioSpec,
@@ -64,6 +65,7 @@ __all__ = [
     "IssueStage",
     "IssueTemplate",
     "ValidationReport",
+    "demand_config_issues",
     "issue",
     "issues_from_pydantic",
     "validate_data",
@@ -257,7 +259,12 @@ ISSUE_CODES: Final[Mapping[str, IssueTemplate]] = MappingProxyType(
             ('route is not connected: "{a}" ends at "{ja}" but "{b}" starts at "{jb}"',),
         ),
         "E504": IssueTemplate(_E, '"{d}" is not reachable from "{o}"{via_text}', "Q"),
-        "E505": IssueTemplate(_E, 'lane {k} does not exist on road "{road}" ({n} lanes)', "Q"),
+        "E505": IssueTemplate(
+            _E,
+            'lane {k} does not exist on road "{road}" ({n} lanes)',
+            "Q",
+            ('lane {k} of road "{road}" has no connection to the next road "{next}" of the route',),
+        ),
         "E506": IssueTemplate(
             _E,
             "binomial arrivals allow at most one vehicle per step: {rate} veh/h > {max:.0f} "
@@ -1101,17 +1108,35 @@ def _capacity(ctx: CheckContext, d: _Demand, flow: FlowSpec, road: str) -> float
     return _lane_count(ctx, road) * C.SECONDS_PER_HOUR / tau
 
 
+def _flow_config_issues(
+    base: Loc, flow: FlowSpec, dt: float, duration: float | None
+) -> Iterator[ValidationIssue]:
+    """E506 and E507 of one flow for a run with ``dt`` and ``duration``."""
+    rate, rate_key = _flow_rate(flow)
+    if flow.arrival == "binomial" and rate * dt > C.SECONDS_PER_HOUR * (1 + C.GEOM_EPS):
+        yield issue("E506", (*base, rate_key), rate=rate, max=C.SECONDS_PER_HOUR / dt, dt=dt)
+    if flow.end is None and flow.count is None and duration is None:
+        yield issue("E507", base)
+
+
+def demand_config_issues(
+    demand: DemandSpec, dt: float, duration: float | None
+) -> list[ValidationIssue]:
+    """The config-dependent flow rules E506 and E507 for the run's final ``dt`` and
+    ``duration`` (the deep check re-runs them after Python/CLI overrides)."""
+    return [
+        i
+        for k, flow in enumerate(demand.flows)
+        for i in _flow_config_issues(("demand", "flows", k), flow, dt, duration)
+    ]
+
+
 def _flow_checks(
     ctx: CheckContext, d: _Demand, base: Loc, flow: FlowSpec
 ) -> Iterator[ValidationIssue]:
     sim = ctx.final().simulation
     rate, rate_key = _flow_rate(flow)
-    if flow.arrival == "binomial" and rate * sim.dt > C.SECONDS_PER_HOUR * (1 + C.GEOM_EPS):
-        yield issue(
-            "E506", (*base, rate_key), rate=rate, max=C.SECONDS_PER_HOUR / sim.dt, dt=sim.dt
-        )
-    if flow.end is None and flow.count is None and sim.duration is None:
-        yield issue("E507", base)
+    yield from _flow_config_issues(base, flow, sim.dt, sim.duration)
     for road, share in _first_roads(flow):
         if road not in ctx.index.roads or road in ctx.broken.roads:
             continue

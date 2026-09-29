@@ -11,11 +11,15 @@ For a running vehicle on a lane that is **not** on the last road of its route, w
 
   1. outside the decision zone (``d > D``): free approach, no obstacle;
   2. exit space ("don't block the box"): ``free(to) - reserved(to) >= len + s0``, where
-     ``free`` is the rear of the last vehicle on the target lane (its length if empty);
+     ``free`` is :attr:`Leaders.lane_rear` of the target lane: the rear of its most
+     upstream body, a vehicle on one of its outgoing connectors hanging back over its end
+     included (its length if none);
   3. conflicts: for every crossing or merging zone on ``c`` the occupancy window
      ``W_i = [T-(d + z_in) - tau, T+(d + z_out + len) + tau]`` must not intersect the
      window of any foe: vehicles on the foe connector that have not cleared the zone,
-     committed vehicles on the lane feeding it, and (for a higher-rank foe movement) the
+     vehicles that left it for its ``to_lane`` (``lock_conn`` = the foe connector) while
+     their rear, at ``L_foe + pos - len`` in foe coordinates, is still before the zone's
+     end, committed vehicles on the lane feeding it, and (for a higher-rank foe movement) the
      nearest uncommitted vehicle there if it plans the foe connector (one queued behind
      an uncommitted vehicle of another movement cannot arrive first);
   4. pass: commit (``commit_seq``, ``reserved(to) += len + s0``); fail but able to stop
@@ -189,6 +193,8 @@ def admit(
     b_l, be_l = types.decel[ti].tolist(), types.emergency_decel[ti].tolist()
     s0_l, nc_l = s0.tolist(), nc.tolist()
     committed_l = veh.committed[run].tolist()
+    lock_l = veh.lock_conn[run].tolist()
+    link_len_l: list[float] = net.link_length.tolist()
     perm_l: list[int] = perm.tolist()
     slink_l: list[int] = link[perm].tolist()
     to_lane_l, from_lane_l = net.conn_to_lane.tolist(), net.conn_from_lane.tolist()
@@ -203,10 +209,6 @@ def admit(
         """Positions of the vehicles on link ``lk``, upstream first."""
         return perm_l[bisect_left(slink_l, lk) : bisect_right(slink_l, lk)]
 
-    def free_space(lane: int) -> float:
-        h = int(leaders.tail[lane])
-        return float(net.link_length[lane]) if h < 0 else float(veh.pos[h] - veh.length[h])
-
     def conflicts_ok(i: int) -> bool:
         ci, di = nc_l[i], d_l[i]
         for foe, z_in, z_out, fz_in, fz_out in index.conflicts[ci - n_lanes]:
@@ -215,6 +217,15 @@ def admit(
                 if pos_l[j] - len_l[j] >= fz_out:
                     continue
                 s, e = window(j, fz_in - pos_l[j], fz_out - pos_l[j] + len_l[j], pos_l[j] >= fz_in)
+                if s <= e_i and s_i <= e:
+                    return False
+            for j in on_link(to_lane_l[foe - n_lanes]):  # left it, rear still on it
+                if pos_l[j] >= len_l[j]:
+                    break  # upstream first: every later rear is on the lane
+                p = link_len_l[foe] + pos_l[j]  # front in foe coordinates (>= fz_in)
+                if lock_l[j] != foe or p - len_l[j] >= fz_out:
+                    continue
+                s, e = window(j, fz_in - p, fz_out - p + len_l[j], True)
                 if s <= e_i and s_i <= e:
                     return False
             # committed vehicles planning the foe connector, and (higher-rank movement
@@ -237,7 +248,7 @@ def admit(
             continue  # free approach
         to = to_lane_l[nc_l[i] - n_lanes]
         need = len_l[i] + s0_l[i]
-        ok = free_space(to) - reserved[to] >= need and conflicts_ok(i)
+        ok = float(leaders.lane_rear[to]) - reserved[to] >= need and conflicts_ok(i)
         # can it still stop? (v^2/(2d) <= b_emerg, with G.3's float tolerance: the cap
         # leaves a held vehicle exactly on this boundary)
         if not ok and vi * vi <= 2 * di * (be_l[i] + C.BALLISTIC_FLOOR):

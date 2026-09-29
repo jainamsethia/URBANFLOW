@@ -115,16 +115,23 @@ def test_idm_equilibrium_gap(make_engine: MakeEngine) -> None:
 
 
 def test_stops_before_the_lane_end(make_engine: MakeEngine) -> None:
-    """A vehicle on a lane without a connector to its next road waits at the lane end."""
+    """A vehicle on a lane without a connector to its next road waits at the lane end.
+
+    ``M_0`` is the only lane ``W_in`` reaches, but only ``M_1`` connects to ``E_out`` (a
+    mandatory lane change, which the vehicle cannot make yet).
+    """
     b = ScenarioBuilder("dead_end", duration=600)
     b.vehicle_type("det", **DET)
-    b.boundary("W", (-200.0, 0.0))
-    b.intersection("J", (0.0, 0.0), kind="uncontrolled")
-    b.boundary("E", (100.0, 0.0))
-    b.road("W_in", "W", "J", lanes=2)
-    b.road("E_out", "J", "E")
-    b.movement("J", "W_in", "E_out", connections=[(1, 0)])
-    b.trip("v", 0.0, route=["W_in", "E_out"], vehicle_type="det", depart_lane=0)
+    b.boundary("W", (-100.0, 0.0))
+    b.intersection("J1", (0.0, 0.0), kind="uncontrolled")
+    b.intersection("J2", (200.0, 0.0), kind="uncontrolled")
+    b.boundary("E", (300.0, 0.0))
+    b.road("W_in", "W", "J1")
+    b.road("M", "J1", "J2", lanes=2)
+    b.road("E_out", "J2", "E")
+    b.movement("J1", "W_in", "M", connections=[(0, 0)])
+    b.movement("J2", "M", "E_out", connections=[(1, 0)])
+    b.trip("v", 0.0, route=["W_in", "M", "E_out"], vehicle_type="det")
     e = make_engine(b.build(), dt=0.5)
     veh = e.vehicles
     decel = []
@@ -133,6 +140,7 @@ def test_stops_before_the_lane_end(make_engine: MakeEngine) -> None:
         decel.append(-float(veh.accel[veh.handle_of("v")]))
     h = veh.handle_of("v")
     end = float(e.network.link_length[veh.link[h]])
+    assert e.network.link_ids[veh.link[h]] == "M_0"
     assert veh.next_conn[h] == -1 and veh.held[h]
     assert end - 0.6 <= veh.pos[h] <= end - 0.4
     assert veh.speed[h] == pytest.approx(0.0, abs=1e-3)

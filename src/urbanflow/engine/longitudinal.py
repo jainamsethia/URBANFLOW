@@ -81,9 +81,12 @@ def anticipation(
     With ``r = (v^2 - v_n^2) / (2 d)`` over the distance ``d`` to the next planned link,
     ``a_lim = -min(r, b_emerg)`` when ``v_n < v`` and ``r > b/2``; otherwise ``+inf``.
     Discrete-time completion: when the link is within reach of this step
-    (``d <= v dt + a dt^2/2``), a vehicle faster than ``v_n`` brakes at ``r`` whatever
-    the threshold, and ``v0_end = min(v0, v_n)`` is the no-overshoot target, so no vehicle
-    enters a slower link above its desired speed there (``v0_end = v0`` otherwise).
+    (``d <= v dt + a dt^2/2``), a vehicle faster than ``v_n`` brakes whatever the
+    threshold, but only down to ``v_n`` at the end of the step: ``a_lim = max(-min(r,
+    b_emerg), (v_n - v)/dt)`` (braking at ``r`` for the whole step would continue on the
+    link after reaching ``v_n`` there, well below it); and ``v0_end = min(v0, v_n)`` is the
+    no-overshoot target, so the step ends at no more than ``v_n`` (``v0_end = v0``
+    otherwise).
     """
     v_n, d = _next_link(net, veh, types, run)
     ti = veh.type_idx[run]
@@ -93,6 +96,7 @@ def anticipation(
     reach = d <= v * dt + types.accel[ti] * dt * dt / 2
     brake = (v_n < v) & ((r > C.ANTICIPATION_DECEL_FACTOR * types.decel[ti]) | reach)
     a_lim = np.where(brake, -np.minimum(r, types.emergency_decel[ti]), np.inf)
+    a_lim = np.where(reach & brake, np.maximum(a_lim, (v_n - v) / dt), a_lim)
     override = veh.speed_override[run]
     v0 = np.where(np.isnan(override), veh.v0[run], override)
     return a_lim, np.where(reach & (v_n < v0), v_n, v0)

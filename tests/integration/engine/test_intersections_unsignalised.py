@@ -162,3 +162,30 @@ def test_priority_junction_keeps_the_major_flowing(make_engine: MakeEngine) -> N
             arrived[origin] = arrived.get(origin, 0) + 1
     assert arrived.get("E", 0) > 150 and arrived.get("W", 0) > 150
     assert e.safety_cap_violations == 0
+
+
+@pytest.mark.parametrize("seed", [1, 2, 3])
+def test_buses_hanging_back_over_a_short_link_are_seen(make_engine: MakeEngine, seed: int) -> None:
+    """Review repro: junctions 35 m apart (a 24.6 m link) and 30 % buses. A bus turning
+    right at J2 keeps its rear on J1_J2 (its connector is shorter than the bus), so the
+    leader search, admission and insertion must not treat J1_J2 as free up to its end."""
+    b = ScenarioBuilder("two_junctions", dt=1.0, duration=600, seed=seed)
+    for name, point in (("W", (-200.0, 0.0)), ("E", (235.0, 0.0))):
+        b.boundary(name, point)
+    b.boundary("S", (35.0, -200.0))
+    b.boundary("N", (35.0, 200.0))
+    b.intersection("J1", (0.0, 0.0), kind="uncontrolled")
+    b.intersection("J2", (35.0, 0.0), kind="uncontrolled")
+    b.road("W_J1", "W", "J1")
+    b.road("J1_J2", "J1", "J2")
+    for to in ("E", "S", "N"):
+        b.road(f"J2_{to}", "J2", to)
+    mix = {"car": 0.7, "bus": 0.3}
+    for to, rate in (("E", 300.0), ("S", 300.0), ("N", 150.0)):
+        route = ["W_J1", "J1_J2", f"J2_{to}"]
+        b.flow(to, route=route, rate=rate, type_mix=mix, arrival="poisson")
+    e = make_engine(b.build())  # debug checks on: I4 (no overlap) every step
+    for _ in range(600):
+        e.step()
+    assert e.safety_cap_violations == 0
+    assert e.arrived > 80 and e.teleported == 0

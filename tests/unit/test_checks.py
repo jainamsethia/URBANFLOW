@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -82,6 +83,50 @@ def test_e903_model_params() -> None:
         'unknown parameter "deltta" for car-following model "idm" (known: delta)'
     )
     assert report.errors[1].message == "must be > 0 (got -1)"
+
+
+def test_e505_depart_lane_without_a_connection_to_the_next_road(
+    corridor_doc: Callable[..., dict[str, Any]],
+) -> None:
+    """Without lane changes such a vehicle could never leave its first lane (G.8)."""
+    e, n = ["J1_J2", "J2_E"], ["J1_J2", "J2_N"]  # J1_J2 lane 0 only reaches J2_N
+    choices = [{"roads": n, "weight": 1.0}, {"roads": e, "weight": 1.0}]
+    doc = corridor_doc(
+        flows=[
+            {"id": "bad", "route": e, "rate": 60, "depart_lane": 0},
+            {"id": "ok", "route": n, "rate": 60, "depart_lane": 0},
+            {"id": "choice", "routes": choices, "rate": 60, "depart_lane": 0},
+            {"id": "named", "route": e, "rate": 60, "depart_lane": "first"},
+        ],
+        trips=[
+            {"id": "od", "depart": 0, "origin": "J1_J2", "destination": "J2_E", "depart_lane": 0},
+            {
+                "id": "od_ok",
+                "depart": 0,
+                "origin": "J1_J2",
+                "destination": "J2_E",
+                "depart_lane": 1,
+            },
+        ],
+    )
+    report = check(Scenario.from_dict(doc))
+    assert _codes(report) == [
+        ("E505", "demand.flows[0].depart_lane"),
+        ("E505", "demand.flows[2].depart_lane"),
+        ("E505", "demand.trips[0].depart_lane"),
+    ]
+    assert report.errors[0].message == (
+        'lane 0 of road "J1_J2" has no connection to the next road "J2_E" of the route'
+    )
+
+
+def test_e506_e507_use_the_final_config(corridor_doc: Callable[..., dict[str, Any]]) -> None:
+    route = ["W_J1", "J1_J2", "J2_E"]
+    flows = [{"id": "b", "route": route, "rate": 3000, "arrival": "binomial"}]
+    scenario = Scenario.from_dict(corridor_doc(flows=flows))  # dt 1, duration 600: clean
+    assert check(scenario).ok
+    report = check(scenario, SimulationConfig(dt=2.0, duration=None))
+    assert _codes(report) == [("E506", "demand.flows[0].rate"), ("E507", "demand.flows[0]")]
 
 
 def test_compile_warning_w302_and_strict() -> None:

@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 from urbanflow.core.errors import CommandError, NotFoundError
-from urbanflow.core.events import EventType
+from urbanflow.core.events import NO_VEHICLE, EventType
 from urbanflow.core.types import VehicleStatus
 from urbanflow.engine import Engine
 from urbanflow.scenario import ScenarioBuilder
@@ -105,6 +105,27 @@ def test_add_vehicle_validation(
     assert engine.generated == 0 and engine.backlog == 0 and not engine.commands.command_log
 
 
+def test_add_vehicle_rejects_a_depart_lane_without_a_connection(make_engine: MakeEngine) -> None:
+    """Review repro: such a vehicle could never leave its first lane (no lane changes)."""
+    b = ScenarioBuilder("dead_end", duration=600)
+    b.boundary("W", (-200.0, 0.0))
+    b.intersection("J", (0.0, 0.0), kind="uncontrolled")
+    b.boundary("E", (100.0, 0.0))
+    b.road("W_in", "W", "J", lanes=2)
+    b.road("E_out", "J", "E")
+    b.movement("J", "W_in", "E_out", connections=[(1, 0)])
+    e = make_engine(b.build())
+    match = 'depart_lane 0 of road "W_in" has no connection to the next road "E_out"'
+    with pytest.raises(CommandError, match=match):
+        e.commands.add_vehicle(route=WE, depart_lane=0)
+    with pytest.raises(CommandError, match=match):  # origin/destination: the router's leg
+        e.commands.add_vehicle(origin="W_in", destination="E_out", depart_lane=0)
+    assert e.generated == 0 and not e.commands.command_log
+    e.commands.add_vehicle(route=WE, depart_lane=1, id="ok")
+    e.commands.add_vehicle(route=["W_in"], depart_lane=0, id="last")  # last road: any lane
+    assert e.generated == 2
+
+
 def test_add_vehicle_ids_are_unique_in_a_run(engine: Engine) -> None:
     e = engine
     e.commands.add_vehicle(route=WE, id="x")
@@ -131,6 +152,27 @@ def test_remove_a_running_vehicle(engine: Engine) -> None:
     assert _events(e) == [("vehicle_removed", uid)]
     assert int(e.events.link[0]) == link and e.events.step[0] == 2
     assert e.commands.command_log[-1][1:] == ("remove_vehicle", {"vehicle_id": vid})
+
+
+def test_removed_handle_is_not_reused_in_the_step_reporting_it(
+    make_engine: MakeEngine, junction_builder: Callable[..., ScenarioBuilder]
+) -> None:
+    """Review repro: a spawn in the step that reports a removal must not reuse its handle,
+    so no handle names two uids in one step's events."""
+    b = junction_builder()
+    b.flow("f", route=WE, rate=3600.0)
+    e = make_engine(b.build())
+    for _ in range(5):
+        e.step()
+    veh = e.vehicles
+    running = veh.running()
+    e.commands.remove_vehicle(veh.ids[int(running[0])] or "")
+    for _ in range(3):
+        e.step()
+        seen: dict[int, set[int]] = {}
+        for h, u in zip(e.events.handle.tolist(), e.events.uid.tolist(), strict=True):
+            seen.setdefault(h, set()).add(u)
+        assert all(len(uids) == 1 for h, uids in seen.items() if h != NO_VEHICLE), seen
 
 
 def test_remove_a_waiting_vehicle(engine: Engine) -> None:

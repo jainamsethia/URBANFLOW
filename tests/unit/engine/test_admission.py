@@ -115,6 +115,49 @@ def test_foe_on_the_connector_until_it_clears_the_zone(junction: World) -> None:
     assert w.veh.committed[h]
 
 
+def test_foe_that_left_the_connector_until_its_rear_clears_the_zone(junction: World) -> None:
+    """Review repro: j's front is on N_out_0 but its rear is still in the crossing zone of
+    W_in_0->N_out_0 (``lock_conn``), so i on E_in_0 must not be admitted across it."""
+    w = junction
+    left = w.link("W_in_0->N_out_0")
+    j = w.place("N_out_0", 1.0, 0.8, route=("N_out",))  # rear 4 m back on the connector
+    w.veh.lock_conn[j] = left  # set on connector entry (engine/advance.py)
+    i = w.place("E_in_0", _lane_end(w, "E_in_0") - 0.3, 0.0, route=("E_in", "W_out"))
+    zone = next(
+        z for z in w.junctions.conflicts[w.veh.next_conn[i] - w.net.n_lanes] if z[0] == left
+    )
+    rear = float(w.net.link_length[left]) + 1.0 - C.VEHICLE_LENGTH
+    assert zone[3] <= rear < zone[4]  # inside the foe zone [fz_in, fz_out)
+    w.admit()
+    assert not w.veh.committed[i] and w.veh.held[i]
+    w.veh.lock_conn[j] = -1  # a vehicle that came from another connector is no foe
+    w.admit()
+    assert w.veh.committed[i]
+    w.veh.committed[i] = False
+    w.veh.lock_conn[j] = left
+    w.veh.pos[j] = C.VEHICLE_LENGTH + 0.5  # rear on the lane: the zone is clear
+    w.admit()
+    assert w.veh.committed[i]
+
+
+def test_exit_space_counts_a_rear_hanging_back_over_the_target_lane(
+    two_junctions: World,
+) -> None:
+    """Review repro: J1_J2_0 has no vehicle with its front on it, but a bus on its
+    outgoing connector still occupies its last metres, so there is no room to admit i."""
+    w = two_junctions
+    route = ("W_J1", "J1_J2", "J2_E")
+    i = w.place("W_J1_0", _lane_end(w, "W_J1_0") - 5.0, 5.0, route=route)
+    bus = w.place("J1_J2_0->J2_S_0", 3.0, 0.0, route=("J1_J2", "J2_S"), vtype="bus")
+    free = _lane_end(w, "J1_J2_0") + 3.0 - 12.0
+    assert 0 < free < C.VEHICLE_LENGTH + C.IDM_MIN_GAP <= _lane_end(w, "J1_J2_0")
+    w.admit()
+    assert not w.veh.committed[i] and w.veh.held[i]
+    w.veh.pos[bus] = 5.0  # 2 m further on: now there is room
+    w.admit()
+    assert w.veh.committed[i]
+
+
 def test_first_come_first_served_at_equal_rank(junction: World) -> None:
     w = junction
     lane = _lane_end(w, "W_in_0")

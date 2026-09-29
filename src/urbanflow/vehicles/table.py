@@ -3,8 +3,10 @@
 A vehicle lives in a *handle* (row). Handles are internal to L4/L5; everything external
 uses the ``uid``, a monotonic spawn serial that is never reused within a run. Freed handles
 go to a deferred list and become reusable only after the next :meth:`VehicleTable.recycle`
-(engine sub-step 0), so a handle never names two vehicles within one step. The free list is
-LIFO, which keeps handle assignment deterministic.
+(engine sub-step 0); handles freed *between* steps (commands) wait one recycle longer,
+because the next step still reports their removal. So a handle never names two vehicles
+within one step's events. The free list is LIFO, which keeps handle assignment
+deterministic.
 """
 
 from __future__ import annotations
@@ -155,6 +157,7 @@ class VehicleTable:
         self._top = 0
         self._free: list[int] = []
         self._deferred: list[int] = []
+        self._held: list[int] = []  # freed between steps: deferred at the next recycle
 
     def __len__(self) -> int:
         """Number of allocated, not yet freed vehicles."""
@@ -178,6 +181,7 @@ class VehicleTable:
         self._top = 0
         self._free.clear()
         self._deferred.clear()
+        self._held.clear()
         self.ids = [None] * self._capacity
         self.id_to_handle.clear()
         self.uid_to_id.clear()
@@ -206,11 +210,13 @@ class VehicleTable:
         self.id_to_handle[vehicle_id] = h
         return h
 
-    def free_deferred(self, handles: IntArray | int) -> None:
+    def free_deferred(self, handles: IntArray | int, *, between_steps: bool = False) -> None:
         """Release rows whose vehicles left (status already arrived/removed).
 
         They stop being ``active`` now and leave ``id_to_handle``; ``ids`` keeps the id, and
-        the handle is reusable only after the next :meth:`recycle`.
+        the handle is reusable only after the next :meth:`recycle`, or the one after it
+        with ``between_steps=True`` (a command between steps: the next step's events still
+        name the vehicle by this handle).
         """
         for h in np.atleast_1d(np.asarray(handles, dtype=np.intp)).tolist():
             vid = self.ids[h]
@@ -218,14 +224,15 @@ class VehicleTable:
                 raise ValueError(f"handle {h} is not a live vehicle")
             self.active[h] = False
             del self.id_to_handle[vid]
-            self._deferred.append(h)
+            (self._held if between_steps else self._deferred).append(h)
 
     def recycle(self) -> None:
-        """Make the handles freed since the last call reusable (engine sub-step 0)."""
+        """Make the handles freed since the last call reusable (engine sub-step 0); those
+        freed between steps become reusable at the following call."""
         for h in self._deferred:
             self.ids[h] = None
         self._free.extend(self._deferred)
-        self._deferred.clear()
+        self._deferred, self._held = self._held, []
 
     def running(self) -> IntArray:
         """Handles of running vehicles, ascending: ``flatnonzero(active)``."""

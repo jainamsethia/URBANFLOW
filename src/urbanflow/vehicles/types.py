@@ -19,9 +19,36 @@ from urbanflow.core import constants as C
 from urbanflow.core.errors import ConfigError, NotFoundError, ValidationIssue, suggest
 from urbanflow.core.types import FloatArray, IntArray
 from urbanflow.scenario.schema import VehicleTypeSpec
-from urbanflow.scenario.validate import issue, issues_from_pydantic
+from urbanflow.scenario.validate import Loc, issue, issues_from_pydantic
 
-__all__ = ["ParamArrays", "VehicleTypes"]
+__all__ = ["ParamArrays", "VehicleTypes", "model_param_issues"]
+
+
+def model_param_issues(
+    model_params: Mapping[str, float],
+    params_model: type[BaseModel] | None,
+    model: str,
+    path: Loc,
+) -> tuple[list[ValidationIssue], dict[str, float]]:
+    """Validate one vehicle type's ``model_params`` against the model's ``Params``.
+
+    Returns ``(issues, values)``: E903 for unknown names (every name is unknown without a
+    ``params_model``), else the ``Params`` errors (E004...) at ``path``; ``values`` are
+    the validated fields with defaults filled in (empty when there are issues).
+    ``VehicleTypes.from_specs`` and the deep check (``urbanflow.check``) both use it.
+    """
+    known = sorted(params_model.model_fields) if params_model is not None else []
+    unknown = [p for p in model_params if p not in known]
+    if unknown:
+        listed = ", ".join(known) or "none"
+        return [issue("E903", (*path, p), p=p, m=model, list=listed) for p in unknown], {}
+    if params_model is None:
+        return [], {}
+    try:
+        validated = params_model.model_validate(dict(model_params))
+    except ValidationError as exc:
+        return issues_from_pydantic(exc, prefix=path, root=params_model), {}
+    return [], {k: float(v) for k, v in validated.model_dump().items()}
 
 
 class ParamArrays:
@@ -132,21 +159,9 @@ class VehicleTypes:
         known = sorted(params_model.model_fields) if params_model is not None else []
         for vt in specs:
             base = ("vehicle_types", vt.id, "model_params")
-            unknown = [p for p in vt.model_params if p not in known]
-            issues += [
-                issue("E903", (*base, p), p=p, m=model, list=", ".join(known) or "none")
-                for p in unknown
-            ]
-            if unknown or params_model is None:
-                extras.append({})
-                continue
-            try:
-                validated = params_model.model_validate(dict(vt.model_params))
-            except ValidationError as exc:
-                issues += issues_from_pydantic(exc, prefix=base, root=params_model)
-                extras.append({})
-                continue
-            extras.append({k: float(v) for k, v in validated.model_dump().items()})
+            found, values = model_param_issues(vt.model_params, params_model, model, base)
+            issues += found
+            extras.append(values)
         if issues:
             raise ConfigError("invalid vehicle type parameters", issues)
 

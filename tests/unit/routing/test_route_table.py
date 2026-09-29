@@ -37,6 +37,17 @@ def test_intern_shares_identical_routes() -> None:
     assert [r.tolist() for r in table.routes] == [[0, 2, 5], [1, 3], [0, 2]]
 
 
+def test_lengths_grow_with_the_table() -> None:
+    table = RouteTable()
+    assert table.lengths.tolist() == []
+    for k in range(200):  # past the initial capacity
+        table.intern([*range(k % 7 + 1), 1000 + k])
+    table.intern([0, 1000])  # a repeat does not add a row
+    assert table.lengths.tolist() == [len(r) for r in table.routes]
+    assert len(table.lengths) == 200
+    assert not table.lengths.flags.writeable
+
+
 def test_bad_routes() -> None:
     table = RouteTable()
     with pytest.raises(ValueError, match="at least one road"):

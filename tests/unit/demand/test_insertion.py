@@ -13,6 +13,7 @@ from hypothesis import strategies as st
 from urbanflow.core import constants as C
 from urbanflow.core.types import VehicleStatus
 from urbanflow.demand import InsertionQueues, SpawnRequest, enqueue, insert_step, lane_tails
+from urbanflow.demand.insertion import lane_rears
 from urbanflow.network import CompiledNetwork
 from urbanflow.routing import RouteTable, plan_connector, valid_mask
 from urbanflow.scenario.schema import VehicleTypeSpec
@@ -172,12 +173,37 @@ def test_first_random_and_exact_lanes(world: World) -> None:
     world.wait("x.0", lane=1)
     world.wait("x.1", lane=1)
     assert world.lanes(world.insert()) == ["W_J1_1"]
-    # an explicit lane is honoured even if it cannot reach the next road (mandatory change)
+    # an explicit lane that cannot reach the next road is no candidate (G.8): the head waits
     world.queues.clear()
     world.veh.reset()
-    h = world.wait("n.0", roads=("J1_J2", "J2_N"), lane=2)
-    assert world.lanes(world.insert()) == ["J1_J2_2"]
-    assert world.veh.next_conn[h] == -1
+    world.wait("n.0", roads=("J1_J2", "J2_N"), lane=2)  # lane 2 only reaches J2_S
+    assert world.insert().tolist() == []
+    world.wait("n.1", roads=("J1_J2", "J2_S"))  # FIFO: blocked behind it
+    assert world.insert().tolist() == []
+
+
+def test_lane_rears_include_connector_overhang(world: World) -> None:
+    """A vehicle on an outgoing connector whose rear hangs back over the lane end is the
+    lane's most upstream body: an otherwise empty lane is not free up to its end."""
+    net = world.net
+    lane = net.link_index["J1_J2_1"]
+    length = float(net.link_length[lane])
+    bus = world.place("bus", "J1_J2_1->J2_E_1", 2.0, 0.0)
+    world.veh.length[bus] = 12.0  # rear at -10 m: 10 m back on J1_J2_1
+    tails = lane_tails(net, world.veh, world.types)
+    assert tails.rear[lane] == pytest.approx(length - 10.0)
+    other = net.link_index["J1_J2_0"]  # a sibling lane is not affected
+    assert tails.rear[other] == net.link_length[other]
+    run = world.veh.running()
+    body, rear = lane_rears(net, world.veh.link[run], world.veh.pos[run] - 12.0, world.veh.uid[run])
+    assert run[body[lane]] == bus and rear[lane] == pytest.approx(length - 10.0)
+    # a vehicle with its front on the lane further upstream is the body instead
+    car = world.place("car", "J1_J2_1", 50.0, 3.0)
+    tails = lane_tails(net, world.veh, world.types)
+    assert tails.rear[lane] == pytest.approx(50.0 - C.VEHICLE_LENGTH)
+    assert tails.speed[lane] == 3.0
+    world.veh.pos[car] = length - 1.0  # now the overhang is further upstream
+    assert lane_tails(net, world.veh, world.types).rear[lane] == pytest.approx(length - 10.0)
 
 
 def test_fifo_head_blocks_its_road(world: World) -> None:

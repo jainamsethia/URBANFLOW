@@ -127,6 +127,20 @@ def test_freed_handles_are_reused_only_after_recycle() -> None:
     assert c == 2
 
 
+def test_handles_freed_between_steps_wait_one_more_recycle() -> None:
+    """A command frees a handle between steps; the next step still reports the removal
+    with it, so it must not be reused by that step's spawns (B.2 #1)."""
+    table = VehicleTable(8)
+    a = table.alloc("a")
+    table.status[a] = VehicleStatus.removed.code
+    table.free_deferred(a, between_steps=True)
+    assert "a" not in table.id_to_handle and not table.active[a]
+    table.recycle()  # sub-step 0 of the step that emits vehicle_removed
+    assert table.ids[a] == "a" and table.alloc("b") != a
+    table.recycle()
+    assert table.ids[a] is None and table.alloc("c") == a
+
+
 def test_uids_are_monotonic_and_never_reused() -> None:
     table = VehicleTable(2)
     h0 = table.alloc("x")

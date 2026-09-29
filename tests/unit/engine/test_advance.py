@@ -80,6 +80,7 @@ def test_multi_hop_in_one_step(corridor_world: World) -> None:
     assert w.veh.route_cursor[h] == 1
     assert not w.veh.committed[h] and w.veh.commit_seq[h] == -1
     assert w.veh.link_waiting_time[h] == 0.0
+    assert w.veh.lock_conn[h] == conn  # kept across lane entry: the rear is still on it
     assert w.veh.next_conn[h] == plan_connector(net, to, w.routes.get(0), 1)
     assert w.veh.v0[h] == pytest.approx(desired_speed(net, w.veh, w.types, np.array([h]))[0])
     assert adv.crossed.tolist() == [h] and adv.crossed_committed.tolist() == [True]
@@ -106,6 +107,7 @@ def test_connector_entry_refreshes_v0(corridor_world: World) -> None:
     assert w.net.link_ids[int(w.veh.link[h])] == "J1_J2_2->J2_S_0"
     assert w.veh.v0[h] == pytest.approx(w.net.link_speed_limit[w.veh.link[h]])
     assert w.veh.route_cursor[h] == 0 and w.veh.committed[h]
+    assert w.veh.lock_conn[h] == w.veh.link[h]  # connector entry locks it (F.3 foe scan)
 
 
 @pytest.mark.parametrize(

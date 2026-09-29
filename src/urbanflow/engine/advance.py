@@ -10,7 +10,11 @@ within one step: lane -> planned connector -> the connector's ``to_lane`` -> ...
 * lane entry: ``route_cursor += 1``, ``v0``, ``valid_mask``, ``next_conn`` (I.2),
   ``committed``/``granted``/``forced``/``commit_seq`` cleared, ``link_waiting_time = 0``,
   then the router's ``on_road_entry`` reroute hook. ``v0`` is also refreshed on connector
-  entry (it is the desired speed on the current link, E.4).
+  entry (it is the desired speed on the current link, E.4);
+* connector entry sets ``lock_conn`` to the connector: it is kept across the lane entry
+  until bookkeeping sees the rear leave the connector, so admission still treats the
+  vehicle as a foe of that connector's zones (F.3). (Zone grants replace this with
+  the E.4 set-on-grant rule.)
 
 Crossing times assume constant acceleration within the step (``(v' - v)/dt``, or the
 constant deceleration of an in-step stop): the time to cover ``x`` from speed ``v`` is
@@ -149,7 +153,7 @@ def advance_links(
     crossed: list[IntArray] = []
     crossed_committed: list[BoolArray] = []
     violations = 0
-    route_len = np.fromiter((len(r) for r in routes.routes), dtype=np.intp, count=len(routes))
+    route_len = routes.lengths
 
     active = np.flatnonzero(_past_end(net, veh, run))
     while active.size:
@@ -203,6 +207,7 @@ def advance_links(
         crossed_committed.append(committed[hop_lane])
         veh.pos[into_conn] -= lengths[link[hop_lane]]
         veh.link[into_conn] = conn
+        veh.lock_conn[into_conn] = conn
         veh.v0[into_conn] = desired_speed(net, veh, types, into_conn)
         # connector -> its to_lane (a new road)
         into_lane = h[hop_conn]
@@ -223,9 +228,7 @@ def advance_links(
         if into_lane.size:
             ctx = RoutingContext(step, time, routes, veh.route_id, veh.route_cursor, events)
             _reroute(net, veh, routes, router, into_lane, ctx)
-            route_len = np.fromiter(
-                (len(r) for r in routes.routes), dtype=np.intp, count=len(routes)
-            )
+            route_len = routes.lengths  # reroutes may have interned new routes
         again = hop_lane | hop_conn
         active = active[again][_past_end(net, veh, h[again])]
 

@@ -99,7 +99,7 @@ def check_debug(engine: Engine, advance: Advance | None = None) -> None:
 
     # I7 route consistency
     routes = engine.routes.routes
-    sizes = np.fromiter((len(r) for r in routes), dtype=np.intp, count=len(routes))
+    sizes = engine.routes.lengths
     flat = np.concatenate([*routes, np.zeros(1, dtype=np.int32)])  # padded: base + 1 is valid
     rid, cursor = veh.route_id[run].astype(np.intp), veh.route_cursor[run].astype(np.intp)
     known = (rid >= 0) & (rid < len(routes))

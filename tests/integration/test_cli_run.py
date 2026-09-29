@@ -134,6 +134,16 @@ def test_invalid_scenario_exits_3(workspace: Path, capsys: pytest.CaptureFixture
     assert "Scenario validation failed" in capsys.readouterr().err
 
 
+def test_overrides_are_rechecked_against_the_demand(
+    workspace: Path, scenario: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """E507: the generated flows have no end, so --set duration=null would never finish."""
+    assert run("run", "s.json", "--set", "duration=null", "--no-save", "--no-progress") == 3
+    err = capsys.readouterr().err
+    assert "Scenario validation failed" in err
+    assert 'demand.flows[0]: flow has neither "end" nor "count"' in err
+
+
 def test_ctrl_c_saves_partial_results(
     workspace: Path,
     scenario: Path,

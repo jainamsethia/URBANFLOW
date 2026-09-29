@@ -30,6 +30,15 @@ class RouteTable:
         self.routes: list[IntArray] = []
         """Read-only ``int32`` road arrays by route id."""
         self._ids: dict[tuple[int, ...], int] = {}
+        self._lengths = np.zeros(64, dtype=np.intp)  # grows by doubling
+
+    @property
+    def lengths(self) -> IntArray:
+        """Number of roads of each route, by route id (read-only; re-read after
+        :meth:`intern`, which may reallocate it)."""
+        view = self._lengths[: len(self.routes)]
+        view.flags.writeable = False
+        return view
 
     def __len__(self) -> int:
         return len(self.routes)
@@ -45,6 +54,9 @@ class RouteTable:
             arr.setflags(write=False)
             route_id = self._ids[key] = len(self.routes)
             self.routes.append(arr)
+            if route_id == self._lengths.size:
+                self._lengths = np.resize(self._lengths, 2 * route_id)
+            self._lengths[route_id] = len(key)
         return route_id
 
     def get(self, route_id: int) -> IntArray:

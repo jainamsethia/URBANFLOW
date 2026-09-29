@@ -177,6 +177,31 @@ def test_rear_over_the_lane_end_blocks_any_lane_vehicle(junction: World) -> None
     assert _lead(w, i)[:2] == (j, pytest.approx(10.0 - 3.0))
 
 
+def test_lookahead_sees_a_rear_hanging_back_over_an_empty_lane(two_junctions: World) -> None:
+    """Review repro: a bus longer than its connector keeps its rear on the lane before it,
+    so a vehicle looking into that lane must not see it as free up to its end."""
+    w = two_junctions
+    net, length = w.net, w.net.link_length
+    lane, conn = w.link("J1_J2_0"), w.link("J1_J2_0->J2_S_0")
+    into = w.link("W_J1_0->J1_J2_0")
+    assert length[conn] < 12.0  # shorter than a bus
+    bus_at = float(length[conn]) - 1.0
+    rear_on_lane = float(length[lane]) + bus_at - 12.0
+    route = ("W_J1", "J1_J2", "J2_E")
+    bus = w.place("J1_J2_0->J2_S_0", bus_at, 0.0, route=("J1_J2", "J2_S"), vtype="bus")
+    car = w.place("W_J1_0->J1_J2_0", 2.0, 13.0, route=route)  # looks into J1_J2_0
+    assert _lead(w, car)[:2] == (bus, pytest.approx(float(length[into]) - 2.0 + rear_on_lane))
+    assert w.leaders().lane_rear[lane] == pytest.approx(rear_on_lane)
+    # a committed lane vehicle looking through its planned connector
+    w2 = World(net)
+    bus2 = w2.place("J1_J2_0->J2_S_0", bus_at, 0.0, route=("J1_J2", "J2_S"), vtype="bus")
+    d = 3.0
+    lane_car = w2.place("W_J1_0", float(length[0]) - d, 13.0, route=route, committed=True)
+    assert w2.veh.next_conn[lane_car] == into
+    gap = d + float(length[into]) + rear_on_lane
+    assert _lead(w2, lane_car)[:2] == (bus2, pytest.approx(gap))
+
+
 def test_no_running_vehicles(junction: World) -> None:
     lead = junction.leaders()
     assert lead.order.size == lead.leader.size == 0
@@ -235,6 +260,11 @@ def _reference(w: World) -> dict[int, tuple[int, float, float]]:
             if lj == li and (pj, int(veh.uid[j])) > (pi, int(veh.uid[i])):
                 gaps.append(rj - pi)
             gaps += [off + rj for lk, off in path if lj == lk and off < reach]
+            if lj >= n_lanes and rj < 0:  # rear hanging back over its from-lane's end
+                back = int(net.conn_from_lane[lj - n_lanes])
+                gaps += [
+                    off + float(length[lk]) + rj for lk, off in path if lk == back and off < reach
+                ]
             if on_lane and lj in out_conns:
                 limit = math.inf if lj == nc else diverge.get((nc, lj), 0.0)
                 if rj <= limit:

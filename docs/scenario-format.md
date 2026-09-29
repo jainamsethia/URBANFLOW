@@ -198,7 +198,7 @@ Stage B codes come from the builder.
 | E502 | error | Q (post-derive) | `unknown road "{road}"{hint}` |
 | E503 | error | Q (post-derive) | `route is not connected: no movement from "{a}" to "{b}" at intersection "{j}"` / `route is not connected: "{a}" ends at "{ja}" but "{b}" starts at "{jb}"` |
 | E504 | error | Q (post-derive) | `"{d}" is not reachable from "{o}"{via_text}` |
-| E505 | error | Q (post-derive) | `lane {k} does not exist on road "{road}" ({n} lanes)` |
+| E505 | error | Q (post-derive) | `lane {k} does not exist on road "{road}" ({n} lanes)` / `lane {k} of road "{road}" has no connection to the next road "{next}" of the route` |
 | E506 | error | Q (post-derive) | `binomial arrivals allow at most one vehicle per step: {rate} veh/h > {max:.0f} veh/h at dt={dt} s (use "poisson" or split the flow)` |
 | E507 | error | Q (post-derive) | `flow has neither "end" nor "count" but simulation.duration is null; the run would never end` |
 | E601 | error | Q (post-derive) | `stop road "{road}" is not on the line's route` |

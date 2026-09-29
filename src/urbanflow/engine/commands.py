@@ -21,6 +21,7 @@ from urbanflow.core.events import EventBuffer, EventType
 from urbanflow.core.types import VehicleStatus
 from urbanflow.demand.insertion import enqueue
 from urbanflow.demand.spawners import api_request
+from urbanflow.routing.lanes import valid_mask
 from urbanflow.scenario.schema import DepartLane, DepartSpeed, TripSpec
 from urbanflow.scenario.validate import issues_from_pydantic
 
@@ -114,12 +115,24 @@ class EngineCommands:
         first = roads[0] if roads else net.road_index[trip.origin or ""]
         lanes = int(net.road_n_lanes[first])
         lane = trip.depart_lane
-        if isinstance(lane, int) and lane >= lanes:
-            raise CommandError(
-                f'depart_lane {lane} does not exist: road "{net.road_ids[first]}" has '
-                f"{lanes} lane(s) (0-{lanes - 1})"
-            )
         try:
+            if isinstance(lane, int):
+                if lane >= lanes:
+                    raise CommandError(
+                        f'depart_lane {lane} does not exist: road "{net.road_ids[first]}" has '
+                        f"{lanes} lane(s) (0-{lanes - 1})"
+                    )
+                path = roads or eng.router.route(
+                    first,
+                    net.road_index[trip.destination or ""],
+                    tuple(net.road_index[v] for v in trip.via),
+                )
+                nxt = path[1] if len(path) > 1 else -1
+                if not valid_mask(net, first, nxt) >> lane & 1:
+                    raise CommandError(
+                        f'depart_lane {lane} of road "{net.road_ids[first]}" has no connection '
+                        f'to the next road "{net.road_ids[nxt]}" of the route'
+                    )
             req = api_request(
                 trip,
                 net=net,
@@ -159,7 +172,7 @@ class EngineCommands:
             link = int(veh.link[h])
         veh.status[h] = _REMOVED
         uid = int(veh.uid[h])
-        veh.free_deferred(h)
+        veh.free_deferred(h, between_steps=True)
         eng.removed += 1
         self._pending.append((EventType.vehicle_removed, eng.time, h, uid, link))
         self._log("remove_vehicle", vehicle_id=vehicle_id)

@@ -88,8 +88,10 @@ def test_anticipation_toward_a_slower_connector(junction: World) -> None:
     assert w.at(a_lim, straight) == pytest.approx(-r)
 
 
-def test_anticipation_in_the_last_step_before_a_slower_link(junction: World) -> None:
-    """Within reach of the link, brake at r below the b/2 threshold; no overshoot of v_n."""
+@pytest.mark.parametrize("dt", [1.0, 2.0])
+def test_anticipation_in_the_last_step_before_a_slower_link(junction: World, dt: float) -> None:
+    """Within reach of the link, brake below the b/2 threshold, but only down to v_n at the
+    end of the step: braking at r for the whole step would undershoot v_n on the link."""
     w = junction
     lane = float(w.net.link_length[w.link("W_in_0")])
     v_c = float(w.net.link_speed_limit[w.link("W_in_0->S_out_0")])
@@ -98,12 +100,13 @@ def test_anticipation_in_the_last_step_before_a_slower_link(junction: World) -> 
     slow = w.place("E_in_0", lane - 1.5, v_c - 1.0, route=("E_in", "N_out"))  # within reach
     r = (v**2 - v_c**2) / (2 * d)
     assert r < C.ANTICIPATION_DECEL_FACTOR * C.IDM_DECEL  # the plain rule would not brake
-    a_lim, v0_end = anticipation(w.net, w.veh, w.types, w.run(), 1.0)
-    assert w.at(a_lim, fast) == pytest.approx(-r)
+    assert r * dt > v - v_c  # braking at r for the whole step would end below v_c
+    a_lim, v0_end = anticipation(w.net, w.veh, w.types, w.run(), dt)
+    assert w.at(a_lim, fast) == pytest.approx((v_c - v) / dt)
     assert w.at(v0_end, fast) == pytest.approx(v_c)
     assert math.isinf(w.at(a_lim, slow))
-    _step(w, 1.0)
-    assert w.veh.speed[fast] <= v_c  # enters the connector at no more than its v0
+    _step(w, dt)
+    assert v_c - 1e-9 <= w.veh.speed[fast] <= v_c  # enters the connector at its v0
     assert w.veh.speed[slow] <= w.at(v0_end, slow) + 1e-12  # accelerates to v_n at most
     assert w.at(v0_end, slow) == pytest.approx(w.net.link_speed_limit[w.link("E_in_0->N_out_0")])
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import math
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -108,6 +109,44 @@ def test_unsupported_features_fail_by_name(junction: Scenario) -> None:
         Simulation(junction, metrics={"collectors": ["default", "speeding"]})
     with pytest.raises(ConfigError, match="unknown field"):
         Simulation(junction, **{"dtt": 1.0})  # type: ignore[arg-type]
+
+
+def test_config_overrides_are_rechecked_against_the_demand(
+    corridor_doc: Callable[..., dict[str, Any]],
+) -> None:
+    """E506/E507 use the run's final dt and duration, not only the scenario's own block."""
+    route = ["W_J1", "J1_J2", "J2_E"]
+    binomial = {"id": "b", "route": route, "rate": 3000, "arrival": "binomial", "end": 600}
+    scenario = Scenario.from_dict(corridor_doc(flows=[binomial]))  # dt = 1: p = 0.83
+    Simulation(scenario)
+    with pytest.raises(ScenarioValidationError) as info:
+        Simulation(scenario, dt=2.0, duration=600)  # p = 1.67
+    assert [(i.code, i.path) for i in info.value.errors] == [("E506", "demand.flows[0].rate")]
+    endless = Scenario.from_dict(corridor_doc(flows=[{"id": "e", "route": route, "rate": 300}]))
+    Simulation(endless)  # the scenario's duration (600 s) ends it
+    with pytest.raises(ScenarioValidationError) as info:
+        Simulation(endless, duration=None)
+    assert [(i.code, i.path) for i in info.value.errors] == [("E507", "demand.flows[0]")]
+
+
+def test_endless_run_drains_through_the_watchdog(
+    corridor_doc: Callable[..., dict[str, Any]],
+) -> None:
+    """Review repro: W_J1 lane 1 only reaches J1_J2 lanes 0 and 2, and neither connects to
+    J2_E. Without lane changes those vehicles wait at the lane end until the watchdog
+    teleports them, so a duration=None run still ends."""
+    flow = {"id": "f", "route": ["W_J1", "J1_J2", "J2_E"], "rate": 600, "end": 120}
+    doc = corridor_doc(flows=[flow])
+    doc["simulation"]["duration"] = None
+    sim = Simulation(Scenario.from_dict(doc), deadlock_timeout=60.0)
+    s = sim.run(until=3000.0).summary  # bounded, in case it never drains
+    assert sim.done and sim.time < 3000.0
+    assert s["vehicles.teleported"] > 0
+    assert s["vehicles.arrived"] == s["vehicles.generated"] == s["vehicles.inserted"] == 20
+    stuck = Simulation(Scenario.from_dict(doc), deadlock_timeout=0.0)  # 0: watchdog off
+    s = stuck.run(until=3000.0).summary
+    assert not stuck.done and s["vehicles.teleported"] == 0
+    assert s["vehicles.arrived"] < s["vehicles.generated"]
 
 
 # ------------------------------------------------------------------------------- time and done

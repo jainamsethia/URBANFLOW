@@ -19,7 +19,10 @@ the minimum gap per vehicle:
 
 Rears are ``pos - len``. A rear below 0 still hangs over the upstream lane, so it counts as
 inside every diverge zone; a vehicle without a planned connector therefore still sees
-connector vehicles whose rear blocks its lane end.
+connector vehicles whose rear blocks its lane end. Looking ahead into a lane, the candidate
+is the lane's most upstream body (:func:`~urbanflow.demand.insertion.lane_rears`), which
+includes a vehicle on one of the lane's outgoing connectors whose rear hangs back over
+the lane end (gap ``offset + L + rear_j``), so an empty-looking lane is not free to its end.
 """
 
 from __future__ import annotations
@@ -30,6 +33,7 @@ import numpy as np
 
 from urbanflow.core import constants as C
 from urbanflow.core.types import BoolArray, FloatArray, IntArray, UIntArray
+from urbanflow.demand.insertion import lane_rears
 from urbanflow.network.compiled import CompiledNetwork
 from urbanflow.network.conflicts import ConflictKind
 from urbanflow.routing.base import RouteTable
@@ -119,6 +123,9 @@ class Leaders:
     ``inf`` if none (G.2 cap obstacle with ``v_L = 0``, ``s_m = 0``)."""
     tail: IntArray
     """Per link: handle of its most upstream vehicle (smallest ``pos``), -1 if empty."""
+    lane_rear: FloatArray
+    """Per lane: rear of its most upstream body, overhanging connector vehicles included
+    (:func:`~urbanflow.demand.insertion.lane_rears`); the lane length if none."""
 
 
 def expand_csr(ptr: IntArray, rows: IntArray) -> tuple[IntArray, IntArray]:
@@ -136,10 +143,9 @@ def remaining_roads(veh: VehicleTable, routes: RouteTable, run: IntArray) -> Int
     A connector vehicle's current road is the one it came from (``route_cursor`` advances
     on lane entry), so 1 means its ``to_lane`` is on the last road.
     """
-    lengths = np.fromiter((len(r) for r in routes.routes), dtype=np.intp, count=len(routes))
-    if lengths.size == 0:
+    if len(routes) == 0:
         return np.zeros(run.size, dtype=np.intp)
-    return lengths[veh.route_id[run]] - 1 - veh.route_cursor[run].astype(np.intp)
+    return routes.lengths[veh.route_id[run]] - 1 - veh.route_cursor[run].astype(np.intp)
 
 
 def compute_leaders(
@@ -160,7 +166,8 @@ def compute_leaders(
         none = np.zeros(0, dtype=np.intp)
         empty = np.zeros(0)
         tails = np.full(net.n_links, -1, dtype=np.intp)
-        return Leaders(none, none, none, empty, empty, empty, tails)
+        free = net.link_length[:n_lanes].astype(np.float64)
+        return Leaders(none, none, none, empty, empty, empty, tails, free)
     link = veh.link[run].astype(np.intp)
     pos = veh.pos[run]
     length = veh.length[run].astype(np.float64)
@@ -172,6 +179,7 @@ def compute_leaders(
     tail = np.full(net.n_links, -1, dtype=np.intp)
     starts = np.flatnonzero(np.r_[True, slink[1:] != slink[:-1]])
     tail[slink[starts]] = perm[starts]
+    body, lane_rear = lane_rears(net, link, rear, uid)
     key = slink * _KEY + pos[perm]
     lengths = net.link_length
     d_end = lengths[link] - pos
@@ -195,10 +203,13 @@ def compute_leaders(
         idx = np.minimum(raw, n - 1)
         return np.where((raw < n) & (slink[idx] == links), perm[idx], -1)
 
-    def lookahead(i: IntArray, links: IntArray, offset: FloatArray) -> None:
-        j = tail[links]
-        ok = (j >= 0) & (offset < reach[i])
-        add(i, j, offset + rear[j], ok)
+    def lookahead(i: IntArray, conns: IntArray, offset: FloatArray) -> None:
+        j = tail[conns]
+        add(i, j, offset + rear[j], (j >= 0) & (offset < reach[i]))
+
+    def lookahead_lane(i: IntArray, lanes: IntArray, offset: FloatArray) -> None:
+        j = body[lanes]
+        add(i, j, offset + lane_rear[lanes], (j >= 0) & (offset < reach[i]))
 
     # same link: the successor in the sorted order
     same = slink[1:] == slink[:-1]
@@ -210,7 +221,7 @@ def compute_leaders(
     conn_i = np.flatnonzero(~on_lane)
     conn_c = link[conn_i]
     to = net.conn_to_lane[conn_c - n_lanes].astype(np.intp)
-    lookahead(conn_i, to, d_end[conn_i])
+    lookahead_lane(conn_i, to, d_end[conn_i])
     far = remaining[conn_i] >= 2
     stop_gap[conn_i[far]] = d_end[conn_i[far]] + lengths[to[far]]
     # committed lane vehicles through their planned connector into its to_lane
@@ -219,7 +230,7 @@ def compute_leaders(
     to2 = net.conn_to_lane[planned - n_lanes].astype(np.intp)
     lookahead(lane_c, planned, d_end[lane_c])
     offset2 = d_end[lane_c] + lengths[planned]
-    lookahead(lane_c, to2, offset2)
+    lookahead_lane(lane_c, to2, offset2)
     far2 = remaining[lane_c] >= 2
     stop_gap[lane_c[far2]] = offset2[far2] + lengths[to2[far2]]
 
@@ -270,4 +281,5 @@ def compute_leaders(
         leader_speed=np.where(has, speed[lead], 0.0),
         stop_gap=stop_gap,
         tail=np.where(tail >= 0, run[tail], -1),
+        lane_rear=lane_rear,
     )

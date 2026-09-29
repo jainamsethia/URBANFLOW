@@ -11,7 +11,6 @@ import numpy as np
 import pytest
 
 from urbanflow.core.config import SimulationConfig
-from urbanflow.core.errors import UrbanFlowError
 from urbanflow.core.rng import RngStreams
 from urbanflow.demand import FlowSpawner, SpawnRequest, TripSchedule, build_spawners
 from urbanflow.demand.spawners import Spawner, emission_step
@@ -283,14 +282,3 @@ def test_trips(build: Build) -> None:
     sf = RngStreams(0).stream("trip:late").normal(1.0, 0.1)
     late = build(trips=trips).spawners[0].due(10)[-1]
     assert late.speed_factor == pytest.approx(float(np.clip(sf, 0.8, 1.2)))
-
-
-def test_transit_is_rejected_by_name(build: Build) -> None:
-    line = {
-        "id": "bus1",
-        "route": ROUTE_E,
-        "headway": 600.0,
-        "stops": [{"road": "W_J1", "position": 100.0}],
-    }
-    with pytest.raises(UrbanFlowError, match=r'transit lines \("bus1"\) are not supported'):
-        build(transit=[line])

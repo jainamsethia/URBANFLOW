@@ -5,8 +5,8 @@ Spawned vehicles wait in one FIFO queue per first road (:func:`enqueue`). Each s
 queue heads: at most one insertion per lane per step, and a head that cannot be inserted
 blocks its road (FIFO). A new vehicle is placed with its rear at the lane start
 (``pos = length``) at a depart speed that satisfies the G.2 cap behind the lane's last
-vehicle, respecting space reserved by committed inbound vehicles (F.3) and the vehicles
-still on connectors into the lane.
+vehicle body (:func:`lane_rears`), respecting space reserved by committed inbound vehicles
+(F.3) and the vehicles still on connectors into the lane.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from urbanflow.core.constants import SAFETY_MARGIN
-from urbanflow.core.types import FloatArray, IntArray, VehicleStatus
+from urbanflow.core.types import FloatArray, IntArray, UIntArray, VehicleStatus
 from urbanflow.demand.spawners import SpawnRequest
 from urbanflow.network.compiled import CompiledNetwork
 from urbanflow.routing.base import RouteTable
@@ -27,7 +27,7 @@ from urbanflow.vehicles.car_following import desired_speed, safe_speed, stop_bud
 from urbanflow.vehicles.table import DEPART_LANE_BEST, DEPART_LANE_FIRST, VehicleTable
 from urbanflow.vehicles.types import VehicleTypes
 
-__all__ = ["InsertionQueues", "LaneTails", "enqueue", "insert_step", "lane_tails"]
+__all__ = ["InsertionQueues", "LaneTails", "enqueue", "insert_step", "lane_rears", "lane_tails"]
 
 _WAITING = VehicleStatus.waiting_insert.code
 _RUNNING = VehicleStatus.running.code
@@ -91,16 +91,46 @@ def enqueue(
     return h
 
 
+def lane_rears(
+    net: CompiledNetwork, link: IntArray, rear: FloatArray, uid: UIntArray
+) -> tuple[IntArray, FloatArray]:
+    """Per lane: its most upstream vehicle body and that body's rear in lane coordinates.
+
+    ``link``, ``rear`` (``pos - length``) and ``uid`` describe running vehicles. A lane's
+    bodies are the vehicles whose front is on it and the vehicles on its outgoing
+    connectors whose rear still hangs back over its end (``rear < 0``, at ``L + rear``).
+    Returns ``(index into the arguments, -1 if none; rear, the lane length if none)``;
+    ties go to the smaller uid.
+
+    ponytail: one link of overhang; a body longer than its connector plus the lane before
+    it would need a walk further upstream (not reachable with E806-sized lanes and buses).
+    """
+    n_lanes = net.n_lanes
+    lane = link.astype(np.intp)
+    x = rear.astype(np.float64)
+    hang = (lane >= n_lanes) & (x < 0)
+    lane[hang] = net.conn_from_lane[lane[hang] - n_lanes]
+    x[hang] += net.link_length[lane[hang]]
+    keep = np.flatnonzero(lane < n_lanes)
+    order = keep[np.lexsort((uid[keep], x[keep], lane[keep]))]
+    first = order[np.r_[True, lane[order][1:] != lane[order][:-1]]] if order.size else order
+    body = np.full(n_lanes, -1, dtype=np.intp)
+    body[lane[first]] = first
+    free = net.link_length[:n_lanes].astype(np.float64)
+    free[lane[first]] = x[first]
+    return body, free
+
+
 @dataclass(frozen=True, slots=True)
 class LaneTails:
     """Upstream ends of every link, as insertion sees them (from the step's start state)."""
 
     rear: FloatArray
-    """Per lane: rear position of the last (most upstream) vehicle; the lane length if empty."""
+    """Per lane: rear of its most upstream body (:func:`lane_rears`); the length if none."""
     speed: FloatArray
-    """Per lane: speed of that vehicle (0 if empty)."""
+    """Per lane: speed of that vehicle (0 if none)."""
     b_emerg: FloatArray
-    """Per lane: its emergency deceleration (``inf`` if empty)."""
+    """Per lane: its emergency deceleration (``inf`` if none)."""
     conn_last: IntArray
     """Per connector: handle of the vehicle nearest its end, -1 if empty."""
 
@@ -108,22 +138,18 @@ class LaneTails:
 def lane_tails(net: CompiledNetwork, veh: VehicleTable, types: VehicleTypes) -> LaneTails:
     """:class:`LaneTails` of the running vehicles (ties broken by uid)."""
     run = veh.running()
+    body, rear = lane_rears(net, veh.link[run], veh.pos[run] - veh.length[run], veh.uid[run])
+    has = body >= 0
+    h = run[body[has]]
+    speed = np.zeros(net.n_lanes)
+    speed[has] = veh.speed[h]
+    b_emerg = np.full(net.n_lanes, np.inf)
+    b_emerg[has] = types.emergency_decel[veh.type_idx[h]]
     order = run[np.lexsort((veh.uid[run], veh.pos[run], veh.link[run]))]
-    change = np.flatnonzero(np.diff(veh.link[order])) + 1
-    first = order[np.r_[0, change]] if order.size else order  # smallest pos per link
-    last = order[np.r_[change - 1, -1]] if order.size else order  # largest pos per link
-    n_lanes = net.n_lanes
-    rear = net.link_length[:n_lanes].copy()
-    speed = np.zeros(n_lanes)
-    b_emerg = np.full(n_lanes, np.inf)
-    tail = first[veh.link[first] < n_lanes]
-    lanes = veh.link[tail]
-    rear[lanes] = veh.pos[tail] - veh.length[tail]
-    speed[lanes] = veh.speed[tail]
-    b_emerg[lanes] = types.emergency_decel[veh.type_idx[tail]]
+    last = order[np.r_[np.diff(veh.link[order]) != 0, True]] if order.size else order
+    head = last[veh.link[last] >= net.n_lanes]  # largest pos per connector
     conn_last = np.full(net.n_conn, -1, dtype=np.intp)
-    head = last[veh.link[last] >= n_lanes]
-    conn_last[veh.link[head] - n_lanes] = head
+    conn_last[veh.link[head] - net.n_lanes] = head
     return LaneTails(rear, speed, b_emerg, conn_last)
 
 
@@ -144,7 +170,8 @@ def insert_step(
 
     ``reserved`` is F.3's per-lane ``reserved(l)``; ``limit`` caps the number of insertions
     (``max_vehicles``). Inserted vehicles become running on their lane with ``pos =
-    length``, the depart speed, ``v0``, ``valid_mask``, ``next_conn`` and ``insert_time``.
+    length``, the depart speed, ``v0``, ``valid_mask``, ``next_conn`` and (first insertion
+    only) ``insert_time``.
     """
     inserted: list[int] = []
     used: set[int] = set()  # lanes that received a vehicle this step (membership only)
@@ -155,7 +182,8 @@ def insert_step(
             if not _try_insert(net, veh, types, routes, queues, tails, reserved, used, h, dt):
                 break  # FIFO: the head blocks its road
             queue.popleft()
-            veh.insert_time[h] = time
+            if np.isnan(veh.insert_time[h]):  # not on re-insertion after a teleport
+                veh.insert_time[h] = time
             inserted.append(h)
     return np.asarray(inserted, dtype=np.intp)
 
@@ -182,8 +210,8 @@ def _try_insert(
         candidates = sorted(valid, key=lambda lane: (reserved[lane] - tails.rear[lane], lane))
     elif code == DEPART_LANE_FIRST:
         candidates = valid[:1]
-    else:  # the lane drawn at spawn ("random") or the requested index
-        candidates = [start + code]
+    else:  # the lane drawn at spawn ("random") or the requested index, if it is valid
+        candidates = [start + code] if mask >> code & 1 else []
     lane = next((c for c in candidates if c not in used), -1)
     if lane < 0:
         return False

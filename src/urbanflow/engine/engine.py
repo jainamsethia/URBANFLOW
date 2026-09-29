@@ -3,8 +3,9 @@
 ``Engine.step()`` advances from ``t_n = n dt`` to ``t_{n+1}`` synchronously: decisions in
 sub-steps 4-7 read the state committed at ``t_n`` plus earlier sub-steps' results. The
 sub-steps run in plan order: 0 begin, 2 spawn, 3 insert, 4 leaders, 6 intersections,
-7 longitudinal, 8 advance, 9 bookkeeping, 10 finish. Sub-step 1 (signals) arrives with
-signalised intersections and sub-step 5 (lane changes) with lane changing.
+7 longitudinal, 8 advance, 9 bookkeeping (with the ``deadlock_timeout`` watchdog),
+10 finish. Sub-step 1 (signals) arrives with signalised intersections and sub-step 5
+(lane changes) with lane changing.
 
 Events of a step carry ``step = step_count`` after the step (the frame they belong to);
 spawn, insertion and command events are stamped with the step's start time, link
@@ -186,8 +187,12 @@ class Engine:
             net, veh, types, self.routes, self.queues, tails, reserved, dt=dt, time=t, limit=limit
         )
         veh.halting[new] = veh.speed[new] < cfg.halting_speed
-        for kind in (EventType.vehicle_inserted, EventType.vehicle_entered_link):
-            events.append_many(kind, tag, t, handles=new, uids=veh.uid[new], links=veh.link[new])
+        first = new[veh.teleports[new] == 0]  # vehicle_inserted once: not again after a teleport
+        for kind, hs in (
+            (EventType.vehicle_inserted, first),
+            (EventType.vehicle_entered_link, new),
+        ):
+            events.append_many(kind, tag, t, handles=hs, uids=veh.uid[hs], links=veh.link[hs])
 
         # 4 leaders
         run = veh.running()
@@ -248,9 +253,11 @@ class Engine:
         self.safety_cap_violations += lon.violations + adv.violations
 
         # 9 bookkeeping
-        bookkeeping_step(
+        book = bookkeeping_step(
             net,
             veh,
+            self.routes,
+            self.queues,
             run,
             adv.dx,
             v0_start,
@@ -258,9 +265,12 @@ class Engine:
             events,
             dt=dt,
             halting_speed=cfg.halting_speed,
+            deadlock_timeout=cfg.deadlock_timeout,
             step=tag,
             time=t + dt,
         )
+        self.teleported += int(book.teleported.size)
+        self.arrived += int(book.arrived.size)
 
         # 10 finish
         self._step_count = tag

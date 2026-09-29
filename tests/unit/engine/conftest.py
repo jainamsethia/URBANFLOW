@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import pytest
 
-from urbanflow import generate
+from urbanflow import ScenarioBuilder, generate
 from urbanflow.core.events import EventBuffer
 from urbanflow.core.types import IntArray, VehicleStatus
 from urbanflow.engine.intersections import Admission, JunctionIndex, admit, reservations
@@ -135,3 +135,25 @@ def priority(priority_net: CompiledNetwork) -> World:
 @pytest.fixture
 def corridor_world(corridor_net: CompiledNetwork) -> World:
     return World(corridor_net)
+
+
+@pytest.fixture(scope="session")
+def two_junctions_net() -> CompiledNetwork:
+    """W -> J1 -> J2 -> {E, S}, 1 lane, derived movements: ``J1_J2_0`` is 14.6 m long and
+    the right turn ``J1_J2_0->J2_S_0`` 5.65 m (shorter than a bus)."""
+    b = ScenarioBuilder("two_junctions")
+    b.boundary("W", (-200.0, 0.0))
+    b.intersection("J1", (0.0, 0.0), kind="uncontrolled")
+    b.intersection("J2", (25.0, 0.0), kind="uncontrolled")
+    b.boundary("E", (225.0, 0.0))
+    b.boundary("S", (25.0, -200.0))
+    b.road("W_J1", "W", "J1")
+    b.road("J1_J2", "J1", "J2")
+    b.road("J2_E", "J2", "E")
+    b.road("J2_S", "J2", "S")
+    return compile_network(b.build())
+
+
+@pytest.fixture
+def two_junctions(two_junctions_net: CompiledNetwork) -> World:
+    return World(two_junctions_net)
