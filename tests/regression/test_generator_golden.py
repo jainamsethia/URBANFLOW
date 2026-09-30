@@ -1,5 +1,8 @@
 """Golden content hashes of generated scenarios (plan U.3): derivation or generator changes
-must be deliberate. Update a hash only together with a changelog entry."""
+must be deliberate. Update a hash only together with a changelog entry.
+
+History (the CHANGELOG arrives in P17): P3 calibrated the built-in car's ``headway`` to
+1.1 s (B.2 #25), which is part of every resolved scenario's vehicle types."""
 
 from __future__ import annotations
 
@@ -10,21 +13,21 @@ import pytest
 from urbanflow import generate
 
 GOLDEN = [
-    ("single_intersection", {}, "33193155c163ff7172a9b01205254366d2593c7f5c8d165ccb05074ccc39df53"),
+    ("single_intersection", {}, "3aefba1f3f7f8e9732b1882ba485c7c0c5f2d632970e0a566ebeb05709fdb958"),
     (
         "single_intersection",
         {"kind": "priority"},
-        "60014dc6431cbd1c3c426e8e951f46f9f1b9b7d36dceb16f210b3be55f789505",
+        "cf944ba71bd621e6fd7aabf814e360192d43b9d46ecec6d1ef0e4e6b48974b74",
     ),
     (
         "single_intersection",
         {"kind": "uncontrolled"},
-        "87f6c97627d0332b909acff9d547819568caed51991e14fd074821cbb2b21003",
+        "3c0ffa9b370bdb62cfc100351e90bbf2551c7640db651350320e4add8c9f04c3",
     ),
     (
         "single_intersection",
         {"arms": 3},
-        "c5322d835743a088cf3c62b8491cbe3b1409502d3ea2999dda07b56a6459e3ce",
+        "fb0ac9593c9ca78df7bcba17d950e7d9fa60553ef1f68846f86c70469b88d23d",
     ),
 ]
 

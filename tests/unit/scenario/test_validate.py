@@ -578,6 +578,35 @@ def test_demo_is_valid(demo_data: Data) -> None:
     assert report.ok and report.spec is not None and report.resolved is not None
 
 
+def test_w305_counts_only_the_intergreens_that_happen(demo_data: Data) -> None:
+    """Review repro: NS -> NS_PLUS loses no green (no yellow, no all-red), so at dt 0.4 the
+    realised cycle is 90 + 2 (3.2 + 1.2) = 98.8 s against 98 s (not 103.2 / 102), which is
+    the fixed-time controller's C_q."""
+    from urbanflow.signals import build_programs
+    from urbanflow.signals.controllers import realised_cycle
+
+    signal = demo_data["network"]["intersections"][0]["signal"]
+    ns, ew = signal["phases"]
+    plus = {**copy.deepcopy(ns), "id": "NS_PLUS"}
+    plus["green"]["E_in->S_out"] = "g"  # a superset of NS
+    signal["phases"] = [ns, plus, ew]
+    for phase in signal["phases"]:
+        phase["duration"] = 30
+    demo_data["simulation"]["dt"] = 0.4
+    w305 = [i for i in validate_data(demo_data).issues if i.code == "W305"]
+    assert [i.message for i in w305] == [
+        "phase durations, yellow or all_red are not multiples of dt=0.4 s; the realised "
+        "cycle is 98.8 s instead of 98.0 s"
+    ]
+    scenario = Scenario.from_dict(demo_data)
+    (prog,) = build_programs(compile_network(scenario), scenario.resolved.network)
+    assert realised_cycle(prog, 0.4) == pytest.approx(98.8)
+    # without the superset phase every change has an intergreen: 60 + 2 (3.2 + 1.2)
+    signal["phases"] = [ns, ew]
+    w305 = [i for i in validate_data(demo_data).issues if i.code == "W305"]
+    assert "the realised cycle is 68.8 s instead of 68.0 s" in w305[0].message
+
+
 @pytest.mark.parametrize("c", CASES, ids=_id)
 def test_issue_code(c: Case, demo_data: Data) -> None:
     found = c.produce(demo_data)

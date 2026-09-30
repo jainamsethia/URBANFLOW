@@ -15,10 +15,33 @@ from numpy.typing import ArrayLike, DTypeLike, NDArray
 
 from urbanflow.core.types import _CodedEnum
 
-__all__ = ["COLUMNS", "NO_VEHICLE", "EventBuffer", "EventType"]
+__all__ = [
+    "COLUMNS",
+    "NO_VEHICLE",
+    "PHASE_FORCED_BIT",
+    "EventBuffer",
+    "EventType",
+    "decode_phase_aux",
+    "phase_aux",
+]
 
 NO_VEHICLE: Final = 0xFFFF_FFFF
 """``handle``/``uid`` of events that are not about a vehicle (u32 maximum)."""
+
+PHASE_FORCED_BIT: Final = 1 << 16
+"""Set in ``aux`` of a ``phase_changed`` event caused by a forced ``set_phase`` jump (B.2
+#25); the low bits hold the new phase index."""
+
+
+def phase_aux(phase: int, *, forced: bool = False) -> int:
+    """``aux`` of a ``phase_changed`` event: the new phase, plus :data:`PHASE_FORCED_BIT`
+    when the change was forced."""
+    return phase | PHASE_FORCED_BIT if forced else phase
+
+
+def decode_phase_aux(aux: int) -> tuple[int, bool]:
+    """Inverse of :func:`phase_aux`: ``(phase, forced)``."""
+    return aux & (PHASE_FORCED_BIT - 1), bool(aux & PHASE_FORCED_BIT)
 
 
 class EventType(_CodedEnum):
@@ -192,5 +215,5 @@ class EventBuffer:
 
     @property
     def aux(self) -> NDArray[np.int32]:
-        """Type-specific payload (e.g. the new phase of ``phase_changed``)."""
+        """Type-specific payload (``phase_changed``: :func:`phase_aux`)."""
         return self._col("aux")

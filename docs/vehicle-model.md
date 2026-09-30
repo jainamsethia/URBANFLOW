@@ -94,7 +94,7 @@ Defaults are the built-in `car`; `bus`, `truck` and `emergency` override some of
 | a | `accel` | 1.5 | m/s² |
 | b | `decel` | 2.0 | m/s² |
 | b<sub>emerg</sub> | `emergency_decel` | 6.0 | m/s² |
-| T | `headway` | 1.5 | s |
+| T | `headway` | 1.1 | s |
 | s<sub>0</sub> | `min_gap` | 2.0 | m |
 | δ | `model_params.delta` | 4 | – |
 | v<sup>max</sup> | `max_speed` | 36.1 | m/s |
@@ -115,6 +115,14 @@ lane-change parameters; the yellow threshold is the dilemma-zone rule of signali
 junctions; the turn lateral acceleration sets connector speed limits
 √(a<sub>lat</sub>·R<sub>min</sub>); τ and the late-arrival factor shape the conflict windows
 of intersection admission.
+
+The car's time gap T = 1.1 s is calibrated on queue discharge at a signal: a queue released
+at green crosses the stop line at about 1580-1640 veh/h/lane (dt 1.0-0.2), inside the
+1500-1900 veh/h/lane band of saturation flows. The IDM equilibrium flow
+v / (s<sub>e</sub>(v) + ℓ), with s<sub>e</sub>(v) = (s<sub>0</sub> + vT) / √(1 − (v/v<sub>0</sub>)<sup>δ</sup>),
+then peaks near 1800 veh/h/lane at 13.9 m/s. The simpler estimate
+3600 / (T + (ℓ + s<sub>0</sub>)/v) ignores the (v/v<sub>0</sub>)<sup>δ</sup> term and
+overstates it (T = 1.5 s measures only about 1420-1440 veh/h).
 
 ## Demand
 

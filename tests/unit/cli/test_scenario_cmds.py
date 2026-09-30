@@ -110,7 +110,7 @@ def broken(workspace: Path) -> Path:
 def test_validate_ok(workspace: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert run(["validate", str(DEMO)]) == 0
     out = capsys.readouterr().out.strip()
-    assert out.startswith("OK: single-intersection-demo (hash 3438b0a26bb0; 5 intersections,")
+    assert out.startswith("OK: single-intersection-demo (hash b758edc3a2b6; 5 intersections,")
     assert out.endswith("16 lanes, 12 movements, 4 flows)")
 
 

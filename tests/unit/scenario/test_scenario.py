@@ -50,7 +50,7 @@ def test_content_hash_ignores_declared_vs_resolved(demo_path: Path, tmp_path: Pa
     scenario = Scenario.load(demo_path)
     resolved_file = scenario.save(tmp_path / "r.json", resolved=True)
     assert Scenario.load(resolved_file).short_hash == scenario.short_hash
-    assert scenario.short_hash == "3438b0a26bb0"  # golden: derivation changes must be deliberate
+    assert scenario.short_hash == "b758edc3a2b6"  # golden: derivation changes must be deliberate
 
 
 def test_constructors(demo_data: dict[str, Any], demo_path: Path) -> None:

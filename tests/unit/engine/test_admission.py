@@ -1,13 +1,17 @@
-"""Admission at unsignalised stop lines (plan F.3) on synthetic states."""
+"""Admission at stop lines (plan F.3, B.2 #25) and the F.1 lookahead rule on synthetic states."""
 
 from __future__ import annotations
 
 import math
 
+import numpy as np
 import pytest
 
 from urbanflow.core import constants as C
-from urbanflow.engine.intersections import eta, reservations
+from urbanflow.core.types import SignalState
+from urbanflow.engine.intersections import eta, reservations, signal_lookahead
+from urbanflow.network import CompiledNetwork, compile_network
+from urbanflow.scenario import ScenarioBuilder
 
 from .conftest import World
 
@@ -80,6 +84,51 @@ def test_exit_space_blocks_the_box(junction: World) -> None:
     adm, reserved = w.admit()
     assert not w.veh.committed[h] and w.veh.held[h]
     assert reserved[w.link("E_out_0")] == pytest.approx(C.VEHICLE_LENGTH + C.IDM_MIN_GAP)
+
+
+def test_exit_space_credits_the_last_vehicles_emergency_stopping_distance(
+    junction: World,
+) -> None:
+    """B.2 #25: ``free(to)`` = rear of the last body on ``to`` + ``v^2 / (2 b_emerg)``, the
+    distance it still travels under emergency braking; a moving platoon does not look
+    parked (review finding: static rears held each queued vehicle ~14 m too long)."""
+    w = junction
+    lane = w.link("E_out_0")
+    h = w.place("W_in_0", _lane_end(w, "W_in_0") - 10.0, 5.0, route=WE)
+    tail = w.place("E_out_0", 8.0, 0.0, route=("E_out",))  # rear 3 m < len + s0 = 7 m
+    need = C.VEHICLE_LENGTH + C.IDM_MIN_GAP
+    b_emerg = float(w.types.emergency_decel[w.veh.type_idx[tail]])
+    v_edge = math.sqrt(2 * b_emerg * (need - 3.0))  # free = 7 m exactly
+    for v, admitted in ((0.0, False), (v_edge - 0.01, False), (v_edge + 0.01, True)):
+        w.veh.committed[h] = False
+        w.veh.speed[tail] = v
+        assert w.leaders().lane_free[lane] == pytest.approx(3.0 + v * v / (2 * b_emerg))
+        w.admit()
+        assert bool(w.veh.committed[h]) is admitted, v
+    # an empty lane is free to its end; reservations still count against a moving tail
+    assert World(w.net).leaders().lane_free[lane] == pytest.approx(_lane_end(w, "E_out_0"))
+    w.veh.committed[h] = False
+    w.place("S_in_0", _lane_end(w, "S_in_0") - 3.0, 1.0, route=("S_in", "E_out"), committed=True)
+    w.admit()
+    assert not w.veh.committed[h] and w.veh.held[h]
+
+
+def test_exit_space_bound_uses_an_overhanging_connector_body(two_junctions: World) -> None:
+    """The overhanging bus of the P2 repro, now moving: its emergency stopping distance
+    frees the space (rear -5.4 m on the lane end, v^2/(2 b_emerg) = 12 m at 12 m/s)."""
+    w = two_junctions
+    route = ("W_J1", "J1_J2", "J2_E")
+    i = w.place("W_J1_0", _lane_end(w, "W_J1_0") - 5.0, 5.0, route=route)
+    bus = w.place("J1_J2_0->J2_S_0", 3.0, 0.0, route=("J1_J2", "J2_S"), vtype="bus")
+    w.admit()
+    assert not w.veh.committed[i]
+    w.veh.speed[bus] = 12.0
+    b_emerg = float(w.types.emergency_decel[w.veh.type_idx[bus]])
+    rear = _lane_end(w, "J1_J2_0") + 3.0 - float(w.veh.length[bus])
+    free = w.leaders().lane_free[w.link("J1_J2_0")]
+    assert free == pytest.approx(rear + 144.0 / (2 * b_emerg)) and free >= 7.0
+    w.admit()
+    assert w.veh.committed[i]
 
 
 def test_conflict_windows(junction: World) -> None:
@@ -268,3 +317,170 @@ def test_last_road_vehicles_are_never_candidates(junction: World) -> None:
 def test_empty(junction: World) -> None:
     adm, _ = junction.admit(next_seq=3)
     assert adm.obstacle_gap.size == 0 and adm.next_seq == 3
+
+
+# --------------------------------------------------------------------------- signals (F.3 step 1)
+EW_GREEN = {"W_in->E_out": "G", "E_in->W_out": "G", "E_in->S_out": "g", "W_in->N_out": "g"}
+V = 13.9
+
+
+def test_red_stops_even_outside_the_decision_zone(signalised: World) -> None:
+    w = signalised
+    h = w.place("W_in_0", _lane_end(w, "W_in_0") - 150.0, V, route=WE)
+    adm, _ = w.admit(signals={})
+    assert w.veh.held[h] and not w.veh.committed[h] and adm.commits == 0
+    assert w.at(adm.obstacle_gap, h) == pytest.approx(150.0 + C.IDM_MIN_GAP - 0.5)
+    adm, _ = w.admit(signals={"W_in->E_out": "G"})  # green: free approach
+    assert not w.veh.held[h] and math.isinf(w.at(adm.obstacle_gap, h))
+
+
+def test_red_runner_that_cannot_stop_is_force_committed(signalised: World) -> None:
+    w = signalised
+    h = w.place("W_in_0", _lane_end(w, "W_in_0") - 5.0, V, route=WE)
+    assert V * V / (2 * 5.0) > C.IDM_EMERGENCY_DECEL
+    adm, reserved = w.admit(signals={})
+    assert (adm.commits, adm.forced, adm.red_runs) == (1, 0, 1)
+    assert w.veh.committed[h] and w.veh.forced[h] and not w.veh.held[h]
+    assert reserved[w.link("E_out_0")] == pytest.approx(C.VEHICLE_LENGTH + C.IDM_MIN_GAP)
+
+
+def test_yellow_dilemma(signalised: World) -> None:
+    """AT-11 on a synthetic state: 10 m proceeds, 60 m at 13.9 m/s stops."""
+    w = signalised
+    lane = _lane_end(w, "W_in_0")
+    near = w.place("W_in_0", lane - 10.0, V, route=WE)
+    far = w.place("E_in_0", lane - 60.0, V, route=("E_in", "W_out"))
+    assert V * V / (2 * 60.0) <= C.YELLOW_MAX_DECEL < V * V / (2 * 10.0)
+    adm, _ = w.admit(signals={"W_in->E_out": "y", "E_in->W_out": "y"})
+    assert w.veh.committed[near] and not w.veh.forced[near] and not w.veh.held[near]
+    assert w.veh.held[far] and not w.veh.committed[far]
+    assert (adm.commits, adm.forced, adm.red_runs) == (1, 0, 0)
+
+
+def test_yellow_dilemma_with_a_blocked_exit(signalised: World) -> None:
+    w = signalised
+    lane = _lane_end(w, "W_in_0")
+    w.place("E_out_0", 6.0, 0.0, route=("E_out",))  # no room behind it
+    # 20 m: too close for a comfortable stop (4.8 m/s^2) but can still stop (<= 6)
+    h = w.place("W_in_0", lane - 20.0, V, route=WE)
+    adm, _ = w.admit(signals={"W_in->E_out": "y"})
+    assert w.veh.held[h] and not w.veh.committed[h] and adm.commits == 0
+    # 12 m: cannot stop any more -> force-commit, counted in forced_commits
+    w.veh.pos[h] = lane - 12.0
+    adm, _ = w.admit(signals={"W_in->E_out": "y"})
+    assert (adm.commits, adm.forced, adm.red_runs) == (1, 1, 0) and w.veh.forced[h]
+
+
+def test_yellow_dilemma_skips_the_decision_zone(signalised: World) -> None:
+    """A hard-braking vehicle (b = 6) at 20 m/s is outside its decision zone at 62 m but
+    inside the dilemma zone (400/124 = 3.2 m/s^2 > 3): it decides at yellow onset."""
+    w = signalised
+    d, v = 62.0, 20.0
+    h = w.place("W_in_0", _lane_end(w, "W_in_0") - d, v, route=WE, vtype="hard")
+    assert d > v * v / (2 * 6.0) + v * 1.0 + C.DECISION_MARGIN
+    w.admit(signals={"W_in->E_out": "G"})
+    assert not w.veh.committed[h] and not w.veh.held[h]  # green: free approach
+    w.admit(signals={"W_in->E_out": "y"})
+    assert w.veh.committed[h] and not w.veh.forced[h]
+
+
+def test_committed_vehicles_never_recheck_the_light(signalised: World) -> None:
+    w = signalised
+    h = w.place("W_in_0", _lane_end(w, "W_in_0") - 30.0, 5.0, route=WE, committed=True)
+    adm, _ = w.admit(signals={})
+    assert w.veh.committed[h] and not w.veh.held[h] and adm.red_runs == 0
+
+
+def test_permissive_yields_to_the_opposing_protected_movement(signalised: World) -> None:
+    w = signalised
+    lane = _lane_end(w, "E_in_0")
+    left = w.place("E_in_0", lane - 0.5, 0.0, route=("E_in", "S_out"))  # g, at the line
+    straight = w.place("W_in_0", lane - 60.0, 12.0, route=WE)  # G, uncommitted, approaching
+    w.admit(signals=EW_GREEN)
+    assert not w.veh.committed[left] and w.veh.held[left]
+    assert not w.veh.committed[straight]  # outside its decision zone
+    # the protected vehicle far away (ETA ~16 s): the permissive turn fits before it
+    w.veh.pos[straight] = lane - 190.0
+    w.admit(signals=EW_GREEN)
+    assert w.veh.committed[left]
+    # both at the stop line: G commits first (rank), g must wait for it
+    w2 = World(w.net)
+    left = w2.place("E_in_0", lane - 0.5, 0.0, route=("E_in", "S_out"))
+    straight = w2.place("W_in_0", lane - 0.5, 0.0, route=WE)
+    w2.admit(signals=EW_GREEN)
+    assert w2.veh.committed[straight] and w2.veh.commit_seq[straight] == 0
+    assert not w2.veh.committed[left] and w2.veh.held[left]
+
+
+# --------------------------------------------------------------------------- F.1 step 4 rule
+@pytest.fixture(scope="module")
+def series_net() -> CompiledNetwork:
+    """W -> J1 (uncontrolled) -> J2 (signalized) -> E; J1_J2 is 30 m long (1 lane)."""
+    b = ScenarioBuilder("series")
+    b.boundary("W", (-200.0, 0.0))
+    b.intersection("J1", (0.0, 0.0), kind="uncontrolled")
+    b.intersection("J2", (40.0, 0.0), kind="signalized")
+    b.boundary("E", (240.0, 0.0))
+    b.road("W_J1", "W", "J1")
+    b.road("J1_J2", "J1", "J2")
+    b.road("J2_E", "J2", "E")
+    return compile_network(b.build())
+
+
+def test_lookahead_stop_line_is_an_idm_obstacle_at_r_and_y(series_net: CompiledNetwork) -> None:
+    w = World(series_net)
+    route = ("W_J1", "J1_J2", "J2_E")
+    conn = w.place("W_J1_0->J1_J2_0", 2.0, 10.0, route=route)  # on J1's connector
+    lane = w.place("W_J1_0", _lane_end(w, "W_J1_0") - 3.0, 10.0, route=route, committed=True)
+    far = w.place("W_J1_0", 50.0, 10.0, route=route)  # uncommitted: its lookahead ends at J1
+    leaders = w.leaders()
+    stop = leaders.stop_gap
+    length = {k: float(w.net.link_length[w.link(k)]) for k in ("W_J1_0->J1_J2_0", "J1_J2_0")}
+    assert w.at(stop, conn) == pytest.approx(length["W_J1_0->J1_J2_0"] - 2.0 + length["J1_J2_0"])
+    assert w.at(stop, lane) == pytest.approx(3.0 + sum(length.values()))
+    assert math.isinf(w.at(stop, far))
+    state = np.full(w.net.n_movements, SignalState.G.code, dtype=np.uint8)
+    j2 = w.net.mov_index["J1_J2->J2_E"]
+    run = w.run()
+    for code, obstacle in (
+        (SignalState.G, False),
+        (SignalState.g, False),
+        (SignalState.y, True),
+        (SignalState.r, True),
+    ):
+        state[j2] = code.code
+        gaps = signal_lookahead(w.net, w.veh, w.types, run, stop, w.routes, w.junctions, state)
+        for h in (conn, lane):
+            expected = w.at(stop, h) + C.IDM_MIN_GAP - C.STOP_LINE_CLEARANCE
+            assert w.at(gaps, h) == (pytest.approx(expected) if obstacle else math.inf), code
+        assert math.isinf(w.at(gaps, far))
+
+
+def test_lookahead_obstacle_needs_the_stop_test_of_admission(series_net: CompiledNetwork) -> None:
+    """B.2 #25 (review repro): a y stop line is an IDM obstacle only if v^2/(2d) <=
+    YELLOW_MAX_DECEL (else the vehicle drives through, as admission's dilemma rule lets
+    it), an r line only if v^2/(2d) <= b_emerg; both always stay G.2 cap obstacles."""
+    w = World(series_net)
+    route = ("W_J1", "J1_J2", "J2_E")
+    h = w.place("W_J1_0->J1_J2_0", 2.0, 10.0, route=route)
+    d = w.at(w.leaders().stop_gap, h)
+    obstacle = d + C.IDM_MIN_GAP - C.STOP_LINE_CLEARANCE
+    state = np.full(w.net.n_movements, SignalState.G.code, dtype=np.uint8)
+    j2 = w.net.mov_index["J1_J2->J2_E"]
+
+    def gap(light: SignalState, v: float) -> float:
+        w.veh.speed[h] = v
+        state[j2] = light.code
+        leaders = w.leaders()
+        assert w.at(leaders.stop_gap, h) == pytest.approx(d)  # the cap obstacle stays
+        args = (w.net, w.veh, w.types, w.run(), leaders.stop_gap, w.routes, w.junctions, state)
+        return w.at(signal_lookahead(*args), h)
+
+    v_y = math.sqrt(2 * d * C.YELLOW_MAX_DECEL)
+    v_r = math.sqrt(2 * d * C.IDM_EMERGENCY_DECEL)
+    assert gap(SignalState.y, 0.99 * v_y) == pytest.approx(obstacle)
+    assert math.isinf(gap(SignalState.y, 1.01 * v_y))  # drives through the yellow
+    assert gap(SignalState.r, 1.01 * v_y) == pytest.approx(obstacle)  # red: stop if able
+    assert gap(SignalState.r, 0.99 * v_r) == pytest.approx(obstacle)
+    assert math.isinf(gap(SignalState.r, 1.01 * v_r))  # cannot stop: admission decides
+    assert math.isinf(gap(SignalState.G, 0.5 * v_y))

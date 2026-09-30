@@ -42,6 +42,7 @@ nav:
   - Road network: road-network.md
   - Vehicle model: vehicle-model.md
   - Simulation model: simulation-model.md
+  - Traffic signals: traffic-signals.md
   - Python API: python-api.md
   - Command line: cli.md
   - Contributing: contributing.md

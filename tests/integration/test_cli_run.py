@@ -112,7 +112,6 @@ def test_config_layers(workspace: Path, scenario: Path, capsys: pytest.CaptureFi
         (["s.json", "--set", "oops"], 4, 'invalid assignment "oops"'),
         (["s.json", "--router", "fastest"], 3, 'unknown router "fastest"'),
         (["s.json", "--config", "none.toml"], 5, "config file not found"),
-        (["signalized.json"], 6, "signalized intersections"),
     ],
 )
 def test_exit_codes(
@@ -123,7 +122,6 @@ def test_exit_codes(
     code: int,
     message: str,
 ) -> None:
-    generate("single_intersection").save(workspace / "signalized.json")
     assert run("run", *argv, "--duration", "5", "--no-save") == code
     assert message in capsys.readouterr().err
 
@@ -167,3 +165,44 @@ def test_ctrl_c_saves_partial_results(
     assert result.interrupted and result.steps == 25
     summary = json.loads((run_dir / "summary.json").read_text(encoding="utf-8"))
     assert summary["interrupted"] is True
+
+
+@pytest.fixture
+def signalised(workspace: Path) -> Path:
+    return generate("single_intersection").save(workspace / "sig.json")
+
+
+def test_controller_option(
+    workspace: Path, signalised: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert run("run", "--help") == 0
+    assert "--controller" in capsys.readouterr().out
+    argv = ["run", "sig.json", "--duration", "30", "--json"]
+    assert run(*argv, "--controller", "fixed_time", "--controller", "J=external") == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["sim_time"] == 30.0
+    assert data["controllers"] == {"J": {"type": "external", "params": {}}}  # the effective one
+    spec = json.loads((Path(data["run_dir"]) / "spec.json").read_text(encoding="utf-8"))
+    assert spec["controllers"] == {"*": "fixed_time", "J": "external"}
+
+
+@pytest.mark.parametrize(
+    ("option", "code", "message"),
+    [
+        ("J=fixd_time", 3, 'unknown signal controller "fixd_time" (did you mean "fixed_time"?)'),
+        ("K=external", 5, 'controllers: unknown intersection "K"'),
+        ("N=external", 4, 'controllers: intersection "N" is not signalized'),
+        ("=external", 4, 'invalid --controller "=external": expected NAME or INTERSECTION=NAME'),
+        ("J=", 4, 'invalid --controller "J="'),
+    ],
+)
+def test_controller_option_errors(
+    workspace: Path,
+    signalised: Path,
+    capsys: pytest.CaptureFixture[str],
+    option: str,
+    code: int,
+    message: str,
+) -> None:
+    assert run("run", "sig.json", "--controller", option, "--duration", "5", "--no-save") == code
+    assert message in capsys.readouterr().err

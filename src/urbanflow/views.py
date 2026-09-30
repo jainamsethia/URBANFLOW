@@ -11,6 +11,10 @@
 Vehicles are identified by id or uid; engine slots (handles) never leave this module.
 Coordinates are world coordinates (the scenario's): the link polyline point at the front
 bumper plus ``lat_offset`` along the unit normal toward the median.
+
+:class:`SignalView`, :class:`PhaseInfo`, :class:`MovementInfo` and
+:class:`IntersectionView` are snapshot copies too; ``sim.signals`` (``control.py``) and
+``sim.intersections`` build them.
 """
 
 from __future__ import annotations
@@ -26,16 +30,22 @@ from numpy.typing import NDArray
 from urbanflow.core import constants as C
 from urbanflow.core.errors import NotFoundError, suggest
 from urbanflow.core.types import (
-    BoolArray,
     DriveSide,
     FloatArray,
     IntArray,
+    IntersectionKind,
+    SignalState,
+    Stage,
+    TurnKind,
     UIntArray,
     VehicleClass,
     VehicleStatus,
 )
+from urbanflow.engine.signalling import stopline_queue
 from urbanflow.network.compiled import CompiledNetwork
 from urbanflow.scenario.schema import DepartLane, DepartSpeed
+from urbanflow.signals import FixedTime, SignalProgram, controller_name
+from urbanflow.signals.controllers import realised_cycle, stage_steps
 from urbanflow.vehicles.table import COLUMNS
 from urbanflow.visualization.geometry import render_geometry
 
@@ -43,16 +53,22 @@ if TYPE_CHECKING:
     from urbanflow.engine import Engine
 
 __all__ = [
+    "IntersectionCollection",
+    "IntersectionView",
     "LaneCollection",
     "LaneView",
+    "MovementInfo",
     "NetworkInfo",
+    "PhaseInfo",
     "RoadCollection",
     "RoadView",
+    "SignalView",
     "StateArrays",
     "StepCache",
     "VehicleCollection",
     "VehicleView",
-    "stopline_queue",
+    "phase_infos",
+    "signal_view",
     "vehicle_xy",
 ]
 
@@ -87,31 +103,6 @@ def vehicle_xy(
     normal = np.column_stack((-np.sin(heading), np.cos(heading))) * toward_median
     world: FloatArray = xy + np.asarray(lat_offset, dtype=np.float64)[:, None] * normal
     return world + net.origin, heading
-
-
-def stopline_queue(
-    link: IntArray, pos: FloatArray, halting: BoolArray, lane_length: FloatArray
-) -> IntArray:
-    """Stop-line queue per lane (plan J.3): the contiguous run of halting vehicles from the
-    front of each lane, counted only when the front vehicle is within
-    ``QUEUE_FRONT_TOLERANCE_M`` of the stop line. Inputs are per vehicle on lanes (any
-    order); the result has one entry per lane (``len(lane_length)``).
-    """
-    n = len(lane_length)
-    if link.size == 0:
-        return np.zeros(n, dtype=np.int64)
-    order = np.lexsort((-pos, link))  # front vehicle first within each lane
-    lk, front, stopped = link[order], pos[order], halting[order]
-    start = np.ones(lk.size, dtype=bool)
-    start[1:] = lk[1:] != lk[:-1]
-    moving = (~stopped).astype(np.int64)
-    c = np.cumsum(moving)
-    base = np.maximum.accumulate(np.where(start, c - moving, 0))
-    in_queue = c == base  # nobody moving between the lane front and this vehicle
-    group = np.cumsum(start) - 1
-    first = np.flatnonzero(start)
-    valid = lane_length[lk[first]] - front[first] <= C.QUEUE_FRONT_TOLERANCE_M
-    return np.bincount(lk[in_queue & valid[group]], minlength=n)
 
 
 # ------------------------------------------------------------------------------- vehicles
@@ -461,7 +452,7 @@ def _lane_stats(engine: Engine) -> _LaneStats:
         halting=_frozen(np.bincount(lane, weights=weights, minlength=n).astype(np.int64)),
         speed_sum=np.bincount(lane, weights=veh.speed[h], minlength=n),
         length_sum=np.bincount(lane, weights=veh.length[h], minlength=n),
-        queue=_frozen(stopline_queue(lane, veh.pos[h], halting, net.link_length[:n])),
+        queue=_frozen(stopline_queue(lane, veh.pos[h], veh.uid[h], halting, net.link_length[:n])),
     )
 
 
@@ -793,6 +784,185 @@ class StateArrays:
             view.flags.writeable = False
             out[name] = view
         return out
+
+
+# ------------------------------------------------------------------------------- signals
+_STATE_CHARS: Final = tuple(s.value for s in SignalState)  # code -> "r", "y", "g", "G"
+
+
+@dataclass(frozen=True, slots=True)
+class SignalView:
+    """Snapshot of the signal of one intersection (plan H.2, AA 5.4)."""
+
+    phase_index: int
+    """Current phase; during yellow and all-red, the phase being left."""
+    phase_id: str
+    stage: Stage
+    """``green``, ``yellow`` or ``all_red``."""
+    target: int
+    """The phase a transition leads to; -1 in green."""
+    stage_elapsed: float
+    """Time the current stage has been applied, s."""
+    green_elapsed: float
+    """Time since the current phase's green started (counts on through its transition), s."""
+    remaining: float | None
+    """``fixed_time``: seconds until the current stage ends (the stage lengths quantised to
+    whole steps); None for other controllers."""
+    min_green: float
+    """Of the current phase, s."""
+    max_green: float
+    cycle: float | None
+    """``fixed_time``: the realised (quantised) cycle ``C_q``, s; None otherwise."""
+    held: bool
+    """A manual hold (``hold_phase``) is active."""
+    movement_states: Mapping[str, str]
+    """Movement id -> ``"G"``, ``"g"``, ``"y"`` or ``"r"``, in canonical order."""
+    state_string: str
+    """SUMO-style: one character per movement, in canonical order."""
+    controller: str
+    """Name of the active controller (``external`` during a manual hold)."""
+
+
+@dataclass(frozen=True, slots=True)
+class PhaseInfo:
+    """One phase of a signal program (AA 5.4)."""
+
+    index: int
+    id: str
+    green: Mapping[str, str]
+    """Movement id -> ``"G"`` (protected) or ``"g"`` (permissive); the others are red."""
+    duration: float
+    """Fixed-time green, s."""
+    min_green: float
+    max_green: float
+
+
+def signal_view(engine: Engine, j: int) -> SignalView:
+    """The :class:`SignalView` of signalised intersection ``j`` (a global index)."""
+    sig, net = engine.signals, engine.network
+    prog = sig.program(j)
+    p = int(sig.phase[j])
+    stage = Stage.from_code(int(sig.stage[j]))
+    controller = engine.controllers[j]
+    remaining = cycle = None
+    if isinstance(controller, FixedTime):
+        dt = engine.config.dt
+        length = {
+            Stage.green: max(float(prog.duration[p]), float(prog.min_green[p])),
+            Stage.yellow: prog.yellow,
+            Stage.all_red: prog.all_red,
+        }[stage]
+        remaining = max(0.0, stage_steps(length, dt) * dt - float(sig.stage_elapsed[j]))
+        cycle = realised_cycle(prog, dt)
+    codes = sig.movement_state[prog.movements].tolist()
+    return SignalView(
+        phase_index=p,
+        phase_id=prog.phase_ids[p],
+        stage=stage,
+        target=int(sig.target[j]),
+        stage_elapsed=float(sig.stage_elapsed[j]),
+        green_elapsed=float(sig.green_elapsed[j]),
+        remaining=remaining,
+        min_green=float(prog.min_green[p]),
+        max_green=float(prog.max_green[p]),
+        cycle=cycle,
+        held=bool(engine.held[j]),
+        movement_states={
+            net.mov_ids[m]: _STATE_CHARS[c]
+            for m, c in zip(prog.movements.tolist(), codes, strict=True)
+        },
+        state_string="".join(_STATE_CHARS[c] for c in codes),
+        controller=controller_name(controller),
+    )
+
+
+def phase_infos(net: CompiledNetwork, prog: SignalProgram) -> tuple[PhaseInfo, ...]:
+    """The phases of ``prog`` in program order."""
+    movements = [net.mov_ids[m] for m in prog.movements.tolist()]
+    return tuple(
+        PhaseInfo(
+            index=p,
+            id=prog.phase_ids[p],
+            green={
+                m: _STATE_CHARS[c]
+                for m, c in zip(movements, prog.phase_state[p].tolist(), strict=True)
+                if c >= SignalState.g.code
+            },
+            duration=float(prog.duration[p]),
+            min_green=float(prog.min_green[p]),
+            max_green=float(prog.max_green[p]),
+        )
+        for p in range(prog.n_phases)
+    )
+
+
+# ------------------------------------------------------------------------------- intersections
+@dataclass(frozen=True, slots=True)
+class MovementInfo:
+    """One movement of an intersection (AA 5.4)."""
+
+    id: str
+    from_road: str
+    to_road: str
+    turn: TurnKind
+    rank: int
+    """Right of way now: the signal state code at a signalised intersection (G 3, g 2,
+    y 1, r 0), else the static rank (priority 3/2/1, uncontrolled 1)."""
+    connections: tuple[str, ...]
+    """Connector ids, in connection order."""
+    state: str | None
+    """``"G"``, ``"g"``, ``"y"`` or ``"r"``; None at an unsignalised intersection."""
+
+
+@dataclass(frozen=True, slots=True)
+class IntersectionView:
+    """Snapshot of one intersection or boundary node (AA 5.4)."""
+
+    id: str
+    kind: IntersectionKind
+    point: tuple[float, float]
+    """Centre, world coordinates."""
+    movements: tuple[MovementInfo, ...]
+    """In canonical order."""
+    signal: SignalView | None
+    """None unless the intersection is signalised."""
+
+
+class IntersectionCollection(_Indexed[IntersectionView]):
+    """``sim.intersections``: every node (boundaries included) in compiled order."""
+
+    kind = "intersection"
+
+    def __init__(self, engine: Engine, cache: StepCache) -> None:
+        super().__init__(engine, cache, engine.network.int_ids)
+
+    def _make(self, i: int) -> IntersectionView:
+        eng = self._engine
+        net = eng.network
+        signalised = i in eng.controllers
+        movements = []
+        for m in np.flatnonzero(net.mov_intersection == i).tolist():
+            code = int(eng.signals.movement_state[m])
+            conns = net.mov_conn[net.mov_conn_ptr[m] : net.mov_conn_ptr[m + 1]].tolist()
+            movements.append(
+                MovementInfo(
+                    id=net.mov_ids[m],
+                    from_road=net.road_ids[int(net.mov_from_road[m])],
+                    to_road=net.road_ids[int(net.mov_to_road[m])],
+                    turn=TurnKind.from_code(int(net.mov_turn[m])),
+                    rank=code if signalised else int(net.mov_static_rank[m]),
+                    connections=tuple(net.link_ids[c] for c in conns),
+                    state=_STATE_CHARS[code] if signalised else None,
+                )
+            )
+        x, y = (net.int_point[i] + net.origin).tolist()
+        return IntersectionView(
+            id=self.ids[i],
+            kind=IntersectionKind.from_code(int(net.int_kind[i])),
+            point=(x, y),
+            movements=tuple(movements),
+            signal=signal_view(eng, i) if signalised else None,
+        )
 
 
 # ------------------------------------------------------------------------------- network

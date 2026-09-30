@@ -126,6 +126,9 @@ class Leaders:
     lane_rear: FloatArray
     """Per lane: rear of its most upstream body, overhanging connector vehicles included
     (:func:`~urbanflow.demand.insertion.lane_rears`); the lane length if none."""
+    lane_free: FloatArray
+    """Per lane: F.3's exit space ``free(l)`` (B.2 #25): ``lane_rear`` plus the minimum
+    distance its body still travels under emergency braking, ``v^2 / (2 b_emerg)``."""
 
 
 def expand_csr(ptr: IntArray, rows: IntArray) -> tuple[IntArray, IntArray]:
@@ -167,7 +170,7 @@ def compute_leaders(
         empty = np.zeros(0)
         tails = np.full(net.n_links, -1, dtype=np.intp)
         free = net.link_length[:n_lanes].astype(np.float64)
-        return Leaders(none, none, none, empty, empty, empty, tails, free)
+        return Leaders(none, none, none, empty, empty, empty, tails, free, free)
     link = veh.link[run].astype(np.intp)
     pos = veh.pos[run]
     length = veh.length[run].astype(np.float64)
@@ -184,6 +187,7 @@ def compute_leaders(
     lengths = net.link_length
     d_end = lengths[link] - pos
     ti = veh.type_idx[run]
+    b_emerg = types.emergency_decel[ti]
     reach = np.maximum(
         C.LOOKAHEAD_MIN_DISTANCE,
         speed**2 / (2 * types.decel[ti]) + speed * types.headway[ti] + types.min_gap[ti],
@@ -282,4 +286,5 @@ def compute_leaders(
         stop_gap=stop_gap,
         tail=np.where(tail >= 0, run[tail], -1),
         lane_rear=lane_rear,
+        lane_free=lane_rear + np.where(body >= 0, speed[body] ** 2 / (2 * b_emerg[body]), 0.0),
     )

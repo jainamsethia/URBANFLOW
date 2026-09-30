@@ -1,4 +1,5 @@
-"""The Simulation facade (plan AA 5.3, AD.1 8.9): construction, lifecycle, run, summary."""
+"""The Simulation facade (plan AA 5.3, AD.1 8.9): construction, controllers=, lifecycle, run,
+summary."""
 
 from __future__ import annotations
 
@@ -6,7 +7,7 @@ import logging
 import math
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import numpy as np
 import pytest
@@ -14,9 +15,15 @@ import pytest
 from urbanflow import Scenario, ScenarioBuilder, Simulation, SimulationResult, generate
 from urbanflow.core import constants as C
 from urbanflow.core.config import SimulationConfig
-from urbanflow.core.errors import ConfigError, ScenarioValidationError, SimulationError
+from urbanflow.core.errors import (
+    ConfigError,
+    NotFoundError,
+    ScenarioValidationError,
+    SimulationError,
+)
 from urbanflow.engine import Engine
 from urbanflow.routing import ShortestPathRouter
+from urbanflow.signals import ControllerBase, ControllerContext, External, FixedTime
 from urbanflow.simulation import ProgressInfo
 
 DET = {"speed_factor": {"mean": 1.0, "std": 0.0, "min": 1.0, "max": 1.0}}
@@ -101,8 +108,6 @@ def test_deep_check_errors_raise(junction: Scenario) -> None:
 
 
 def test_unsupported_features_fail_by_name(junction: Scenario) -> None:
-    with pytest.raises(SimulationError, match="signalized intersections"):
-        Simulation(generate("single_intersection"))
     with pytest.raises(ConfigError, match=r"record.enabled"):
         Simulation(junction, record={"enabled": True})
     with pytest.raises(ConfigError, match="custom metric collectors"):
@@ -329,3 +334,127 @@ def test_results_identity(junction: Scenario) -> None:
     assert (
         np.isfinite(result.summary["travel_time.mean"]) or result.summary["vehicles.arrived"] == 0
     )
+
+
+# ------------------------------------------------------------------------------- controllers=
+def _two_signals() -> Scenario:
+    """Signalised junctions A and B on a W-E arterial, each with a N-S cross street."""
+    b = ScenarioBuilder("two_signals", duration=300)
+    b.boundary("W", (-200.0, 0.0))
+    b.boundary("E", (500.0, 0.0))
+    for j, x in (("A", 0.0), ("B", 300.0)):
+        b.intersection(j, (x, 0.0), kind="signalized")
+        for name, dy in (("N", 200.0), ("S", -200.0)):
+            b.boundary(f"{j}{name}", (x, dy))
+            b.road(f"{j}{name}_in", f"{j}{name}", j)
+            b.road(f"{j}{name}_out", j, f"{j}{name}")
+    for a, c in (("W", "A"), ("A", "B"), ("B", "E")):
+        b.road(f"{a}_{c}", a, c)
+        b.road(f"{c}_{a}", c, a)
+    b.flow("we", route=["W_A", "A_B", "B_E"], rate=600.0)
+    return b.build()
+
+
+class RandomPhase(ControllerBase):
+    """Requests a random phase from ``ctx.rng`` once min green is over."""
+
+    made: ClassVar[list[RandomPhase]] = []
+
+    def __init__(self) -> None:
+        RandomPhase.made.append(self)
+
+    def decide(self, ctx: ControllerContext) -> int | None:
+        if ctx.green_elapsed < ctx.min_green:
+            return None
+        return int(ctx.rng.integers(ctx.n_phases))
+
+
+def _names(sim: Simulation) -> dict[str, str]:
+    return {j: sim.signals[j].controller for j in sim.signals.ids}
+
+
+def test_controllers_star_applies_everywhere_and_ids_win() -> None:
+    scenario = _two_signals()
+    assert _names(Simulation(scenario)) == {"A": "fixed_time", "B": "fixed_time"}
+    sim = Simulation(scenario, controllers={"*": "external"})
+    assert _names(sim) == {"A": "external", "B": "external"}
+    sim = Simulation(scenario, controllers={"B": "external", "*": "fixed_time"})
+    assert _names(sim) == {"A": "fixed_time", "B": "external"}
+    sim = Simulation(scenario, controllers={"A": "external"})
+    assert _names(sim) == {"A": "external", "B": "fixed_time"}
+
+
+def test_controller_refs_by_name_mapping_and_factory() -> None:
+    scenario = _two_signals()
+    offset = {"type": "fixed_time", "params": {"offset": 20.0}}
+    sim = Simulation(scenario, controllers={"A": offset, "B": External})
+    assert isinstance(sim.signals.controller("A"), FixedTime)
+    assert isinstance(sim.signals.controller("B"), External)
+    sim.step()  # A starts 48 s into its 68 s cycle (u = -20 mod 68): 14 s into p1's green
+    assert (sim.signals["A"].phase_index, sim.signals["A"].stage_elapsed) == (1, 15.0)
+    assert (sim.signals["B"].phase_index, sim.signals["B"].stage_elapsed) == (0, 1.0)
+
+
+def test_reset_rebuilds_the_controllers_deterministically() -> None:
+    RandomPhase.made.clear()
+    sim = Simulation(_two_signals(), controllers={"*": RandomPhase}, duration=200)
+    assert len(RandomPhase.made) == 2  # the factory is called per intersection
+
+    def phases() -> list[list[int]]:
+        out = []
+        while not sim.done:
+            sim.step()
+            out.append(sim.signals.phase_indices().tolist())
+        return out
+
+    first = phases()
+    assert len({tuple(p) for p in first}) > 1  # it does switch
+    sim.reset()
+    sim.signals.set_controller("A", "external")  # a runtime change that reset() undoes
+    sim.reset()
+    assert len(RandomPhase.made) == 6 and _names(sim) == {"A": "RandomPhase", "B": "RandomPhase"}
+    assert phases() == first  # fresh instances, re-seeded controller:{id} streams
+    sim.reset(seed=5)
+    assert phases() != first
+
+
+def test_results_record_the_configured_controllers(tmp_path: Path) -> None:
+    """Review finding: results of runs that differ only in ``controllers=`` must differ."""
+    scenario = _two_signals()
+    plain = Simulation(scenario).get_results()
+    assert plain.controllers == {
+        "A": {"type": "fixed_time", "params": {"offset": 0.0}},
+        "B": {"type": "fixed_time", "params": {"offset": 0.0}},
+    }
+    offset = {"type": "fixed_time", "params": {"offset": 20}}
+    sim = Simulation(scenario, controllers={"*": "external", "A": offset, "B": RandomPhase})
+    sim.signals.set_controller("A", "external")  # runtime changes are the command log's
+    result = sim.run(until=5)
+    assert result.controllers == {
+        "A": {"type": "fixed_time", "params": {"offset": 20.0}},
+        "B": {"type": "RandomPhase", "params": {}},
+    }
+    assert result.to_dict()["controllers"] == result.controllers
+    assert SimulationResult.load(result.save(tmp_path)).controllers == result.controllers
+    assert (
+        Simulation(generate("single_intersection", kind="priority")).get_results().controllers == {}
+    )
+
+
+def test_controller_override_errors() -> None:
+    scenario = _two_signals()
+    with pytest.raises(NotFoundError, match=r'controllers: unknown intersection "AA" \(did you'):
+        Simulation(scenario, controllers={"AA": "external"})
+    with pytest.raises(ConfigError, match='controllers: intersection "W" is not signalized'):
+        Simulation(scenario, controllers={"W": "external"})
+    with pytest.raises(ScenarioValidationError) as info:
+        Simulation(scenario, controllers={"*": "extrenal", "B": {"type": "fixed_time", "x": 1}})
+    assert [(i.code, i.path) for i in info.value.errors] == [
+        ("E901", 'controllers["*"]'),
+        ("E002", "controllers.B.x"),  # unknown field
+    ]
+    with pytest.raises(ConfigError, match="one controller instance cannot run several"):
+        Simulation(scenario, controllers={"*": External()})
+    assert Simulation(scenario, controllers={"A": External(), "B": External()})
+    unsignalised = generate("single_intersection", kind="uncontrolled")
+    assert Simulation(unsignalised, controllers={"*": "external"}).signals.ids == ()

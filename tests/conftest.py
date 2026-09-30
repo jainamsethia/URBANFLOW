@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -49,7 +49,8 @@ def _reset_urbanflow_logger() -> Iterator[None]:
 
 @pytest.fixture
 def make_engine() -> Callable[..., Engine]:
-    """``make_engine(scenario, **config)``: an Engine with ``debug_checks=True`` by default.
+    """``make_engine(scenario, controllers=None, **config)``: an Engine with
+    ``debug_checks=True`` by default (``controllers``: overrides by intersection index).
 
     The config resolves the scenario's ``simulation`` block, then the overrides; the car
     following model and router come from their registries, as the facade does.
@@ -59,9 +60,12 @@ def make_engine() -> Callable[..., Engine]:
     from urbanflow.engine import Engine
     from urbanflow.network import compile_network
     from urbanflow.routing import router_registry
+    from urbanflow.signals import build_programs
     from urbanflow.vehicles import VehicleTypes, car_following_registry
 
-    def make(scenario: Scenario, **overrides: Any) -> Engine:
+    def make(
+        scenario: Scenario, *, controllers: Mapping[int, Any] | None = None, **overrides: Any
+    ) -> Engine:
         config = resolve_config(
             ("scenario", scenario.resolved.simulation),
             ("test", {"debug_checks": True, **overrides}),
@@ -77,6 +81,8 @@ def make_engine() -> Callable[..., Engine]:
             car_following=model(),
             types=types,
             demand=scenario.resolved.demand,
+            signals=build_programs(net, scenario.resolved.network),
+            controllers=controllers,
         )
 
     return make

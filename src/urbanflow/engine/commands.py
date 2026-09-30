@@ -4,13 +4,33 @@ Commands check their arguments (``CommandError``, or ``NotFoundError`` with a di
 hint for unknown ids), mutate runtime state immediately, and become visible in the next
 ``step()``; their events are emitted into that step's buffer. Every command is appended to
 :attr:`EngineCommands.command_log` as ``(step, name, args)`` for replay verification.
-Signal commands arrive with signals; ``set_route`` and ``change_lane`` with lane changing.
+``set_route`` and ``change_lane`` arrive with lane changing.
+
+Signal commands take an intersection (id or index) and a phase (index or id); indices may
+be Python or numpy integers:
+
+* ``request_phase`` queues a phase at a controller that accepts requests (``external``);
+  the runtime honours min-green, yellow and all-red;
+* ``set_phase`` jumps to the phase now, without intergreen (tests and setup; the
+  ``phase_changed`` event is marked forced);
+* ``hold_phase`` parks the configured controller, installs a fresh ``external`` and
+  requests the phase (any controller); ``release`` reinstates the parked controller, which
+  continues from the current phase;
+* ``set_controller`` installs a new controller (a registry name, ``{"type", "params"}``,
+  an instance or a factory) that continues from the current phase; during a hold it
+  replaces the parked controller. An instance already running another intersection is
+  rejected (each intersection needs its own controller state).
+
+Whenever the active controller changes (``set_controller`` outside a hold, ``release``)
+the runtime's queued request is dropped: it belonged to the previous controller, and the
+new one re-requests in its next ``decide`` if it wants to.
 """
 
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+import numbers
+from collections.abc import Mapping, Sequence
 from itertools import pairwise
 from typing import TYPE_CHECKING, Any
 
@@ -22,13 +42,20 @@ from urbanflow.core.types import VehicleStatus
 from urbanflow.demand.insertion import enqueue
 from urbanflow.demand.spawners import api_request
 from urbanflow.routing.lanes import valid_mask
-from urbanflow.scenario.schema import DepartLane, DepartSpeed, TripSpec
+from urbanflow.scenario.schema import ControllerSpec, DepartLane, DepartSpeed, TripSpec
 from urbanflow.scenario.validate import issues_from_pydantic
+from urbanflow.signals import (
+    ControllerRef,
+    External,
+    SignalController,
+    SignalProgram,
+    controller_name,
+)
 
 if TYPE_CHECKING:
     from urbanflow.engine.engine import Engine
 
-__all__ = ["CommandLogEntry", "EngineCommands"]
+__all__ = ["CommandLogEntry", "EngineCommands", "as_index"]
 
 CommandLogEntry = tuple[int, str, dict[str, Any]]
 """``(step_count when issued, command name, JSON-safe arguments)``."""
@@ -39,7 +66,7 @@ _REMOVED = VehicleStatus.removed.code
 
 
 class EngineCommands:
-    """Vehicle commands of one :class:`~urbanflow.engine.engine.Engine` (``engine.commands``)."""
+    """Vehicle and signal commands of one :class:`~urbanflow.engine.engine.Engine`."""
 
     def __init__(self, engine: Engine) -> None:
         self._engine = engine
@@ -200,6 +227,126 @@ class EngineCommands:
             veh.override_until[h] = math.inf if duration is None else eng.time + float(duration)
         self._log("set_speed", vehicle_id=vehicle_id, speed=speed, duration=duration)
 
+    # ------------------------------------------------------------------ signals
+    def request_phase(self, intersection: int | str, phase: int | str) -> None:
+        """Ask the controller of ``intersection`` for ``phase`` (honours min-green, yellow
+        and all-red). Needs a controller that accepts requests (e.g. ``external``)."""
+        j, prog = self._signal(intersection)
+        q = self._phase(prog, phase)
+        name = self._engine.network.int_ids[j]
+        if self._engine.held[j]:
+            raise CommandError(
+                f'intersection "{name}" is under a manual hold; use hold_phase to change the '
+                f'held phase or release("{name}") first'
+            )
+        controller = self._engine.controllers[j]
+        if not _accepts(controller):
+            raise CommandError(
+                f'the controller "{controller_name(controller)}" of intersection "{name}" '
+                "does not accept phase requests; install one that does with "
+                f'set_controller("{name}", "external"), or use hold_phase("{name}", phase) '
+                "for a temporary manual override"
+            )
+        controller.request_phase(q)  # type: ignore[attr-defined]
+        self._log("request_phase", intersection=name, phase=q)
+
+    def set_phase(self, intersection: int | str, phase: int | str) -> None:
+        """Jump to ``phase`` now, without yellow or all-red (a forced change for tests and
+        setup); the controller continues from it."""
+        j, prog = self._signal(intersection)
+        q = self._phase(prog, phase)
+        self._engine.signals.force(j, q)
+        self._log("set_phase", intersection=self._engine.network.int_ids[j], phase=q)
+
+    def hold_phase(self, intersection: int | str, phase: int | str) -> None:
+        """Manual override with any controller: park the configured controller, install a
+        fresh ``external`` and request ``phase`` (min-green, yellow and all-red honoured).
+        While held, :meth:`request_phase` raises; call :meth:`release` to end the hold."""
+        eng = self._engine
+        j, prog = self._signal(intersection)
+        q = self._phase(prog, phase)
+        if not eng.held[j]:
+            eng.parked[j] = eng.controllers[j]
+            eng.controllers[j] = eng.make_controller(j, External)
+            eng.held[j] = True
+        eng.controllers[j].request_phase(q)  # type: ignore[attr-defined]  # External
+        self._log("hold_phase", intersection=eng.network.int_ids[j], phase=q)
+
+    def release(self, intersection: int | str) -> None:
+        """End a manual hold: the parked controller continues from the current phase."""
+        eng = self._engine
+        j, _ = self._signal(intersection)
+        name = eng.network.int_ids[j]
+        if not eng.held[j]:
+            raise CommandError(f'intersection "{name}" has no manual hold to release')
+        eng.controllers[j] = eng.parked.pop(j)
+        eng.held[j] = False
+        eng.signals.pending[j] = -1  # the hold's request is not the parked controller's
+        self._log("release", intersection=name)
+
+    def set_controller(self, intersection: int | str, ref: ControllerRef) -> None:
+        """Install the controller ``ref`` at ``intersection``; it continues from the current
+        phase. During a manual hold it replaces the parked controller. An instance already
+        running another intersection raises ``CommandError`` (pass a factory)."""
+        eng = self._engine
+        j, _ = self._signal(intersection)
+        if not isinstance(ref, type) and hasattr(ref, "decide"):
+            running = [c for k, c in (*eng.controllers.items(), *eng.parked.items()) if k != j]
+            if any(ref is c for c in running):
+                raise CommandError(
+                    "one controller instance cannot run several intersections; pass a "
+                    "factory instead (e.g. its class), which is called per intersection"
+                )
+        controller = eng.make_controller(j, ref)
+        if eng.held[j]:
+            eng.parked[j] = controller
+        else:
+            eng.controllers[j] = controller
+            eng.signals.pending[j] = -1  # the previous controller's request
+        self._log("set_controller", intersection=eng.network.int_ids[j], ref=_ref_json(ref))
+
+    def signal_index(self, intersection: object) -> int:
+        """Global index of a signalised intersection given by id or index (a Python or numpy
+        integer). Unknown ids and indices out of range raise ``NotFoundError`` (with a hint);
+        other values and unsignalised intersections raise ``CommandError``."""
+        net = self._engine.network
+        k = as_index(intersection)
+        if isinstance(intersection, str):
+            if intersection not in net.int_index:
+                hint = suggest(intersection, net.int_index)
+                raise NotFoundError(f'unknown intersection "{intersection}"{hint}')
+            j = net.int_index[intersection]
+        elif k is None:
+            raise CommandError(f"intersection must be an id or an index, got {intersection!r}")
+        elif not 0 <= k < net.n_intersections:
+            raise NotFoundError(
+                f"intersection index {k} out of range ({net.n_intersections} intersections)"
+            )
+        else:
+            j = k
+        if j not in self._engine.controllers:
+            signalised = [net.int_ids[i] for i in sorted(self._engine.controllers)]
+            raise CommandError(
+                f'intersection "{net.int_ids[j]}" has no traffic signal; signalized: '
+                f"{', '.join(signalised) or 'none'}"
+            )
+        return j
+
+    def _signal(self, intersection: object) -> tuple[int, SignalProgram]:
+        """``(index, program)`` of a signalised intersection (:meth:`signal_index`)."""
+        j = self.signal_index(intersection)
+        return j, self._engine.signals.program(j)
+
+    def _phase(self, prog: SignalProgram, phase: object) -> int:
+        key = phase if isinstance(phase, str) else as_index(phase)
+        if key is None:
+            raise CommandError(f"phase must be an index or a phase id, got {phase!r}")
+        name = self._engine.network.int_ids[prog.intersection]
+        try:
+            return prog.phase_index(key)
+        except NotFoundError as exc:
+            raise NotFoundError(f'intersection "{name}": {exc}') from None
+
     # ------------------------------------------------------------------ helpers
     def _log(self, name: str, **args: Any) -> None:
         self.command_log.append((self._engine.step_count, name, args))
@@ -240,3 +387,27 @@ def _finite_at_least(value: object, low: float) -> bool:
         and math.isfinite(value)
         and value >= low
     )
+
+
+def as_index(value: object) -> int | None:
+    """``int(value)`` for Python and numpy integers (bools excluded), else None."""
+    if isinstance(value, numbers.Integral) and not isinstance(value, bool):
+        return int(value)
+    return None
+
+
+def _accepts(controller: SignalController) -> bool:
+    return bool(getattr(controller, "accepts_requests", False)) and callable(
+        getattr(controller, "request_phase", None)
+    )
+
+
+def _ref_json(ref: ControllerRef) -> Any:
+    """A JSON-safe form of a controller reference for the command log."""
+    if isinstance(ref, str):
+        return ref
+    if isinstance(ref, ControllerSpec):
+        return ref.model_dump(mode="json")
+    if isinstance(ref, Mapping):
+        return {str(k): v for k, v in ref.items()}
+    return {"type": controller_name(ref)}

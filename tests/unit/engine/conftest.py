@@ -10,7 +10,7 @@ import pytest
 
 from urbanflow import ScenarioBuilder, generate
 from urbanflow.core.events import EventBuffer
-from urbanflow.core.types import IntArray, VehicleStatus
+from urbanflow.core.types import IntArray, SignalState, VehicleStatus
 from urbanflow.engine.intersections import Admission, JunctionIndex, admit, reservations
 from urbanflow.engine.leaders import Leaders, SiblingGroups, compute_leaders, remaining_roads
 from urbanflow.network import CompiledNetwork, compile_network
@@ -88,8 +88,17 @@ class World:
         run = self.run()
         return compute_leaders(self.net, self.veh, run, self.types, self.remaining(), self.groups)
 
-    def admit(self, *, dt: float = 1.0, next_seq: int = 0) -> tuple[Admission, np.ndarray]:
+    def admit(
+        self, *, dt: float = 1.0, next_seq: int = 0, signals: dict[str, str] | None = None
+    ) -> tuple[Admission, np.ndarray]:
+        """F.3 admission; ``signals`` maps movement ids to states ("r", "y", "g", "G") at
+        a signalised junction (unlisted movements are red)."""
         run = self.run()
+        state = None
+        if signals is not None:
+            state = np.full(self.net.n_movements, SignalState.r.code, dtype=np.uint8)
+            for mid, s in signals.items():
+                state[self.net.mov_index[mid]] = SignalState(s).code
         reserved = reservations(self.net, self.veh, self.types, run)
         adm = admit(
             self.net,
@@ -102,6 +111,7 @@ class World:
             self.junctions,
             dt=dt,
             next_seq=next_seq,
+            movement_state=state,
         )
         return adm, reserved
 
@@ -120,6 +130,19 @@ def junction_net() -> CompiledNetwork:
 def priority_net() -> CompiledNetwork:
     """The same junction with priority control; E-W is the major axis."""
     return compile_network(generate("single_intersection", kind="priority", lanes=1))
+
+
+@pytest.fixture(scope="session")
+def signal_net() -> CompiledNetwork:
+    """The 1-lane junction, signalized, plus a type "hard" that brakes at 6 m/s^2."""
+    b = ScenarioBuilder.from_scenario(generate("single_intersection", kind="signalized", lanes=1))
+    b.vehicle_type("hard", decel=6.0, emergency_decel=6.0)
+    return compile_network(b.build())
+
+
+@pytest.fixture
+def signalised(signal_net: CompiledNetwork) -> World:
+    return World(signal_net)
 
 
 @pytest.fixture

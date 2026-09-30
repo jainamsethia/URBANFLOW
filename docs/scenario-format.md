@@ -136,7 +136,7 @@ Validation runs in stages: **L**oad (size cap 64 MiB, UTF-8, JSON without NaN, f
 version), **S**tructure (the JSON Schema rules), **P**re-derive (ids, references,
 geometry), derive, and **Q** post-derive (movements, signals, demand, transit, simulation).
 Deep checks (**X**: registered model and router names, model parameters, network
-compilation; controller parameters join with traffic signals) run in `urbanflow.check`,
+compilation, signal controller names and parameters) run in `urbanflow.check`,
 which `urbanflow validate` (by default) and `Simulation` call. Every issue has a code, a JSON path and a message; one broken
 reference is reported once, not as a cascade:
 
@@ -472,7 +472,7 @@ A vehicle type; fields you set override the built-in type with the same id.
 | `decel` | number | 2.0 | > 0, <= 10.0 | IDM comfortable deceleration b, m/s^2. |
 | `emergency_decel` | number | 6.0 | > 0, <= 15.0 | Physical braking bound, m/s^2 (>= decel). |
 | `min_gap` | number | 2.0 | >= 0, <= 20.0 | Jam distance s0, m. |
-| `headway` | number | 1.5 | > 0, <= 10.0 | Desired time headway T, s. |
+| `headway` | number | 1.1 | > 0, <= 10.0 | Desired time headway T, s. |
 | `speed_factor` | [SpeedFactorSpec](#speedfactorspec) | derived / optional |  | Speed factor distribution, sampled per vehicle from the spawning flow's stream. |
 | `politeness` | number | 0.2 | >= 0, <= 1 | MOBIL politeness p. |
 | `lc_threshold` | number | 0.1 | >= 0, <= 5.0 | MOBIL threshold a_th, m/s^2. |

@@ -965,10 +965,19 @@ def check_signals(ctx: CheckContext) -> Iterator[ValidationIssue]:
                 yield issue("W301", base, m=mid)
         if sig.yellow == 0:
             yield issue("W303", (*base, "yellow"))
-        cycle = sum(p.duration + sig.yellow + sig.all_red for p in phases)
+        # a phase change has yellow and all-red only when some movement loses green (H.1),
+        # as the fixed-time cycle C_q counts them (signals.controllers.fixed_time)
+        inter = [
+            not set(p.green) <= set(phases[(k + 1) % len(phases)].green)
+            for k, p in enumerate(phases)
+        ]
+        cycle = sum(
+            p.duration + (sig.yellow + sig.all_red) * x for p, x in zip(phases, inter, strict=True)
+        )
         realised = sum(
-            _quantised(p.duration, dt) + _quantised(sig.yellow, dt) + _quantised(sig.all_red, dt)
-            for p in phases
+            _quantised(p.duration, dt)
+            + (_quantised(sig.yellow, dt) + _quantised(sig.all_red, dt)) * x
+            for p, x in zip(phases, inter, strict=True)
         )
         if abs(realised - cycle) > C.TIME_EPS * max(1.0, cycle):
             yield issue("W305", base, dt=dt, cq=_quote(realised), c=_quote(cycle))

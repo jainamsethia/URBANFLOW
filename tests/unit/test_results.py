@@ -75,13 +75,19 @@ def test_to_dict_is_strict_json(result: SimulationResult) -> None:
 
 @pytest.mark.parametrize("mean", [161.4, math.nan, 0.1 + 0.2])
 def test_save_load_round_trip(result: SimulationResult, tmp_path: Path, mean: float) -> None:
-    original = replace(result, summary={**SUMMARY, "travel_time.mean": mean}, run_id="r1")
+    controllers = {"J": {"type": "fixed_time", "params": {"offset": 5.0}}}
+    original = replace(
+        result, summary={**SUMMARY, "travel_time.mean": mean}, run_id="r1", controllers=controllers
+    )
     assert original.save(tmp_path / "run") == tmp_path / "run"
     assert (tmp_path / "run" / RESULT_FILE).is_file()
     loaded = SimulationResult.load(tmp_path / "run")
     assert _same(loaded, original)
     assert loaded.config == original.config and loaded.config.metrics.warmup == 60
-    assert loaded.run_id == "r1"
+    assert loaded.run_id == "r1" and loaded.controllers == controllers
+    data = original.to_dict()
+    del data["controllers"]  # results saved before the field existed still load
+    assert SimulationResult.from_dict(data).controllers == {}
 
 
 def test_load_errors(result: SimulationResult, tmp_path: Path) -> None:

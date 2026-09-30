@@ -1,4 +1,5 @@
-"""Deep validation, ``urbanflow.check`` (plan E.8 stage X): E903, E904 and compile issues."""
+"""Deep validation, ``urbanflow.check`` (plan E.8 stage X): E901-E904 (including the
+``controllers=`` overrides of a run) and compile issues."""
 
 from __future__ import annotations
 
@@ -12,11 +13,14 @@ import pytest
 
 import urbanflow
 from urbanflow import check
+from urbanflow.checks import deep_check
 from urbanflow.cli import main as cli
 from urbanflow.core.config import SimulationConfig
 from urbanflow.core.errors import NotFoundError, Severity
 from urbanflow.routing import router_registry
 from urbanflow.scenario import Scenario
+from urbanflow.scenario.schema import ControllerSpec
+from urbanflow.signals import External
 from urbanflow.vehicles import car_following_registry
 
 DEMO = Path(__file__).resolve().parents[1] / "fixtures" / "scenarios" / "demo.json"
@@ -83,6 +87,39 @@ def test_e903_model_params() -> None:
         'unknown parameter "deltta" for car-following model "idm" (known: delta)'
     )
     assert report.errors[1].message == "must be > 0 (got -1)"
+
+
+@pytest.mark.parametrize(
+    ("controller", "expected"),
+    [
+        (
+            {"type": "fixed_tme"},
+            ("E901", "type", 'unknown signal controller "fixed_tme" (did you mean "fixed_time"?)'),
+        ),
+        ({"type": "actuated"}, ("E901", "type", 'unknown signal controller "actuated"')),
+        (
+            {"type": "fixed_time", "params": {"ofset": 3}},
+            ("E902", "params.ofset", 'unknown field "ofset" (did you mean "offset"?)'),
+        ),
+        (
+            {"type": "fixed_time", "params": {"offset": "x"}},
+            ("E902", "params.offset", 'expected a number, got string "x"'),
+        ),
+        ({"type": "external", "params": {"a": 1}}, ("E902", "params.a", 'unknown field "a"')),
+    ],
+)
+def test_e901_e902_signal_controllers(
+    controller: dict[str, Any], expected: tuple[str, str, str]
+) -> None:
+    data = _demo()
+    data["network"]["intersections"][0]["signal"]["controller"] = controller
+    report = check(Scenario.from_dict(data))
+    code, path, message = expected
+    base = "network.intersections[0].signal.controller"
+    assert _codes(report) == [(code, f"{base}.{path}")]
+    assert report.errors[0].message.startswith(message)
+    if code == "E901":  # the registered names are listed (other tests may register more)
+        assert "external, fixed_time" in report.errors[0].message
 
 
 def test_e505_depart_lane_without_a_connection_to_the_next_road(
@@ -204,3 +241,56 @@ def test_cli_validate_runs_the_deep_checks(
     err = capsys.readouterr().err
     assert '  - simulation.car_following: unknown car-following model "krauss"' in err
     assert run("validate", "--no-deep", str(path)) == 0
+
+
+@pytest.mark.parametrize(
+    ("ref", "expected"),
+    [
+        ("fixd_time", ("E901", "", 'unknown signal controller "fixd_time" (did you mean')),
+        ({"type": "actuated"}, ("E901", ".type", 'unknown signal controller "actuated"')),
+        (
+            {"type": "fixed_time", "params": {"ofset": 3}},
+            ("E902", ".params.ofset", 'unknown field "ofset" (did you mean "offset"?)'),
+        ),
+        (
+            ControllerSpec(type="fixed_time", params={"offset": "x"}),
+            ("E902", ".params.offset", 'expected a number, got string "x"'),
+        ),
+        ({"type": ""}, ("E004", ".type", "")),
+    ],
+)
+def test_e901_e902_controller_overrides(ref: Any, expected: tuple[str, str, str]) -> None:
+    """``Simulation(controllers=...)`` overrides given by name or mapping are deep-checked."""
+    scenario = urbanflow.generate("single_intersection")
+    report, _ = deep_check(scenario, controllers={"J": "external", "*": ref})
+    code, path, message = expected
+    assert _codes(report) == [(code, f'controllers["*"]{path}')]
+    assert report.errors[0].message.startswith(message)
+
+
+@pytest.mark.parametrize(("key", "path"), [("*", 'controllers["*"]'), ("J", "controllers.J")])
+def test_an_override_replaces_the_scenario_controller_check(key: str, path: str) -> None:
+    """Review repro: the scenario's own controller is never built when overridden, so an
+    unregistered one must not fail the run; the override itself is still checked."""
+    data = urbanflow.generate("single_intersection").to_dict()
+    data["network"]["intersections"][0]["signal"]["controller"] = {"type": "actuated"}
+    scenario = Scenario.from_dict(data)
+    assert [c for c, _ in _codes(check(scenario))] == ["E901"]
+    report, _ = deep_check(scenario, controllers={key: "fixed_time"})
+    assert report.ok
+    urbanflow.Simulation(scenario, controllers={key: "fixed_time"}).step()
+    report, _ = deep_check(scenario, controllers={key: "fixed_tme"})
+    assert _codes(report) == [("E901", path)]
+
+
+def test_controller_factories_are_not_deep_checked() -> None:
+    scenario = urbanflow.generate("single_intersection")
+    report, _ = deep_check(scenario, controllers={"J": External, "*": External()})
+    assert report.ok
+
+
+def test_controllers_are_checked_even_with_an_unknown_car_following_model() -> None:
+    data = _demo(simulation={**_DEMO.get("simulation", {}), "car_following": "krauss"})
+    data["network"]["intersections"][0]["signal"]["controller"] = {"type": "fixed_tme"}
+    codes = [c for c, _ in _codes(check(Scenario.from_dict(data)))]
+    assert codes == ["E904", "E901"]

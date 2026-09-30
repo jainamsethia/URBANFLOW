@@ -8,8 +8,9 @@ from collections.abc import Callable
 import numpy as np
 import pytest
 
+from urbanflow import generate
 from urbanflow.core.errors import InvariantViolation, SimulationError
-from urbanflow.core.types import VehicleStatus
+from urbanflow.core.types import SignalState, VehicleStatus
 from urbanflow.engine import Engine, check_always, check_debug
 from urbanflow.engine.advance import Advance
 from urbanflow.scenario import ScenarioBuilder
@@ -155,3 +156,39 @@ def test_i11_identity(engine: Engine) -> None:
     _violates("I11", lambda: check_debug(engine))
     veh.status[a] = VehicleStatus.running.code
     check_debug(engine)
+
+
+@pytest.fixture
+def signalled(make_engine: Callable[..., Engine]) -> Engine:
+    e = make_engine(generate("single_intersection", lanes=1))
+    for _ in range(10):
+        e.step()
+    return e
+
+
+def test_i10_signal_state_machine(signalled: Engine) -> None:
+    e = signalled
+    sig = e.signals
+    check_debug(e)
+    green = int(np.flatnonzero(sig.movement_state == SignalState.G.code)[0])
+    j = int(e.network.mov_intersection[green])
+    sig.movement_state[green] = SignalState.r.code  # G -> r without yellow
+    _violates("I10", lambda: check_debug(e))
+    sig.forced[j] = True  # ...unless a forced set_phase caused it
+    check_debug(e)
+    sig.forced[j] = False
+    sig.yellow_zero[j] = True  # ...or the program has no yellow
+    check_debug(e)
+    sig.yellow_zero[j] = False
+    sig.movement_state[green] = SignalState.y.code  # G -> y is the legal path
+    check_debug(e)
+    sig.movement_state[green] = 7  # not a signal state
+    _violates("I10", lambda: check_debug(e))
+    sig.movement_state[green] = SignalState.G.code
+    check_debug(e)
+
+
+def test_i10_passes_a_whole_signalised_run(signalled: Engine) -> None:
+    for _ in range(200):  # debug checks run every step: several full cycles, no violation
+        signalled.step()
+    assert signalled.red_runs == 0

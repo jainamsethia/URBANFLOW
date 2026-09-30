@@ -2,8 +2,8 @@
 
 Thin composition only: the engine owns the state and the step pipeline; the facade adds
 the lifecycle (``done``, ``reset``, ``close``), ``run()`` with progress, per-step caches
-of the read views and the run summary. Control calls made between steps take effect in
-the next step (AA 5.5).
+of the read views, the signal controllers chosen with ``controllers=`` and the run summary.
+Control calls made between steps take effect in the next step (AA 5.5).
 """
 
 from __future__ import annotations
@@ -20,19 +20,23 @@ from typing import Any, Self, Unpack
 import numpy as np
 
 from urbanflow.checks import deep_check
+from urbanflow.control import SignalsAPI
 from urbanflow.core import constants as C
 from urbanflow.core.config import ConfigOverrides, SimulationConfig, resolve_config
-from urbanflow.core.errors import ConfigError, SimulationError
+from urbanflow.core.errors import ConfigError, NotFoundError, SimulationError, suggest
 from urbanflow.core.events import EventType
 from urbanflow.core.rng import RngStreams
-from urbanflow.core.types import FloatArray, IntArray
+from urbanflow.core.types import FloatArray, IntArray, IntersectionKind
 from urbanflow.engine import Engine
+from urbanflow.network.compiled import CompiledNetwork
 from urbanflow.results import SimulationResult, provenance
 from urbanflow.routing import Router, router_registry
 from urbanflow.scenario.scenario import Scenario
 from urbanflow.scenario.schema import ScenarioSpec
+from urbanflow.signals import ControllerRef, build_programs
 from urbanflow.vehicles import VehicleTypes, car_following_registry
 from urbanflow.views import (
+    IntersectionCollection,
     LaneCollection,
     NetworkInfo,
     RoadCollection,
@@ -41,7 +45,7 @@ from urbanflow.views import (
     VehicleCollection,
 )
 
-__all__ = ["MetricsAPI", "ProgressCallback", "ProgressInfo", "Simulation"]
+__all__ = ["ControllerRef", "MetricsAPI", "ProgressCallback", "ProgressInfo", "Simulation"]
 
 _log = logging.getLogger("urbanflow.simulation")
 _ARRIVED = EventType.vehicle_arrived.code
@@ -152,6 +156,33 @@ def _as_scenario(
     return Scenario.load(source)
 
 
+def _controller_overrides(
+    network: CompiledNetwork, controllers: Mapping[str, ControllerRef]
+) -> dict[int, ControllerRef]:
+    """``controllers=`` by intersection index: ``"*"`` applies to every signalised
+    intersection and per-id entries win. Unknown ids raise ``NotFoundError``; the engine
+    rejects unsignalised ones. An instance shared by two intersections is a ``ConfigError``
+    (each intersection needs its own controller state)."""
+    for key in controllers:
+        if key != "*" and key not in network.int_index:
+            raise NotFoundError(
+                f'controllers: unknown intersection "{key}"{suggest(key, network.int_index)} '
+                '(use an intersection id, or "*" for every signalized intersection)'
+            )
+    out: dict[int, ControllerRef] = {}
+    if "*" in controllers:
+        signalised = network.int_kind == IntersectionKind.signalized.code
+        out = dict.fromkeys(np.flatnonzero(signalised).tolist(), controllers["*"])
+    out.update((network.int_index[k], ref) for k, ref in controllers.items() if k != "*")
+    instances = [id(r) for r in out.values() if not isinstance(r, type) and hasattr(r, "decide")]
+    if len(set(instances)) < len(instances):
+        raise ConfigError(
+            "controllers: one controller instance cannot run several intersections; "
+            "pass a factory instead (e.g. its class), which is called per intersection"
+        )
+    return out
+
+
 def _check_supported(config: SimulationConfig) -> None:
     """Config features scheduled for later versions fail by name instead of being ignored."""
     if config.record.enabled:
@@ -170,7 +201,11 @@ class Simulation:
     ``scenario`` is a :class:`Scenario`, a ``ScenarioSpec``, a scenario mapping or a file
     path. The config is resolved as defaults < ``scenario.simulation`` < ``config`` (its set
     fields) < ``router`` < ``**overrides``; ``router`` may also be a :class:`Router`
-    instance. The constructor deep-checks the scenario (``urbanflow.check``; errors raise
+    instance. ``controllers`` replaces the scenario's signal controllers: keys are
+    intersection ids or ``"*"`` (every signalised intersection; per-id entries win), values
+    a registry name, ``{"type", "params"}`` or a zero-argument factory returning a
+    controller (called again at every ``reset()``). The constructor deep-checks the
+    scenario and the named controllers (``urbanflow.check``; errors raise
     ``ScenarioValidationError``), compiles the network, builds the engine and resets to
     ``config.seed``.
     """
@@ -182,6 +217,7 @@ class Simulation:
         scenario: Scenario | ScenarioSpec | Mapping[str, Any] | str | os.PathLike[str],
         config: SimulationConfig | None = None,
         *,
+        controllers: Mapping[str, ControllerRef] | None = None,
         router: str | Router | None = None,
         **overrides: Unpack[ConfigOverrides],
     ) -> None:
@@ -199,7 +235,9 @@ class Simulation:
         )
         _check_supported(self.config)
         instance = None if router is None or isinstance(router, str) else router
-        report, network = deep_check(self.scenario, self.config, router=instance)
+        report, network = deep_check(
+            self.scenario, self.config, router=instance, controllers=controllers
+        )
         source = str(self.scenario.path) if self.scenario.path else self.scenario.name
         report.raise_for_errors(source=source)
         if network is None:  # pragma: no cover - a network that fails to compile has errors
@@ -220,6 +258,8 @@ class Simulation:
                 network.vehicle_types, model.Params, model=cfg.car_following
             ),
             demand=self.scenario.resolved.demand,
+            signals=build_programs(network, self.scenario.resolved.network),
+            controllers=_controller_overrides(network, controllers or {}),
         )
         dt, duration = cfg.dt, cfg.duration
         self._n_steps = None if duration is None else math.floor(duration / dt + C.TIME_EPS)
@@ -231,6 +271,9 @@ class Simulation:
         self.lanes = LaneCollection(self._engine, self._cache)
         self.roads = RoadCollection(self._engine, self._cache)
         self.state = StateArrays(self._engine, self._cache)
+        self.intersections = IntersectionCollection(self._engine, self._cache)
+        self.signals = SignalsAPI(self._engine, self._cache)
+        """Signal state and control (``sim.signals["J"]``, ``request_phase``, ...)."""
         self._closed = False
         self._clear(cfg.seed)
         _log.info(
@@ -302,8 +345,9 @@ class Simulation:
     def reset(self, seed: int | None = None) -> None:
         """Fresh runtime from the cached network; ``seed=None`` reuses the current seed.
 
-        Re-seeds every random stream and clears vehicles, counters and the summary, so
-        repeated ``reset()`` reproduces the run.
+        Re-seeds every random stream, clears vehicles, counters and the summary, and
+        rebuilds the configured signal controllers (commands such as ``set_controller`` and
+        manual holds are undone), so repeated ``reset()`` reproduces the run.
         """
         if self._closed:
             raise SimulationError("the simulation is closed")
@@ -441,6 +485,9 @@ class Simulation:
             summary=self.metrics.summary(),
             event_counts=self.metrics.event_counts(),
             provenance=provenance(),
+            controllers={
+                self._engine.network.int_ids[j]: spec for j, spec in self._engine.configured.items()
+            },
         )
 
     def __repr__(self) -> str:

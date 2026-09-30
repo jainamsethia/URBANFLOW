@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
 import pytest
 
 from urbanflow.core import constants as C
@@ -64,10 +65,15 @@ def test_speed_factor_ordering() -> None:
 
 
 def test_saturation_flow_matches_webster_default() -> None:
-    # G.7: T = 1.5 s gives ~1800 veh/h/lane at 13.9 m/s with l = 5 m, s0 = 2 m.
-    v = C.SPEED_LIMIT
-    flow = C.SECONDS_PER_HOUR / (C.IDM_HEADWAY + (C.VEHICLE_LENGTH + C.IDM_MIN_GAP) / v)
-    assert flow == pytest.approx(C.WEBSTER_SATURATION_FLOW, rel=0.01)
+    # B.2 #25 (G.7 corrected): the built-in car's IDM equilibrium flow q(v) = v / (s_e + l),
+    # s_e = (s0 + vT) / sqrt(1 - (v/v0)^delta), peaks at Webster's ~1800 veh/h/lane at the
+    # default 13.9 m/s limit (T = 1.5 s peaks at ~1470: G.7 had dropped the delta term).
+    # The measured queue discharge of this T is AT-10's (1500-1900 veh/h/lane).
+    v0 = C.SPEED_LIMIT
+    v = np.linspace(0.01, v0, 100_000, endpoint=False)
+    s_e = (C.IDM_MIN_GAP + v * C.IDM_HEADWAY) / np.sqrt(1 - (v / v0) ** C.IDM_DELTA)
+    flow = C.SECONDS_PER_HOUR * v / (s_e + C.VEHICLE_LENGTH)
+    assert flow.max() == pytest.approx(C.WEBSTER_SATURATION_FLOW, rel=0.01)
 
 
 def test_defaults_within_their_bounds() -> None:

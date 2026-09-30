@@ -44,7 +44,14 @@ IDM_ACCEL: Final = 1.5  # m/s²; IDM a, typical city value (Treiber & Kesting 20
 IDM_DECEL: Final = 2.0  # m/s²; IDM b, comfortable deceleration
 IDM_EMERGENCY_DECEL: Final = 6.0  # m/s²; b_emerg, physical braking bound, assumption A1 (G.2)
 IDM_MIN_GAP: Final = 2.0  # m; s0
-IDM_HEADWAY: Final = 1.5  # s; T; saturation ~1800 veh/h/lane at 13.9 m/s (G.7)
+# s; T, calibrated (B.2 #25): the largest of 1.4/1.3/1.2/1.1/1.0 s whose measured queue
+# discharge (AT-10, 5th-15th vehicle) stays inside 1500-1900 veh/h/lane with >= 50 veh/h
+# margin at dt 1.0, 0.5 and 0.2: 1584 / 1616 / 1636 veh/h (T = 1.5 s: 1414 / 1440 / 1425).
+# G.7's "T = 1.5 s gives ~1800 veh/h" used 3600 / (T + (l + s0)/v), which omits IDM's
+# (v/v0)^delta term; with it the equilibrium flow of T = 1.1 s peaks at ~1792 veh/h, near
+# Webster's s. Within the IDM time-gap range of Treiber & Kesting (2013, Traffic Flow
+# Dynamics, ch. 11: about 0.8-2 s, 1.0 s in their city-traffic set).
+IDM_HEADWAY: Final = 1.1
 IDM_DELTA: Final = 4.0  # free-road exponent δ (model_params.delta)
 IDM_OVERLAP_GAP: Final = 0.01  # m; at or below this gap a_IDM = -b_emerg (G.1)
 BALLISTIC_FLOOR: Final = 1e-9  # m, m/s, m/s²; G.3 floors of C and b*, float noise of its tests

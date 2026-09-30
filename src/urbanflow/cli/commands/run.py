@@ -38,6 +38,25 @@ def _config(
     )
 
 
+def _controllers(items: list[str]) -> dict[str, str]:
+    """``--controller NAME`` (every signalised intersection, key ``"*"``) and
+    ``--controller J=NAME`` (intersection ``J``); a later option wins for the same key."""
+    from urbanflow.core.errors import ConfigError
+
+    out: dict[str, str] = {}
+    for item in items:
+        key, sep, name = item.partition("=")
+        if not sep:
+            key, name = "*", key
+        if not key.strip() or not name.strip():
+            raise ConfigError(
+                f'invalid --controller "{item}": expected NAME or INTERSECTION=NAME '
+                "(e.g. --controller external or --controller J=fixed_time)"
+            )
+        out[key.strip()] = name.strip()
+    return out
+
+
 def _loaded_line(sim: Simulation) -> str:
     from urbanflow.core.types import IntersectionKind
 
@@ -64,6 +83,14 @@ def run(
     ] = None,
     seed: Annotated[int | None, typer.Option("--seed", help="Root random seed.")] = None,
     dt: Annotated[float | None, typer.Option("--dt", help="Step length, s.")] = None,
+    controller: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--controller",
+            help="Signal controller: NAME for every signalized intersection, or "
+            "INTERSECTION=NAME (repeatable; per-intersection options win).",
+        ),
+    ] = None,
     router: Annotated[str | None, typer.Option("--router", help="Registered router.")] = None,
     out: Annotated[
         Path | None,
@@ -116,7 +143,8 @@ def run(
     flags = {k: v for k, v in flags.items() if v is not None}
     if debug_checks:
         flags["debug_checks"] = True
-    sim = Simulation(loaded, _config(loaded, config, assign or [], flags))
+    controllers = _controllers(controller or [])
+    sim = Simulation(loaded, _config(loaded, config, assign or [], flags), controllers=controllers)
     if not json_output:
         console.print(_loaded_line(sim), markup=False, soft_wrap=True)
     artifacts = None
@@ -134,6 +162,7 @@ def run(
                 },
                 "seed": sim.seed,
                 "until": until,
+                "controllers": controllers,
                 "config": sim.config.model_dump(mode="json"),
             }
         )

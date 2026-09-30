@@ -1,4 +1,4 @@
-"""Views, vector state and vehicle control (plan AA 5.4, 5.5, AD.1 8.10)."""
+"""Views, vector state and vehicle control (plan AA 5.4, 5.5, H.2, AD.1 8.10)."""
 
 from __future__ import annotations
 
@@ -10,11 +10,19 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from urbanflow import Scenario, ScenarioBuilder, Simulation, generate
+from urbanflow import Scenario, ScenarioBuilder, Simulation, bundled, generate
 from urbanflow.core import constants as C
 from urbanflow.core.errors import CommandError, NotFoundError
-from urbanflow.core.types import LinkKind, VehicleClass, VehicleStatus
-from urbanflow.views import stopline_queue, vehicle_xy
+from urbanflow.core.types import (
+    IntersectionKind,
+    LinkKind,
+    Stage,
+    TurnKind,
+    VehicleClass,
+    VehicleStatus,
+)
+from urbanflow.engine.signalling import stopline_queue
+from urbanflow.views import vehicle_xy
 
 DET = {"speed_factor": {"mean": 1.0, "std": 0.0, "min": 1.0, "max": 1.0}}
 
@@ -300,9 +308,13 @@ def test_queue_is_the_halting_run_from_the_stop_line() -> None:
     link = np.array([0, 0, 0, 0, 1, 1, 2])
     pos = np.array([99.0, 92.0, 85.0, 60.0, 80.0, 70.0, 99.5])
     halting = np.array([True, True, False, True, True, True, False])
+    uid = np.arange(link.size, dtype=np.uint32)
     # lane 0: two halting at the front, then a moving car; lane 1: front 20 m back (> 10 m)
-    assert stopline_queue(link, pos, halting, lane_length).tolist() == [2, 0, 0]
-    assert stopline_queue(link[:0], pos[:0], halting[:0], lane_length).tolist() == [0, 0, 0]
+    assert stopline_queue(link, pos, uid, halting, lane_length).tolist() == [2, 0, 0]
+    empty = stopline_queue(link[:0], pos[:0], uid[:0], halting[:0], lane_length)
+    assert empty.tolist() == [0, 0, 0]
+    # connector vehicles (link >= n_lanes) are ignored
+    assert stopline_queue(link + 3, pos, uid, halting, lane_length).tolist() == [0, 0, 0]
 
 
 def _naive_queue(link: list[int], pos: list[float], halting: list[bool], n: int) -> list[int]:
@@ -336,6 +348,7 @@ def test_queue_matches_a_naive_loop(cars: list[tuple[int, float, bool]]) -> None
     got = stopline_queue(
         np.array(link, dtype=np.intp),
         np.array(pos, dtype=np.float64),
+        np.arange(len(link), dtype=np.uint32),
         np.array(halting, dtype=bool),
         np.full(4, 100.0),
     )
@@ -368,3 +381,85 @@ def test_network_info(busy: Simulation) -> None:
     graph = info.graph()
     graph.remove_node(0)
     assert info.graph().number_of_nodes() == net.n_roads  # a copy each time
+
+
+# ------------------------------------------------------------------------------- signals
+@pytest.mark.parametrize(("dt", "green", "yellow", "all_red"), [(1.0, 30, 3, 1), (0.4, 75, 8, 3)])
+def test_signal_view_follows_the_quantised_fixed_time_cycle(
+    dt: float, green: int, yellow: int, all_red: int
+) -> None:
+    """30/3/1 s stages last ceil(d/dt - 1e-9) steps; ``remaining`` counts down to the end of
+    the stage and ``cycle`` is the realised C_q (H.2, H.4)."""
+    sim = Simulation(Scenario.load(bundled("single_intersection")), dt=dt, duration=200)
+    cycle = 2 * (green + yellow + all_red) * dt
+    stages = [
+        (Stage.green, 0, -1, green),
+        (Stage.yellow, 0, 1, yellow),
+        (Stage.all_red, 0, 1, all_red),
+        (Stage.green, 1, -1, green),
+    ]
+    since_green = 0
+    for stage, phase, target, steps in stages:
+        for k in range(1, steps + 1):
+            sim.step()
+            since_green = k if stage is Stage.green else since_green + 1
+            view = sim.signals["J"]
+            assert (view.stage, view.phase_index, view.target) == (stage, phase, target)
+            assert view.phase_id == f"p{phase}"
+            assert view.stage_elapsed == pytest.approx(k * dt)
+            assert view.green_elapsed == pytest.approx(since_green * dt)
+            assert view.remaining == pytest.approx((steps - k) * dt, abs=1e-9)
+            assert view.cycle == pytest.approx(cycle)
+            assert (view.min_green, view.max_green) == (5.0, 60.0)
+            assert (view.held, view.controller) == (False, "fixed_time")
+            assert view.state_string == "".join(view.movement_states.values())
+    green_view = sim.signals["J"]
+    assert green_view.movement_states["N_in->S_out"] == "G"
+    assert green_view.movement_states["S_in->W_out"] == "g"
+    assert green_view.movement_states["W_in->E_out"] == "r"
+
+
+def test_signal_view_of_an_offset_and_of_external_control() -> None:
+    scenario = Scenario.load(bundled("single_intersection"))
+    offset = {"type": "fixed_time", "params": {"offset": 10}}
+    sim = Simulation(scenario, controllers={"J": offset}, duration=100)
+    sim.step()  # t = 0 is 58 s into the 68 s cycle: 24 s into p1's green
+    view = sim.signals["J"]
+    assert (view.phase_index, view.stage_elapsed, view.remaining) == (1, 25.0, 5.0)
+    sim.run(until=11)  # p0's green starts at t = offset
+    view = sim.signals["J"]
+    assert (view.stage, view.phase_index, view.stage_elapsed) == (Stage.green, 0, 1.0)
+    external = Simulation(scenario, controllers={"J": "external"}, duration=100)
+    external.step()
+    view = external.signals["J"]
+    assert (view.remaining, view.cycle, view.controller) == (None, None, "external")
+
+
+def test_intersection_views() -> None:
+    sim = Simulation(Scenario.load(bundled("single_intersection")), duration=100)
+    sim.run(until=40)  # p1 green
+    net = sim.network.compiled
+    assert len(sim.intersections) == 5 and sim.intersections.ids == net.int_ids
+    junction = sim.intersections["J"]
+    assert junction.kind is IntersectionKind.signalized
+    assert junction.point == tuple((net.int_point[net.int_index["J"]] + net.origin).tolist())
+    assert [m.id for m in junction.movements] == list(sim.network.movement_ids)
+    assert junction.signal == sim.signals["J"]
+    by_id = {m.id: m for m in junction.movements}
+    straight, left = by_id["N_in->S_out"], by_id["N_in->E_out"]
+    assert (straight.from_road, straight.to_road, straight.turn) == ("N_in", "S_out", "straight")
+    assert left.turn is TurnKind.left
+    assert (straight.state, straight.rank, left.state, left.rank) == ("G", 3, "g", 2)
+    assert (by_id["W_in->E_out"].state, by_id["W_in->E_out"].rank) == ("r", 0)
+    for mov in junction.movements:
+        assert mov.connections and set(mov.connections) <= set(sim.network.connection_ids)
+    boundary = sim.intersections["N"]
+    assert boundary.kind is IntersectionKind.boundary
+    assert (boundary.movements, boundary.signal) == ((), None)
+    with pytest.raises(NotFoundError, match=r'unknown intersection "JJ" \(did you mean "J"'):
+        sim.intersections["JJ"]
+    for kind, rank in (("uncontrolled", {1}), ("priority", {1, 2, 3})):
+        other = Simulation(generate("single_intersection", kind=kind))
+        view = other.intersections["J"]
+        assert view.signal is None and {m.state for m in view.movements} == {None}
+        assert {m.rank for m in view.movements} == rank

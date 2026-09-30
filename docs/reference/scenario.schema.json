@@ -1564,7 +1564,7 @@
           "type": "number"
         },
         "headway": {
-          "default": 1.5,
+          "default": 1.1,
           "description": "Desired time headway T, s.",
           "exclusiveMinimum": 0,
           "maximum": 10.0,

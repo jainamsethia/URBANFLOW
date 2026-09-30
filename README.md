@@ -29,18 +29,22 @@ On Windows on ARM64, install a native uv first, for example `winget install --id
 ## First run
 
 ```bash
+uv run urbanflow run src/urbanflow/scenario/bundled/single_intersection.json --duration 600
 uv run urbanflow generate single_intersection -p kind=uncontrolled -o s.json
 uv run urbanflow run s.json --duration 600
 ```
 
 ```python
-from urbanflow import Simulation, generate
+from urbanflow import Simulation, bundled
 
-with Simulation(generate("single_intersection", kind="uncontrolled"), duration=600) as sim:
+with Simulation.from_scenario(bundled("single_intersection"), duration=600) as sim:
+    sim.run(until=45)
+    print(sim.signals["J"])  # phase, stage, movement states of the traffic light
     print(sim.run())
 ```
 
-See `docs/getting-started.md` and `docs/python-api.md`.
+See `docs/getting-started.md`, `docs/traffic-signals.md`, `docs/python-api.md` and
+`examples/`.
 
 ## License
 

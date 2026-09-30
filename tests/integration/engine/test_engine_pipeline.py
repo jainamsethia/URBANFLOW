@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from urbanflow import generate
-from urbanflow.core.errors import SimulationError
+from urbanflow.core.errors import ConfigError, SimulationError
 from urbanflow.core.events import EventType
 from urbanflow.engine import Engine
 from urbanflow.scenario import Scenario, ScenarioBuilder
@@ -71,9 +71,31 @@ def test_sub_step_order_is_observable_in_events(
     assert seen == {2, 3, 8, 9}
 
 
-def test_rejects_signalized_intersections(make_engine: MakeEngine) -> None:
-    with pytest.raises(SimulationError, match=r'signalized intersections \("J"\)'):
-        make_engine(generate("single_intersection", kind="signalized"))
+def test_signal_programs_must_cover_every_signalized_intersection(
+    make_engine: MakeEngine,
+) -> None:
+    from urbanflow.core.config import SimulationConfig
+    from urbanflow.core.rng import RngStreams
+    from urbanflow.network import compile_network
+    from urbanflow.routing import ShortestPathRouter
+    from urbanflow.vehicles import IDM, VehicleTypes
+
+    scenario = generate("single_intersection", kind="signalized")
+    e = make_engine(scenario)  # the fixture passes the programs
+    assert [p.intersection for p in e.signals.programs] == [0] and e.signals.state_string(0)
+    net = compile_network(scenario)
+    with pytest.raises(SimulationError, match=r'missing: "J"'):
+        Engine(
+            net,
+            SimulationConfig(),
+            rng=RngStreams(0),
+            router=ShortestPathRouter(),
+            car_following=IDM(),
+            types=VehicleTypes.from_specs(net.vehicle_types, IDM.Params),
+            demand=scenario.resolved.demand,
+        )
+    with pytest.raises(ConfigError, match='intersection "N" is not signalized'):
+        make_engine(scenario, controllers={net.int_index["N"]: "external"})
 
 
 def test_rejects_transit_lines(make_engine: MakeEngine, junction_builder: Builder) -> None:

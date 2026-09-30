@@ -9,6 +9,10 @@ needs the resolved run config, the component registries and the network compiler
   and the available names); ``lane_change_model`` joins when lane changing lands;
 * **E903** ``vehicle_types[i].model_params`` the car-following model's ``Params`` rejects
   (unknown names, or bad values reported with the structural codes);
+* **E901** unknown ``signal.controller.type`` and **E902** controller ``params`` its
+  ``Params`` rejects (the converted pydantic message at the parameter's path); the same
+  for ``Simulation(controllers=...)`` overrides given by name or ``{"type", "params"}``
+  (paths ``controllers.<key>``);
 * the compile diagnostics: **E802**, **E905**, **E806** (errors) and **W302**, **W304**;
 * **E505** (second message): an integer ``depart_lane`` of a flow or trip with no
   connection to the route's next road (for origin/destination items, the router's first
@@ -20,8 +24,12 @@ needs the resolved run config, the component registries and the network compiler
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
+
+from pydantic import ValidationError
 
 from urbanflow.core.config import SimulationConfig, resolve_config
 from urbanflow.core.errors import (
@@ -37,13 +45,15 @@ from urbanflow.network.graph import build_road_graph
 from urbanflow.routing import Router, router_registry, valid_mask
 from urbanflow.scenario.io import parse_json, read_text
 from urbanflow.scenario.scenario import Scenario
-from urbanflow.scenario.schema import FlowSpec, TripSpec
+from urbanflow.scenario.schema import ControllerSpec, FlowSpec, TripSpec
 from urbanflow.scenario.validate import (
     ValidationReport,
     demand_config_issues,
     issue,
+    issues_from_pydantic,
     validate_data,
 )
+from urbanflow.signals import ControllerRef, controller_registry
 from urbanflow.vehicles import car_following_registry
 from urbanflow.vehicles.types import model_param_issues
 
@@ -75,11 +85,14 @@ def deep_check(
     config: SimulationConfig | None = None,
     *,
     router: Router | None = None,
+    controllers: Mapping[str, ControllerRef] | None = None,
 ) -> tuple[ValidationReport, CompiledNetwork | None]:
     """:func:`check` plus the compiled network (None if the scenario does not compile).
 
     ``Simulation`` reuses the network instead of compiling twice. ``router`` is the router
-    instance a run uses instead of ``config.router`` (no E904 for the router name then).
+    instance a run uses instead of ``config.router`` (no E904 for the router name then);
+    ``controllers`` are its ``controllers=`` overrides (E901/E902 for the ones given by name
+    or mapping; instances and factories are checked when built).
     """
     if not isinstance(scenario, Scenario):
         loaded = _load(Path(scenario))
@@ -92,6 +105,7 @@ def deep_check(
         *demand_config_issues(scenario.resolved.demand, cfg.dt, cfg.duration),
     ]
     issues += _registry_issues(scenario, cfg, check_router=router is None)
+    issues += _controller_issues(scenario, controllers or {})
     net: CompiledNetwork | None = None
     try:
         net = compile_network(scenario)
@@ -141,6 +155,48 @@ def _registry_issues(
         base = ("vehicle_types", i, "model_params")
         issues += model_param_issues(vt.model_params, params, name, base)[0]
     return issues
+
+
+def _controller_issues(
+    scenario: Scenario, overrides: Mapping[str, ControllerRef]
+) -> list[ValidationIssue]:
+    """E901/E902 of the named overrides and of the resolved signals' controllers they do
+    not replace (an override may rescue a scenario whose configured controller is unknown)."""
+    issues: list[ValidationIssue] = []
+    for i, ix in enumerate(scenario.resolved.network.intersections):
+        if ix.signal is not None and "*" not in overrides and ix.id not in overrides:
+            base = ("network", "intersections", i, "signal", "controller")
+            issues += _spec_issues(ix.signal.controller, base, (*base, "type"))
+    for key, ref in overrides.items():
+        loc: tuple[str | int, ...] = ("controllers", key)
+        if isinstance(ref, ControllerSpec):
+            issues += _spec_issues(ref, loc, (*loc, "type"))
+        elif isinstance(ref, str | Mapping):
+            data: Mapping[str, Any] = {"type": ref} if isinstance(ref, str) else ref
+            try:
+                spec = ControllerSpec.model_validate(dict(data))
+            except ValidationError as exc:
+                issues += issues_from_pydantic(exc, prefix=loc, root=ControllerSpec)
+                continue
+            issues += _spec_issues(spec, loc, loc if isinstance(ref, str) else (*loc, "type"))
+    return issues
+
+
+def _spec_issues(
+    spec: ControllerSpec, base: tuple[str | int, ...], type_path: tuple[str | int, ...]
+) -> list[ValidationIssue]:
+    """E901 if ``spec.type`` is not registered, else E902 for what its ``Params`` rejects."""
+    if spec.type not in controller_registry:
+        names = controller_registry.names()
+        hint, listed = suggest(spec.type, names), ", ".join(names) or "none"
+        return [issue("E901", type_path, t=spec.type, hint=hint, list=listed)]
+    params = controller_registry.get(spec.type).Params
+    try:
+        params.model_validate(dict(spec.params))
+    except ValidationError as exc:
+        converted = issues_from_pydantic(exc, prefix=(*base, "params"), root=params)
+        return [replace(x, code="E902") for x in converted]
+    return []
 
 
 def _depart_lane_issues(

@@ -9,7 +9,15 @@ import pytest
 
 import urbanflow
 from urbanflow.core.config import RecordEvent
-from urbanflow.core.events import COLUMNS, NO_VEHICLE, EventBuffer, EventType
+from urbanflow.core.events import (
+    COLUMNS,
+    NO_VEHICLE,
+    PHASE_FORCED_BIT,
+    EventBuffer,
+    EventType,
+    decode_phase_aux,
+    phase_aux,
+)
 
 CANONICAL = [
     "vehicle_departed",
@@ -122,3 +130,16 @@ def test_bad_shapes_are_rejected() -> None:
     with pytest.raises(ValueError):
         buf.append_many(EventType.vehicle_departed, 0, 0.0, handles=[1, 2], uids=[1, 2, 3])
     assert len(buf) == 0
+
+
+def test_phase_changed_aux_encoding() -> None:
+    """B.2 #25: aux = new phase, plus bit 16 when the change was forced."""
+    assert PHASE_FORCED_BIT == 1 << 16
+    assert phase_aux(3) == 3 and phase_aux(3, forced=True) == 3 + 65536
+    for phase in (0, 7, 65535):
+        for forced in (False, True):
+            aux = phase_aux(phase, forced=forced)
+            assert decode_phase_aux(aux) == (phase, forced)
+    buf = EventBuffer()  # fits the i32 aux column
+    buf.append(EventType.phase_changed, 1, 0.0, intersection=0, aux=phase_aux(2, forced=True))
+    assert decode_phase_aux(int(buf.aux[0])) == (2, True) and buf.link[0] == -1

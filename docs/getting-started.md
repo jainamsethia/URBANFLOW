@@ -70,7 +70,7 @@ uv run urbanflow run scenarios/cross.json --duration 600 --seed 7
 ```
 
 ```text
-Loaded single_intersection: 1 intersection, 8 roads, 16 lanes, 16 connectors  (hash 87f6c97627d0)
+Loaded single_intersection: 1 intersection, 8 roads, 16 lanes, 16 connectors  (hash 3c0ffa9b370b)
      Results: single_intersection (seed 7, 600 s)
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━┓
 ┃ Metric                      ┃       Value ┃
@@ -78,9 +78,9 @@ Loaded single_intersection: 1 intersection, 8 roads, 16 lanes, 16 connectors  (h
 │ Vehicles departed / arrived │   386 / 346 │
 │ Vehicles en route / waiting │      40 / 0 │
 │ Throughput                  │ 2,076 veh/h │
-│ Mean travel time            │      52.5 s │
+│ Mean travel time            │      48.3 s │
 │ Teleports                   │           0 │
-│ Wall time                   │      0.80 s │
+│ Wall time                   │      0.62 s │
 └─────────────────────────────┴─────────────┘
 Run saved: runs/20260929T110843-single-intersection-s7-0b3c
 ```
@@ -98,6 +98,49 @@ print(result)
 print(result.summary["travel_time.mean"], result.summary["vehicles.arrived"])
 ```
 
-Signalised intersections arrive with the traffic-signal engine; until then the simulator
-reports them by name. See [Python API](python-api.md) for stepping, vehicle views and
-vector state, and [Simulation model](simulation-model.md) for what happens in a step.
+## Your first signalised run
+
+The bundled `single_intersection` scenario is a four-arm junction with a fixed-time
+traffic light (two 30 s phases, 3 s yellow, 1 s all-red). From the repository root:
+
+```bash
+uv run urbanflow run src/urbanflow/scenario/bundled/single_intersection.json --duration 600
+```
+
+```text
+Loaded single_intersection: 1 intersection, 8 roads, 16 lanes, 16 connectors  (hash 3aefba1f3f7f)
+     Results: single_intersection (seed 0, 600 s)
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━┓
+┃ Metric                      ┃       Value ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━┩
+│ Vehicles departed / arrived │   385 / 309 │
+│ Vehicles en route / waiting │      76 / 0 │
+│ Throughput                  │ 1,854 veh/h │
+│ Mean travel time            │      73.5 s │
+│ Teleports                   │           0 │
+│ Wall time                   │      0.94 s │
+└─────────────────────────────┴─────────────┘
+Run saved: runs/20260930T101512-single-intersection-s0-7c2e
+```
+
+`--controller external` (or `--controller J=external`) swaps the controller; see
+[Command line](cli.md#urbanflow-run-scenario). In Python, `sim.signals` shows and
+controls the light:
+
+```python
+from urbanflow import Simulation, bundled
+
+sim = Simulation.from_scenario(bundled("single_intersection"), duration=600)
+sim.run(until=45)
+light = sim.signals["J"]
+print(light.phase_id, light.stage, light.state_string, f"{light.remaining:g} s left")
+sim.signals.hold_phase("J", "p0")  # manual override: back to the east-west phase
+sim.run(until=120)
+print(sim.signals["J"].phase_id, sim.signals["J"].held)
+```
+
+Signalised intersections run their configured controller (`fixed_time` by default;
+`external` switches phases on request). See [Traffic signals](traffic-signals.md) for
+programs, the signal state machine and custom controllers, [Python API](python-api.md)
+for stepping, vehicle views and vector state, and [Simulation model](simulation-model.md)
+for what happens in a step.

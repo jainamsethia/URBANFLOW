@@ -14,7 +14,7 @@ import math
 import os
 import platform
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib import metadata
 from pathlib import Path
 from typing import Any, Final
@@ -79,6 +79,11 @@ class SimulationResult:
     """urbanflow, numpy, python, platform and machine of the producing process."""
     run_id: str | None = None
     """Set when the run was saved as run artifacts (CLI ``run``)."""
+    controllers: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
+    """The configured signal controller of each signalised intersection, ``{id: {"type",
+    "params"}}`` (the scenario's, or the ``controllers=`` override; a custom class or
+    factory by its name, with its validated parameters). Commands issued during the run
+    (``set_controller``, holds) are not included."""
 
     # ------------------------------------------------------------------ serialisation
     def to_dict(self) -> dict[str, Any]:
@@ -97,6 +102,7 @@ class SimulationResult:
             "summary": {k: _json_number(v) for k, v in self.summary.items()},
             "event_counts": dict(self.event_counts),
             "provenance": dict(self.provenance),
+            "controllers": {k: dict(v) for k, v in self.controllers.items()},
             "config": self.config.model_dump(mode="json"),
         }
 
@@ -119,6 +125,7 @@ class SimulationResult:
                 event_counts={k: int(v) for k, v in dict(data["event_counts"]).items()},
                 provenance={k: str(v) for k, v in dict(data["provenance"]).items()},
                 run_id=data.get("run_id"),
+                controllers={str(k): dict(v) for k, v in dict(data.get("controllers", {})).items()},
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise ConfigError(f"malformed UrbanFlow result: {exc}") from None

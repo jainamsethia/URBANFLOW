@@ -12,10 +12,13 @@
   from ``route[cursor]`` to ``route[cursor + 1]``;
 * I8 no ungated crossing: every vehicle that crossed a stop line this step, and every
   vehicle on a connector, is committed;
+* I10 signal state machine: signalised movement states are r, y, g or G, and a movement
+  that was G or g at the end of the previous step is not r now unless it went through
+  yellow, i.e. unless the change was a forced ``set_phase`` or its program has yellow = 0;
 * I11 identity: uids unique among live vehicles; handle, id and uid maps consistent.
 
 A failure logs at ERROR and raises :class:`InvariantViolation` ``(rule, step, uids,
-details)``. I5, I9 and I10 arrive with zone locks and signals.
+details)``. I5 and I9 arrive with zone locks.
 """
 
 from __future__ import annotations
@@ -26,9 +29,9 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 from numpy.typing import NDArray
 
-from urbanflow.core.constants import POSITION_EPS
+from urbanflow.core.constants import LOG_MAX_IDS, POSITION_EPS
 from urbanflow.core.errors import InvariantViolation
-from urbanflow.core.types import IntArray, VehicleStatus
+from urbanflow.core.types import IntArray, IntersectionKind, SignalState, VehicleStatus
 from urbanflow.engine.leaders import compute_leaders, remaining_roads
 from urbanflow.vehicles.table import VehicleTable
 
@@ -36,7 +39,7 @@ if TYPE_CHECKING:
     from urbanflow.engine.advance import Advance
     from urbanflow.engine.engine import Engine
 
-__all__ = ["check_always", "check_debug"]
+__all__ = ["check_always", "check_debug", "check_signals"]
 
 _log = logging.getLogger("urbanflow.engine")
 _WAITING = VehicleStatus.waiting_insert.code
@@ -63,7 +66,7 @@ def check_always(veh: VehicleTable, run: IntArray, step: int) -> None:
 
 
 def check_debug(engine: Engine, advance: Advance | None = None) -> None:
-    """I3, I4, I6, I7, I8 and I11 on the committed state of ``engine``.
+    """I3, I4, I6, I7, I8, I10 and I11 on the committed state of ``engine``.
 
     ``advance`` is the step's :class:`~urbanflow.engine.advance.Advance` (for I8's list of
     stop-line crossings); without it only connector vehicles are checked.
@@ -136,6 +139,9 @@ def check_debug(engine: Engine, advance: Advance | None = None) -> None:
         worst = float(leaders.gap[bad].min())
         raise _violation("I4", step, uid[bad], f"longitudinal overlap (gap {worst:.3f} m)")
 
+    # I10 signal state machine
+    check_signals(engine)
+
     # I11 identity
     ids = veh.ids
     broken = [
@@ -150,3 +156,22 @@ def check_debug(engine: Engine, advance: Advance | None = None) -> None:
     active = np.flatnonzero(veh.active[:top])
     if not np.array_equal(active, np.sort(live[veh.status[live] == _RUNNING])):
         raise _violation("I11", step, [], "active flags disagree with the running vehicles")
+
+
+def check_signals(engine: Engine) -> None:
+    """I10 on ``engine.signals`` against the states at the end of the previous step."""
+    net, sig = engine.network, engine.signals
+    j = net.mov_intersection
+    signalised = net.int_kind[j] == IntersectionKind.signalized.code
+    cur, prev = sig.movement_state, sig.last_state
+    bad = signalised & (cur > SignalState.G.code)
+    if not bad.any():
+        was_green = prev >= SignalState.g.code
+        bad = signalised & was_green & (cur == SignalState.r.code)
+        bad &= ~(sig.forced[j] | sig.yellow_zero[j])
+        problem = "went from green to red without yellow"
+    else:
+        problem = "has a state other than r, y, g or G"
+    if bad.any():
+        ids = ", ".join(net.mov_ids[m] for m in np.flatnonzero(bad)[:LOG_MAX_IDS].tolist())
+        raise _violation("I10", engine.step_count, [], f"movement {ids} {problem}")

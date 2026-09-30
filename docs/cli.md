@@ -90,7 +90,7 @@ Parameter errors are reported with paths such as `params.lanes` (exit 3).
 
 ```text
 $ urbanflow generate single_intersection -p kind=uncontrolled -o s.json
-Wrote s.json (5 intersections, 8 roads, 12 flows; hash 87f6c97627d0)
+Wrote s.json (5 intersections, 8 roads, 12 flows; hash 3c0ffa9b370b)
 ```
 
 ### `urbanflow schema [scenario|config]`
@@ -111,6 +111,7 @@ Load and deep-check a scenario, run it headless, print the results and save the 
 | `--duration S` | Time limit, s (the config `duration`). |
 | `--until S` | Stop at this simulated time, s (never past the time limit). |
 | `--seed N`, `--dt S`, `--router NAME` | Seed, step length and router. |
+| `--controller NAME`, `--controller J=NAME` | Signal controller for every signalised intersection, or for intersection `J` (repeatable; per-intersection options win). Unknown names exit 3 with a did-you-mean hint (E901), unknown intersections exit 5. |
 | `--config FILE` | TOML file whose `[simulation]` table sets defaults (default: the workspace `urbanflow.toml`, if it exists). |
 | `--set KEY=VALUE` | A config override (repeatable; dotted keys such as `metrics.warmup=300`, JSON values). |
 | `--debug-checks` | Check every invariant each step (slow; a failure exits 7). |
@@ -121,16 +122,19 @@ Load and deep-check a scenario, run it headless, print the results and save the 
 
 Configuration precedence, lowest first: defaults < the scenario's `simulation` block <
 the config file `[simulation]` < `--set` < the dedicated options. The run directory holds
-`spec.json` (scenario identity, seed, resolved config), `scenario.json` (an exact copy),
+`spec.json` (scenario identity, seed, resolved config, `--controller` choices), `scenario.json` (an exact copy),
 `env.json` (Python, platform, CPU, RAM, versions), `result.json` (the full result, loadable
 with `SimulationResult.load`) and `summary.json`, the nested summary, written last.
 Run ids look like `20260923T141502-grid-3x3-s7-a1f0` (UTC time, scenario, seed, random
 suffix). Ctrl-C stops the run, saves the partial results with `interrupted: true` and
 exits 130.
 
+For example, `urbanflow run scenarios/signals.json --controller external --controller
+J2=fixed_time` puts every signal under on-request control except `J2`.
+
 ```text
 $ urbanflow run scenarios/cross.json --duration 600 --seed 7
-Loaded single_intersection: 1 intersection, 8 roads, 16 lanes, 16 connectors  (hash 87f6c97627d0)
+Loaded single_intersection: 1 intersection, 8 roads, 16 lanes, 16 connectors  (hash 3c0ffa9b370b)
      Results: single_intersection (seed 7, 600 s)
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━┓
 ┃ Metric                      ┃       Value ┃
@@ -138,16 +142,16 @@ Loaded single_intersection: 1 intersection, 8 roads, 16 lanes, 16 connectors  (h
 │ Vehicles departed / arrived │   386 / 346 │
 │ Vehicles en route / waiting │      40 / 0 │
 │ Throughput                  │ 2,076 veh/h │
-│ Mean travel time            │      52.5 s │
+│ Mean travel time            │      48.3 s │
 │ Teleports                   │           0 │
-│ Wall time                   │      0.80 s │
+│ Wall time                   │      0.62 s │
 └─────────────────────────────┴─────────────┘
 Run saved: runs/20260929T110843-single-intersection-s7-0b3c
 ```
 
 Exit codes: 3 invalid scenario (including the deep checks), 4 bad option or config value
 (or a non-empty `--out`), 5 missing scenario or config file, 6 a feature not available
-yet (signalised intersections, transit lines, recording), 7 invariant violation, 130
+yet (transit lines, recording), 7 invariant violation, 130
 interrupted.
 
 ## Workbench
