@@ -14,6 +14,9 @@ if TYPE_CHECKING:
     from urbanflow.engine import Engine
     from urbanflow.scenario import Scenario, ScenarioBuilder
 
+# Typer forces coloured "terminal" help output under GITHUB_ACTIONS; tests read plain text.
+os.environ.setdefault("_TYPER_FORCE_DISABLE_TERMINAL", "1")
+
 # Property tests check correctness, not speed: no per-example deadline (slow CI runners and
 # coverage tracing otherwise turn timing into failures).
 settings.register_profile("urbanflow", deadline=None, suppress_health_check=[HealthCheck.too_slow])
