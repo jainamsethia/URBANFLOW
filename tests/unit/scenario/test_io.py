@@ -65,18 +65,20 @@ def test_non_finite_constants_are_rejected(text: str, line: int) -> None:
     ("text", "fragment"),
     [
         ('{"x": ' + "1" * 5000 + "}", "integer string conversion"),  # Python's digit limit
-        ('{"x": ' + "[" * 100_000 + "]" * 100_000 + "}", "recursion"),  # nesting depth
+        # nesting depth: RecursionError up to Python 3.13, our depth cap on 3.14+
+        ('{"x": ' + "[" * 100_000 + "]" * 100_000 + "}", ("recursion", "nesting deeper than")),
         ('{"x": ' + "[" * 64 + "]" * 64 + "}", "nesting deeper than 64 levels"),  # hashable
     ],
     ids=["digit-limit", "nesting", "depth-cap"],
 )
-def test_parser_limits_are_load_errors(text: str, fragment: str) -> None:
+def test_parser_limits_are_load_errors(text: str, fragment: str | tuple[str, ...]) -> None:
     """Every json.loads failure is an E000 issue, never an internal error."""
     with pytest.raises(ScenarioValidationError) as info:
         io.parse_json(text)
     code, path, message = _issue(info)
     assert (code, path) == ("E000", "$")
-    assert message.startswith("invalid JSON: ") and fragment in message
+    fragments = (fragment,) if isinstance(fragment, str) else fragment
+    assert message.startswith("invalid JSON: ") and any(f in message for f in fragments)
 
 
 def test_nesting_up_to_the_cap_is_fine() -> None:
