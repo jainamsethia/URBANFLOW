@@ -50,7 +50,7 @@ def test_same_seed_same_episode_and_reseed_changes_demand() -> None:
 
 def test_masks_and_overrides() -> None:
     env = TrafficSignalEnv("single_intersection", episode_length=120, decision_interval=1.0)
-    obs, info = env.reset(seed=0)
+    _obs, info = env.reset(seed=0)
     current = info["phase"]
     other = 1 - current
     # immediately after reset the green is younger than min-green: only the current phase
