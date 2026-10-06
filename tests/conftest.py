@@ -6,11 +6,29 @@ from collections.abc import Callable, Iterator, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import os
+
 import pytest
+from hypothesis import HealthCheck, settings
 
 if TYPE_CHECKING:
     from urbanflow.engine import Engine
     from urbanflow.scenario import Scenario, ScenarioBuilder
+
+# Property tests check correctness, not speed: no per-example deadline (slow CI runners and
+# coverage tracing otherwise turn timing into failures).
+settings.register_profile("urbanflow", deadline=None, suppress_health_check=[HealthCheck.too_slow])
+settings.load_profile("urbanflow")
+
+
+def pytest_runtest_logreport(report: pytest.TestReport) -> None:
+    """On GitHub Actions, turn each failure into a public ``::error::`` annotation."""
+    if not os.environ.get("GITHUB_ACTIONS") or not report.failed:
+        return
+    text = str(report.longrepr).strip().splitlines()
+    tail = " | ".join(line.strip() for line in text[-4:] if line.strip())
+    message = tail.replace("%", "%25").replace("\r", "").replace("\n", " ")[:900]
+    print(f"\n::error title={report.nodeid} ({report.when})::{message}")
 
 
 @pytest.fixture
