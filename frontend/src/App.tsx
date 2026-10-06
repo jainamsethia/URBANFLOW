@@ -24,16 +24,17 @@ function NewSession({
   const [scenario, setScenario] = useState(`bundled:${scenarios.find((s) => s.name === "grid_3x3")?.name ?? scenarios[0]?.name ?? ""}`);
   const [controller, setController] = useState("");
   const [seed, setSeed] = useState(0);
+  const [grid, setGrid] = useState({ rows: 3, cols: 4, entry_rate: 300, lanes: 2 });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const create = async () => {
     setBusy(true);
     setError(null);
-    const [source, name] = scenario.split(":") as ["bundled" | "workspace", string];
+    const [source, name] = scenario.split(":") as ["bundled" | "workspace" | "generate", string];
+    const what =
+      source === "generate" ? { generator: "grid", params: grid, label: `grid ${grid.rows}x${grid.cols}` } : { scenario: name, source };
     try {
-      onCreated(
-        await api.createSession({ scenario: name, source, seed, ...(controller ? { controller } : {}) }),
-      );
+      onCreated(await api.createSession({ ...what, seed, ...(controller ? { controller } : {}) }));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -51,8 +52,28 @@ function NewSession({
               {s.source === "workspace" ? " (workspace)" : ""}
             </option>
           ))}
+          <option value="generate:grid">Generate a grid…</option>
         </select>
       </label>
+      {scenario === "generate:grid" &&
+        ([
+          ["rows", "Rows", 1, 8],
+          ["cols", "Cols", 1, 8],
+          ["lanes", "Lanes", 1, 4],
+          ["entry_rate", "veh/h per entry", 50, 1500],
+        ] as const).map(([key, label, min, max]) => (
+          <label key={key}>
+            <span className="block text-[11px] text-slate-400">{label}</span>
+            <input
+              type="number"
+              min={min}
+              max={max}
+              className="w-16 rounded bg-slate-800 p-1"
+              value={grid[key]}
+              onChange={(e) => setGrid({ ...grid, [key]: +e.target.value })}
+            />
+          </label>
+        ))}
       <label>
         <span className="block text-[11px] text-slate-400">Signals</span>
         <select className="rounded bg-slate-800 p-1" value={controller} onChange={(e) => setController(e.target.value)}>
