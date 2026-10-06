@@ -55,6 +55,7 @@ BUNDLED_SCENARIOS: Final[Mapping[str, tuple[str, Mapping[str, Any]]]] = MappingP
         "single_intersection": ("single_intersection", MappingProxyType({})),
         "grid_3x3": ("grid", MappingProxyType({})),
         "grid_4x4": ("grid", MappingProxyType({"rows": 4, "cols": 4})),
+        "corridor": ("corridor", MappingProxyType({})),
     }
 )
 """Bundled scenario name -> (generator, params); see ``scripts/regen_bundled_scenarios.py``."""
@@ -119,5 +120,5 @@ def list_generators() -> list[tuple[str, GeneratorEntry]]:
     return GENERATORS.items()
 
 
-for _module in ("single_intersection", "grid"):  # built-ins register on import
+for _module in ("single_intersection", "grid", "corridor"):  # built-ins register on import
     importlib.import_module(f"{__name__}.{_module}")

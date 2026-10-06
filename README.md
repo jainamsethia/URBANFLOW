@@ -18,8 +18,9 @@ replays and a web workbench.
   (gap-out / max-out), `max_pressure` (Varaiya) and `external` (API / RL) controllers,
   manual hold/release, live controller switching.
 - **Scenarios**: versioned JSON format with friendly, JSON-path validation errors; derived
-  movements, lane mappings and signal programs; generators `single_intersection` and
-  `grid` (bundled: `single_intersection`, `grid_3x3`, `grid_4x4`).
+  movements, lane mappings and signal programs; generators `single_intersection`, `grid`
+  and `corridor` (an arterial with green-wave signal offsets); bundled: `single_intersection`,
+  `grid_3x3`, `grid_4x4`, `corridor`.
 - **Metrics**: travel time, delay, waiting, stops, throughput, queues, space-mean speed,
   VKT/VHT; global, per-intersection and per-trip tables; CSV / JSON / Parquet export.
 - **Replay**: compact `.ufr` recordings with seek, step back and rewind.
@@ -33,8 +34,7 @@ replays and a web workbench.
   view and replay viewer.
 - **Snapshots** (save/restore any state) and **state digests** for bit-exact reproducibility.
 
-Not built yet (planned): more generators (corridor, downtown, rush
-hour), Webster and emergency preemption, transit, the CityFlow importer, the visual
+Not built yet (planned): more generators (downtown, rush hour), Webster and emergency preemption, transit, the CityFlow importer, the visual
 scenario editor, the experiment database/dashboards and the benchmark suite.
 
 ## Install
@@ -123,6 +123,14 @@ Tabular Q-learning, single intersection with 3:1 asymmetric demand, 60 training 
 
 The tabular learner (60 short episodes, a 7-feature state) clearly beats random and
 fixed-cycle control but not max-pressure on this junction.
+
+Signal coordination: `corridor` (5 junctions, 90 s cycle, 1800 s, seed 2), eastbound
+through traffic from `W` to `E`:
+
+| offsets | mean travel time (s) | stops per vehicle |
+|---|---|---|
+| none (all 0) | 152.7 | 2.1 |
+| green wave (`o_i = i * spacing / v`) | 109.7 | 0.84 |
 
 Multi-agent: nine independent tabular Q-learners on `grid_3x3` (PettingZoo env, 40 training
 episodes of 900 s, 3 held-out seeds; `uv run python examples/reinforcement_learning/independent_q_grid.py`):

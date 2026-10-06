@@ -1,0 +1,907 @@
+{
+  "format": "urbanflow.scenario",
+  "version": "1.0",
+  "meta": {
+    "name": "corridor_5",
+    "description": "5-junction arterial, green_wave coordination.",
+    "generator": {
+      "name": "corridor",
+      "params": {
+        "intersections": 5,
+        "spacing": 250.0,
+        "main_lanes": 2,
+        "side_lanes": 1,
+        "main_speed": 16.67,
+        "side_speed": 11.11,
+        "side_length": 150.0,
+        "cycle": 90.0,
+        "main_share": 0.6,
+        "coordination": "green_wave",
+        "main_rate": 900.0,
+        "side_rate": 200.0,
+        "turn_ratios": {
+          "far": 0.1,
+          "straight": 0.8,
+          "near": 0.1
+        },
+        "arrival": "poisson",
+        "duration": 3600.0
+      },
+      "urbanflow_version": "0.1.0"
+    }
+  },
+  "simulation": {
+    "duration": 3600.0
+  },
+  "network": {
+    "drive_side": "right",
+    "lane_width": 3.2,
+    "speed_limit": 13.89,
+    "intersections": [
+      {
+        "id": "J0",
+        "point": [
+          0.0,
+          0.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time",
+            "params": {
+              "offset": 0.0
+            }
+          },
+          "phases": [
+            {
+              "id": "main",
+              "green": {
+                "W_J0->J0_J1": "G",
+                "W_J0->J0_N0": "g",
+                "W_J0->J0_S0": "G",
+                "J1_J0->J0_W": "G",
+                "J1_J0->J0_N0": "G",
+                "J1_J0->J0_S0": "g"
+              },
+              "duration": 49.0
+            },
+            {
+              "id": "side",
+              "green": {
+                "N0_J0->J0_W": "G",
+                "N0_J0->J0_J1": "g",
+                "N0_J0->J0_S0": "G",
+                "S0_J0->J0_W": "g",
+                "S0_J0->J0_J1": "G",
+                "S0_J0->J0_N0": "G"
+              },
+              "duration": 33.0
+            }
+          ]
+        }
+      },
+      {
+        "id": "N0",
+        "point": [
+          0.0,
+          150.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "S0",
+        "point": [
+          0.0,
+          -150.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "J1",
+        "point": [
+          250.0,
+          0.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time",
+            "params": {
+              "offset": 15.0
+            }
+          },
+          "phases": [
+            {
+              "id": "main",
+              "green": {
+                "J0_J1->J1_J2": "G",
+                "J0_J1->J1_N1": "g",
+                "J0_J1->J1_S1": "G",
+                "J2_J1->J1_J0": "G",
+                "J2_J1->J1_N1": "G",
+                "J2_J1->J1_S1": "g"
+              },
+              "duration": 49.0
+            },
+            {
+              "id": "side",
+              "green": {
+                "N1_J1->J1_J0": "G",
+                "N1_J1->J1_J2": "g",
+                "N1_J1->J1_S1": "G",
+                "S1_J1->J1_J0": "g",
+                "S1_J1->J1_J2": "G",
+                "S1_J1->J1_N1": "G"
+              },
+              "duration": 33.0
+            }
+          ]
+        }
+      },
+      {
+        "id": "N1",
+        "point": [
+          250.0,
+          150.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "S1",
+        "point": [
+          250.0,
+          -150.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "J2",
+        "point": [
+          500.0,
+          0.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time",
+            "params": {
+              "offset": 30.0
+            }
+          },
+          "phases": [
+            {
+              "id": "main",
+              "green": {
+                "J1_J2->J2_J3": "G",
+                "J1_J2->J2_N2": "g",
+                "J1_J2->J2_S2": "G",
+                "J3_J2->J2_J1": "G",
+                "J3_J2->J2_N2": "G",
+                "J3_J2->J2_S2": "g"
+              },
+              "duration": 49.0
+            },
+            {
+              "id": "side",
+              "green": {
+                "N2_J2->J2_J1": "G",
+                "N2_J2->J2_J3": "g",
+                "N2_J2->J2_S2": "G",
+                "S2_J2->J2_J1": "g",
+                "S2_J2->J2_J3": "G",
+                "S2_J2->J2_N2": "G"
+              },
+              "duration": 33.0
+            }
+          ]
+        }
+      },
+      {
+        "id": "N2",
+        "point": [
+          500.0,
+          150.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "S2",
+        "point": [
+          500.0,
+          -150.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "J3",
+        "point": [
+          750.0,
+          0.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time",
+            "params": {
+              "offset": 45.0
+            }
+          },
+          "phases": [
+            {
+              "id": "main",
+              "green": {
+                "J2_J3->J3_J4": "G",
+                "J2_J3->J3_N3": "g",
+                "J2_J3->J3_S3": "G",
+                "J4_J3->J3_J2": "G",
+                "J4_J3->J3_N3": "G",
+                "J4_J3->J3_S3": "g"
+              },
+              "duration": 49.0
+            },
+            {
+              "id": "side",
+              "green": {
+                "N3_J3->J3_J2": "G",
+                "N3_J3->J3_J4": "g",
+                "N3_J3->J3_S3": "G",
+                "S3_J3->J3_J2": "g",
+                "S3_J3->J3_J4": "G",
+                "S3_J3->J3_N3": "G"
+              },
+              "duration": 33.0
+            }
+          ]
+        }
+      },
+      {
+        "id": "N3",
+        "point": [
+          750.0,
+          150.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "S3",
+        "point": [
+          750.0,
+          -150.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "J4",
+        "point": [
+          1000.0,
+          0.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time",
+            "params": {
+              "offset": 60.0
+            }
+          },
+          "phases": [
+            {
+              "id": "main",
+              "green": {
+                "J3_J4->J4_E": "G",
+                "J3_J4->J4_N4": "g",
+                "J3_J4->J4_S4": "G",
+                "E_J4->J4_J3": "G",
+                "E_J4->J4_N4": "G",
+                "E_J4->J4_S4": "g"
+              },
+              "duration": 49.0
+            },
+            {
+              "id": "side",
+              "green": {
+                "N4_J4->J4_J3": "G",
+                "N4_J4->J4_E": "g",
+                "N4_J4->J4_S4": "G",
+                "S4_J4->J4_J3": "g",
+                "S4_J4->J4_E": "G",
+                "S4_J4->J4_N4": "G"
+              },
+              "duration": 33.0
+            }
+          ]
+        }
+      },
+      {
+        "id": "N4",
+        "point": [
+          1000.0,
+          150.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "S4",
+        "point": [
+          1000.0,
+          -150.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "W",
+        "point": [
+          -150.0,
+          0.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "E",
+        "point": [
+          1150.0,
+          0.0
+        ],
+        "kind": "boundary"
+      }
+    ],
+    "roads": [
+      {
+        "id": "W_J0",
+        "from": "W",
+        "to": "J0",
+        "lanes": [
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "J0_W",
+        "from": "J0",
+        "to": "W",
+        "lanes": [
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "J0_J1",
+        "from": "J0",
+        "to": "J1",
+        "lanes": [
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "J1_J0",
+        "from": "J1",
+        "to": "J0",
+        "lanes": [
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "J1_J2",
+        "from": "J1",
+        "to": "J2",
+        "lanes": [
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "J2_J1",
+        "from": "J2",
+        "to": "J1",
+        "lanes": [
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "J2_J3",
+        "from": "J2",
+        "to": "J3",
+        "lanes": [
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "J3_J2",
+        "from": "J3",
+        "to": "J2",
+        "lanes": [
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "J3_J4",
+        "from": "J3",
+        "to": "J4",
+        "lanes": [
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "J4_J3",
+        "from": "J4",
+        "to": "J3",
+        "lanes": [
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "J4_E",
+        "from": "J4",
+        "to": "E",
+        "lanes": [
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "E_J4",
+        "from": "E",
+        "to": "J4",
+        "lanes": [
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "N0_J0",
+        "from": "N0",
+        "to": "J0",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "J0_N0",
+        "from": "J0",
+        "to": "N0",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "J0_S0",
+        "from": "J0",
+        "to": "S0",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "S0_J0",
+        "from": "S0",
+        "to": "J0",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "N1_J1",
+        "from": "N1",
+        "to": "J1",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "J1_N1",
+        "from": "J1",
+        "to": "N1",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "J1_S1",
+        "from": "J1",
+        "to": "S1",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "S1_J1",
+        "from": "S1",
+        "to": "J1",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "N2_J2",
+        "from": "N2",
+        "to": "J2",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "J2_N2",
+        "from": "J2",
+        "to": "N2",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "J2_S2",
+        "from": "J2",
+        "to": "S2",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "S2_J2",
+        "from": "S2",
+        "to": "J2",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "N3_J3",
+        "from": "N3",
+        "to": "J3",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "J3_N3",
+        "from": "J3",
+        "to": "N3",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "J3_S3",
+        "from": "J3",
+        "to": "S3",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "S3_J3",
+        "from": "S3",
+        "to": "J3",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "N4_J4",
+        "from": "N4",
+        "to": "J4",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "J4_N4",
+        "from": "J4",
+        "to": "N4",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "J4_S4",
+        "from": "J4",
+        "to": "S4",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "S4_J4",
+        "from": "S4",
+        "to": "J4",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      }
+    ]
+  },
+  "demand": {
+    "flows": [
+      {
+        "id": "W_J0:far",
+        "origin": "W_J0",
+        "destination": "J0_N0",
+        "rate": 90.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "W_J0:straight",
+        "origin": "W_J0",
+        "destination": "J4_E",
+        "rate": 720.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "W_J0:near",
+        "origin": "W_J0",
+        "destination": "J0_S0",
+        "rate": 90.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "E_J4:far",
+        "origin": "E_J4",
+        "destination": "J4_S4",
+        "rate": 90.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "E_J4:straight",
+        "origin": "E_J4",
+        "destination": "J0_W",
+        "rate": 720.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "E_J4:near",
+        "origin": "E_J4",
+        "destination": "J4_N4",
+        "rate": 90.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "N0_J0:far",
+        "origin": "N0_J0",
+        "destination": "J4_E",
+        "rate": 20.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "N0_J0:straight",
+        "origin": "N0_J0",
+        "destination": "J0_S0",
+        "rate": 160.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "N0_J0:near",
+        "origin": "N0_J0",
+        "destination": "J0_W",
+        "rate": 20.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "S0_J0:far",
+        "origin": "S0_J0",
+        "destination": "J0_W",
+        "rate": 20.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "S0_J0:straight",
+        "origin": "S0_J0",
+        "destination": "J0_N0",
+        "rate": 160.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "S0_J0:near",
+        "origin": "S0_J0",
+        "destination": "J4_E",
+        "rate": 20.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "N1_J1:far",
+        "origin": "N1_J1",
+        "destination": "J4_E",
+        "rate": 20.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "N1_J1:straight",
+        "origin": "N1_J1",
+        "destination": "J1_S1",
+        "rate": 160.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "N1_J1:near",
+        "origin": "N1_J1",
+        "destination": "J0_W",
+        "rate": 20.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "S1_J1:far",
+        "origin": "S1_J1",
+        "destination": "J0_W",
+        "rate": 20.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "S1_J1:straight",
+        "origin": "S1_J1",
+        "destination": "J1_N1",
+        "rate": 160.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "S1_J1:near",
+        "origin": "S1_J1",
+        "destination": "J4_E",
+        "rate": 20.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "N2_J2:far",
+        "origin": "N2_J2",
+        "destination": "J4_E",
+        "rate": 20.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "N2_J2:straight",
+        "origin": "N2_J2",
+        "destination": "J2_S2",
+        "rate": 160.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "N2_J2:near",
+        "origin": "N2_J2",
+        "destination": "J0_W",
+        "rate": 20.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "S2_J2:far",
+        "origin": "S2_J2",
+        "destination": "J0_W",
+        "rate": 20.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "S2_J2:straight",
+        "origin": "S2_J2",
+        "destination": "J2_N2",
+        "rate": 160.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "S2_J2:near",
+        "origin": "S2_J2",
+        "destination": "J4_E",
+        "rate": 20.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "N3_J3:far",
+        "origin": "N3_J3",
+        "destination": "J4_E",
+        "rate": 20.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "N3_J3:straight",
+        "origin": "N3_J3",
+        "destination": "J3_S3",
+        "rate": 160.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "N3_J3:near",
+        "origin": "N3_J3",
+        "destination": "J0_W",
+        "rate": 20.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "S3_J3:far",
+        "origin": "S3_J3",
+        "destination": "J0_W",
+        "rate": 20.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "S3_J3:straight",
+        "origin": "S3_J3",
+        "destination": "J3_N3",
+        "rate": 160.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "S3_J3:near",
+        "origin": "S3_J3",
+        "destination": "J4_E",
+        "rate": 20.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "N4_J4:far",
+        "origin": "N4_J4",
+        "destination": "J4_E",
+        "rate": 20.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "N4_J4:straight",
+        "origin": "N4_J4",
+        "destination": "J4_S4",
+        "rate": 160.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "N4_J4:near",
+        "origin": "N4_J4",
+        "destination": "J0_W",
+        "rate": 20.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "S4_J4:far",
+        "origin": "S4_J4",
+        "destination": "J0_W",
+        "rate": 20.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "S4_J4:straight",
+        "origin": "S4_J4",
+        "destination": "J4_N4",
+        "rate": 160.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "S4_J4:near",
+        "origin": "S4_J4",
+        "destination": "J4_E",
+        "rate": 20.0,
+        "arrival": "poisson"
+      }
+    ]
+  }
+}
