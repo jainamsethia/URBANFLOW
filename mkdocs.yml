@@ -43,6 +43,10 @@ nav:
   - Vehicle model: vehicle-model.md
   - Simulation model: simulation-model.md
   - Traffic signals: traffic-signals.md
+  - Metrics: metrics.md
+  - Replay: replay.md
+  - Reinforcement learning: reinforcement-learning.md
+  - Web workbench: workbench.md
   - Python API: python-api.md
   - Command line: cli.md
   - Troubleshooting: troubleshooting.md

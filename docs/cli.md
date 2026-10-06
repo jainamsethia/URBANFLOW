@@ -119,12 +119,15 @@ Load and deep-check a scenario, run it headless, print the results and save the 
 | `--no-save` | Do not write a run directory. |
 | `--progress/--no-progress` | Progress bar on stderr (default: when stderr is a terminal). |
 | `--json` | Print only the result as JSON on stdout (`SimulationResult.to_dict()` plus `run_dir`). |
+| `--record` | Record a replay: `<run dir>/replay.ufr`, or `<workspace>/replays/<scenario>-s<seed>.ufr` with `--no-save`. |
+| `--export PATH` | Also write the global timeseries table to `PATH` (`.csv`, `.json` or `.parquet`). |
 
 Configuration precedence, lowest first: defaults < the scenario's `simulation` block <
 the config file `[simulation]` < `--set` < the dedicated options. The run directory holds
 `spec.json` (scenario identity, seed, resolved config, `--controller` choices), `scenario.json` (an exact copy),
 `env.json` (Python, platform, CPU, RAM, versions), `result.json` (the full result, loadable
-with `SimulationResult.load`) and `summary.json`, the nested summary, written last.
+with `SimulationResult.load`), the metrics tables `timeseries.csv`, `intersections.csv` and
+`trips.csv`, and `summary.json`, the nested summary, written last.
 The printed `State digest` (also `state_digest` in `result.json` and in `--json` output)
 is the sha256 of the final engine state: two runs with equal digests on the same platform
 ended in exactly the same state.
@@ -155,10 +158,37 @@ Run saved: runs/20260929T110843-single-intersection-s7-0b3c
 
 Exit codes: 3 invalid scenario (including the deep checks), 4 bad option or config value
 (or a non-empty `--out`), 5 missing scenario or config file, 6 a feature not available
-yet (transit lines, recording), 7 invariant violation, 130
-interrupted.
+yet (transit lines), 7 invariant violation, 130 interrupted.
+
+### `urbanflow replay FILE`
+
+Print a replay's manifest (scenario, frames, vehicles, seed, controllers); `--json`
+prints it as JSON. `--view` copies the file into `<workspace>/replays/` if needed, starts
+the workbench (`--port`, default 8000) and opens the replay viewer. See [Replay](replay.md).
+
+## Research
+
+### `urbanflow compare SCENARIO -c NAME -c NAME ...`
+
+Run every controller on the same seeds of one scenario (a bundled name or a file) in
+parallel processes and print, per metric, the mean with a 95 % confidence interval and
+the paired difference against the first controller (`*` marks differences whose 95 % CI
+excludes 0). Options: `--seeds N` (default 3), `--duration S`, `--workers N`, `--json`,
+`--out FILE` (JSON). Demand is drawn per flow at spawn, so a seed gives identical demand
+to every controller.
+
+```bash
+uv run urbanflow compare grid_3x3 -c fixed_time -c actuated -c max_pressure --seeds 3 --duration 1800
+```
 
 ## Workbench
+
+### `urbanflow serve`
+
+Start the web workbench and its API on `--host` (default `127.0.0.1`) and `--port`
+(default 8000); `--open` opens a browser. Binding to a non-loopback address requires
+`--token`/`--token-file` (clients then send `Authorization: Bearer <token>`). `--dev`
+also accepts the Vite dev server on `localhost:5173`. See [Web workbench](workbench.md).
 
 ### `urbanflow doctor`
 
