@@ -21,9 +21,26 @@ __all__ = [
     "RandomPolicy",
     "TabularQ",
     "evaluate",
+    "phase_queue_features",
 ]
 
 Policy = Callable[[np.ndarray, dict[str, Any]], int]
+
+
+def phase_queue_features(agent: AgentSpec, obs: np.ndarray, *, scale: float = 2.0) -> np.ndarray:
+    """A compact state for tabular learners: the phase one-hot, the min-green flag and, per
+    phase, the summed normalised queue of the incoming lanes that phase serves (/ ``scale``,
+    clipped to 1)."""
+    p = agent.n_phases
+    queue = obs[p + 1 + agent.in_lanes.size :]
+    position = {lane: i for i, lane in enumerate(agent.in_lanes.tolist())}
+    served = np.array(
+        [
+            sum(queue[position[x]] for x in set(agent.conn_from[agent.phase_conn[k]].tolist()))
+            for k in range(p)
+        ]
+    )
+    return np.concatenate([obs[: p + 1], np.minimum(1.0, served / scale)])
 
 
 class RandomPolicy:

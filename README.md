@@ -117,6 +117,15 @@ Tabular Q-learning, single intersection with 3:1 asymmetric demand, 60 training 
 | max-pressure | 27.1 | 82.6 |
 | Q-learning | 20.6 | 80.8 |
 
+Multi-agent: nine independent tabular Q-learners on `grid_3x3` (PettingZoo env, 40 training
+episodes of 900 s, 3 held-out seeds; `uv run python examples/reinforcement_learning/independent_q_grid.py`):
+
+| policy | mean waiting (s) | mean travel time (s) |
+|---|---|---|
+| fixed-time cycle (30 s) | 22.2 | 100.8 |
+| max-pressure | 8.0 | 83.3 |
+| independent Q-learning | 6.1 | 83.6 |
+
 Numbers come from this machine (Windows 11 ARM64, Python 3.13); they are deterministic for
 a given seed and platform.
 

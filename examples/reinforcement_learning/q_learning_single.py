@@ -24,6 +24,7 @@ from urbanflow.rl.baselines import (
     RandomPolicy,
     TabularQ,
     evaluate,
+    phase_queue_features,
 )
 
 QUICK = os.environ.get("URBANFLOW_EXAMPLE_QUICK") == "1"
@@ -43,15 +44,7 @@ def make_env() -> TrafficSignalEnv:
 
 def compact(env: TrafficSignalEnv, obs: np.ndarray) -> np.ndarray:
     """(phase one-hot, min-green ok, queue served by each phase) - small enough for a table."""
-    a = env.agent
-    p = a.n_phases
-    queue = obs[p + 1 + a.in_lanes.size :]
-    from_index = {lane: i for i, lane in enumerate(a.in_lanes.tolist())}
-    served = [
-        sum(queue[from_index[x]] for x in set(a.conn_from[a.phase_conn[k]].tolist()))
-        for k in range(p)
-    ]
-    return np.concatenate([obs[: p + 1], np.minimum(1.0, np.array(served) / 2.0)])
+    return phase_queue_features(env.agent, obs)
 
 
 def train(env: TrafficSignalEnv) -> TabularQ:

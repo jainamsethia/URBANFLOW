@@ -6,6 +6,8 @@ intersections) environments.
 - `q_learning_single.py`: tabular Q-learning on an intersection with 3:1 asymmetric
   demand, evaluated on held-out seeds against random, fixed-cycle and max-pressure
   policies (all on identical demand).
+- `independent_q_grid.py`: nine independent tabular Q-learners (one per intersection)
+  on the 3x3 grid through the PettingZoo environment, against fixed-time and max-pressure.
 
 ```bash
 uv run python examples/reinforcement_learning/q_learning_single.py
