@@ -183,6 +183,7 @@ def run(
         emit_json({**result.to_dict(), "run_dir": run_dir})
     else:
         print_summary(result.title, dict(result.rows()))
+        console.print(f"State digest: {result.state_digest}", markup=False)
         if artifacts is not None:
             console.print(f"Run saved: {_shown(artifacts.directory)}", markup=False)
     if interrupted:

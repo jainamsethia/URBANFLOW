@@ -75,13 +75,14 @@ Loaded single_intersection: 1 intersection, 8 roads, 16 lanes, 16 connectors  (h
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━┓
 ┃ Metric                      ┃       Value ┃
 ┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━┩
-│ Vehicles departed / arrived │   386 / 346 │
-│ Vehicles en route / waiting │      40 / 0 │
-│ Throughput                  │ 2,076 veh/h │
-│ Mean travel time            │      48.3 s │
+│ Vehicles departed / arrived │   386 / 345 │
+│ Vehicles en route / waiting │      41 / 0 │
+│ Throughput                  │ 2,070 veh/h │
+│ Mean travel time            │      51.9 s │
 │ Teleports                   │           0 │
-│ Wall time                   │      0.62 s │
+│ Wall time                   │      0.48 s │
 └─────────────────────────────┴─────────────┘
+State digest: c831f98be7f625dcc42aac30f92dc6ef6fae2c45c048c48b75eede3cc1ad7668
 Run saved: runs/20260929T110843-single-intersection-s7-0b3c
 ```
 
@@ -113,13 +114,14 @@ Loaded single_intersection: 1 intersection, 8 roads, 16 lanes, 16 connectors  (h
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━┓
 ┃ Metric                      ┃       Value ┃
 ┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━┩
-│ Vehicles departed / arrived │   385 / 309 │
-│ Vehicles en route / waiting │      76 / 0 │
-│ Throughput                  │ 1,854 veh/h │
-│ Mean travel time            │      73.5 s │
+│ Vehicles departed / arrived │   385 / 331 │
+│ Vehicles en route / waiting │      54 / 0 │
+│ Throughput                  │ 1,986 veh/h │
+│ Mean travel time            │      59.7 s │
 │ Teleports                   │           0 │
-│ Wall time                   │      0.94 s │
+│ Wall time                   │      0.51 s │
 └─────────────────────────────┴─────────────┘
+State digest: 4d675f0d14b67fe7aecb2ca358fd0104a76d17903e24f91b7bc4243f003c7147
 Run saved: runs/20260930T101512-single-intersection-s0-7c2e
 ```
 

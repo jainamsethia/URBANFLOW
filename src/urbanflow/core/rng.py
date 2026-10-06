@@ -48,8 +48,15 @@ class RngStreams:
         }
 
     def load_state_dict(self, state: Mapping[str, Any]) -> None:
-        """Restore :meth:`state_dict` output; streams absent from it start fresh when used."""
-        fresh = RngStreams(int(state["seed"]))
-        for name, bit_state in state["streams"].items():
-            fresh.stream(name).bit_generator.state = dict(bit_state)
-        self._seed, self._streams = fresh._seed, fresh._streams
+        """Restore :meth:`state_dict` output in place: generators already handed out keep
+        their identity and continue from the restored state; streams absent from it are
+        forgotten and start fresh when next used."""
+        self._seed = int(state["seed"])
+        streams = state["streams"]
+        for name in [n for n in self._streams if n not in streams]:
+            del self._streams[name]
+        for name, bit_state in streams.items():
+            gen = self._streams.get(name)
+            if gen is None:
+                gen = self.stream(name)
+            gen.bit_generator.state = dict(bit_state)

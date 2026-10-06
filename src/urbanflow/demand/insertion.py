@@ -13,7 +13,9 @@ from __future__ import annotations
 
 import math
 from collections import deque
+from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 
@@ -65,6 +67,15 @@ class InsertionQueues:
 
     def clear(self) -> None:
         self._queues.clear()
+
+    def state_dict(self) -> dict[str, Any]:
+        """JSON-safe state: ``{"queues": [[road, [handle, ...]], ...]}`` (non-empty queues,
+        ascending road, each front to back)."""
+        return {"queues": [[r, list(self._queues[r])] for r in self.roads()]}
+
+    def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        """Replace every queue by :meth:`state_dict` output."""
+        self._queues = {int(r): deque(int(h) for h in hs) for r, hs in state["queues"]}
 
 
 def enqueue(

@@ -90,6 +90,16 @@ def test_save_load_round_trip(result: SimulationResult, tmp_path: Path, mean: fl
     assert SimulationResult.from_dict(data).controllers == {}
 
 
+def test_state_digest_round_trips(result: SimulationResult, tmp_path: Path) -> None:
+    digest = "0f" * 32
+    original = replace(result, state_digest=digest)
+    assert original.to_dict()["state_digest"] == digest
+    assert SimulationResult.load(original.save(tmp_path)).state_digest == digest
+    data = original.to_dict()
+    del data["state_digest"]  # saved before the field existed
+    assert SimulationResult.from_dict(data).state_digest == ""
+
+
 def test_load_errors(result: SimulationResult, tmp_path: Path) -> None:
     with pytest.raises(NotFoundError, match=r"result.json missing"):
         SimulationResult.load(tmp_path)

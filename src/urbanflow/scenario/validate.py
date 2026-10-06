@@ -21,6 +21,7 @@ from pydantic import BaseModel, ValidationError
 from pydantic_core import ErrorDetails
 
 from urbanflow.core import constants as C
+from urbanflow.core.capacity import idm_capacity_vph
 from urbanflow.core.errors import (
     ScenarioValidationError,
     Severity,
@@ -1104,17 +1105,27 @@ def _flow_rate(flow: FlowSpec) -> tuple[float, str]:
 
 
 def _capacity(ctx: CheckContext, d: _Demand, flow: FlowSpec, road: str) -> float | None:
-    """W501 entry capacity n * 3600 / (T + (l + s0) / v) of ``road`` for the flow's types."""
+    """W501 entry capacity of ``road``: ``n`` lanes times the IDM peak equilibrium flow
+    (:func:`~urbanflow.core.capacity.idm_capacity_vph`) of each type at its desired speed
+    ``min(max_speed, speed limit)`` with its own T, s0, length and ``model_params.delta``,
+    averaged over the flow's type mix by headway (``1 / sum(share / q_type)``)."""
     mix = dict(flow.type_mix) if flow.type_mix is not None else {str(flow.vehicle_type): 1.0}
     if any(t not in d.vtypes for t in mix):
         return None
     speed = d.speeds[road]
+
+    def lane_flow(vt: VehicleTypeSpec) -> float:
+        return idm_capacity_vph(
+            min(speed, vt.max_speed),
+            headway=vt.headway,
+            min_gap=vt.min_gap,
+            length=vt.length,
+            delta=float(vt.model_params.get("delta", C.IDM_DELTA)),
+        )
+
     total = sum(mix.values())
-    tau = sum(
-        w / total * (d.vtypes[t].headway + (d.vtypes[t].length + d.vtypes[t].min_gap) / speed)
-        for t, w in mix.items()
-    )
-    return _lane_count(ctx, road) * C.SECONDS_PER_HOUR / tau
+    headway = sum(w / total / lane_flow(d.vtypes[t]) for t, w in mix.items())
+    return _lane_count(ctx, road) / headway
 
 
 def _flow_config_issues(

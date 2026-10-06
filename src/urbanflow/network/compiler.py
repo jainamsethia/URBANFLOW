@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from urbanflow.core import constants as C
+from urbanflow.core.capacity import idm_capacity_vph
 from urbanflow.core.errors import ScenarioValidationError, Severity, ValidationIssue
 from urbanflow.core.logging import log_duration
 from urbanflow.core.types import DriveSide, IntArray, IntersectionKind, LinkKind, TurnKind
@@ -416,7 +417,6 @@ def _assemble(
         [resolved_value(road.speed_limit, "road speed_limit") for road in network.roads],
         dtype=np.float64,
     )
-    headway_s = C.IDM_HEADWAY + (C.VEHICLE_LENGTH + C.IDM_MIN_GAP) / speed
     lane_out_ptr, lane_out_conn = _csr(lane_out)
     mov_conn_ptr, mov_conn_flat = _csr(mov_conn)
     int_in_ptr, int_in_lanes = _csr(int_in)
@@ -441,7 +441,7 @@ def _assemble(
         road_n_lanes=np.array(n_road_lanes, dtype=np.uint8),
         road_length=np.array([ref.length for ref in roads.reference], dtype=np.float64),
         road_speed_limit=speed,
-        road_capacity_vph=np.array(n_road_lanes) * C.SECONDS_PER_HOUR / headway_s,
+        road_capacity_vph=np.array(n_road_lanes) * [idm_capacity_vph(v) for v in speed.tolist()],
         link_kind=np.array(
             [LinkKind.lane.code] * n_lanes + [LinkKind.connector.code] * n_conn, dtype=np.uint8
         ),

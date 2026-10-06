@@ -233,6 +233,12 @@ Stage B codes come from the builder.
 | W802 | warning | P (pre-derive) | `sharp bend ({deg:.0f} deg); offset lanes may self-intersect` |
 <!-- END GENERATED: issue-codes -->
 
+The entry capacity of W501 is the road's lane count times the peak IDM equilibrium flow
+of one lane at the road speed limit v<sub>0</sub>, 3600 · max<sub>v</sub> v /
+(s<sub>e</sub>(v) + ℓ) with s<sub>e</sub>(v) = (s<sub>0</sub> + vT) /
+√(1 − (v/v<sub>0</sub>)<sup>δ</sup>), for the flow's vehicle types (averaged by headway
+over a `type_mix`); see [Simulation model](simulation-model.md#road-capacity).
+
 ## Building scenarios in Python
 
 ```python

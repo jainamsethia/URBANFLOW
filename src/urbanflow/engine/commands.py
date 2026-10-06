@@ -3,8 +3,11 @@
 Commands check their arguments (``CommandError``, or ``NotFoundError`` with a did-you-mean
 hint for unknown ids), mutate runtime state immediately, and become visible in the next
 ``step()``; their events are emitted into that step's buffer. Every command is appended to
-:attr:`EngineCommands.command_log` as ``(step, name, args)`` for replay verification.
-``set_route`` and ``change_lane`` arrive with lane changing.
+:attr:`EngineCommands.command_log` as ``(step, name, args)`` for replay verification; a
+rejected call changes nothing. Vehicle commands: ``add_vehicle``, ``remove_vehicle``,
+``set_speed`` and ``set_route`` (F.4: the new roads start at the current road, and a
+vehicle committed to its next stop line keeps its connector). ``change_lane`` arrives with
+lane changing.
 
 Signal commands take an intersection (id or index) and a phase (index or id); indices may
 be Python or numpy integers:
@@ -41,7 +44,7 @@ from urbanflow.core.events import EventBuffer, EventType
 from urbanflow.core.types import VehicleStatus
 from urbanflow.demand.insertion import enqueue
 from urbanflow.demand.spawners import api_request
-from urbanflow.routing.lanes import valid_mask
+from urbanflow.routing.lanes import plan_connector, valid_mask
 from urbanflow.scenario.schema import ControllerSpec, DepartLane, DepartSpeed, TripSpec
 from urbanflow.scenario.validate import issues_from_pydantic
 from urbanflow.signals import (
@@ -81,6 +84,26 @@ class EngineCommands:
         self._api_count = 0
         self._pending: list[tuple[EventType, float, int, int, int]] = []
 
+    def state_dict(self, *, with_log: bool = True) -> dict[str, Any]:
+        """JSON-safe state: the command log (empty with ``with_log=False``), the API id
+        counter and the events of commands issued since the last step (``[type, time,
+        handle, uid, link]``)."""
+        log = self.command_log if with_log else []
+        return {
+            "log": [[step, name, args] for step, name, args in log],
+            "api_count": self._api_count,
+            "pending": [[kind.value, t, h, uid, link] for kind, t, h, uid, link in self._pending],
+        }
+
+    def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        """Restore :meth:`state_dict` output."""
+        self.command_log = [(int(s), str(n), dict(a)) for s, n, a in state["log"]]
+        self._api_count = int(state["api_count"])
+        self._pending = [
+            (EventType(kind), float(t), int(h), int(uid), int(link))
+            for kind, t, h, uid, link in state["pending"]
+        ]
+
     def emit_pending(self, events: EventBuffer, step: int) -> None:
         """Append the events of commands issued since the last step (engine sub-step 0)."""
         for kind, time, handle, uid, link in self._pending:
@@ -103,11 +126,12 @@ class EngineCommands:
         """Spawn a vehicle now (``waiting_insert``); the next step tries to insert it.
 
         Give either ``route`` (road ids) or ``origin`` and ``destination`` (plus optional
-        ``via``). ``id`` defaults to ``"api.{n}"``. Returns the vehicle id.
+        ``via``). ``id`` defaults to ``"api.{n}"``. Returns the vehicle id. A rejected
+        call changes nothing (not even the default id counter).
         """
         eng = self._engine
         net = eng.network
-        vid = self._next_api_id() if id is None else id
+        vid, api_count = self._next_api_id() if id is None else (id, self._api_count)
         try:
             trip = TripSpec(
                 id=vid,
@@ -142,34 +166,35 @@ class EngineCommands:
         first = roads[0] if roads else net.road_index[trip.origin or ""]
         lanes = int(net.road_n_lanes[first])
         lane = trip.depart_lane
-        try:
-            if isinstance(lane, int):
-                if lane >= lanes:
-                    raise CommandError(
-                        f'depart_lane {lane} does not exist: road "{net.road_ids[first]}" has '
-                        f"{lanes} lane(s) (0-{lanes - 1})"
-                    )
-                path = roads or eng.router.route(
-                    first,
-                    net.road_index[trip.destination or ""],
-                    tuple(net.road_index[v] for v in trip.via),
-                )
-                nxt = path[1] if len(path) > 1 else -1
-                if not valid_mask(net, first, nxt) >> lane & 1:
-                    raise CommandError(
-                        f'depart_lane {lane} of road "{net.road_ids[first]}" has no connection '
-                        f'to the next road "{net.road_ids[nxt]}" of the route'
-                    )
-            req = api_request(
-                trip,
-                net=net,
-                routes=eng.routes,
-                router=eng.router,
-                types=eng.types,
-                rng=eng.rng.stream("vehicle_params"),
+        try:  # the router caches the path for api_request
+            path = roads or eng.router.route(
+                first,
+                net.road_index[trip.destination or ""],
+                tuple(net.road_index[v] for v in trip.via),
             )
         except NotFoundError as exc:  # unreachable destination
             raise CommandError(str(exc)) from None
+        if isinstance(lane, int):
+            if lane >= lanes:
+                raise CommandError(
+                    f'depart_lane {lane} does not exist: road "{net.road_ids[first]}" has '
+                    f"{lanes} lane(s) (0-{lanes - 1})"
+                )
+            nxt = path[1] if len(path) > 1 else -1
+            if not valid_mask(net, first, nxt) >> lane & 1:
+                raise CommandError(
+                    f'depart_lane {lane} of road "{net.road_ids[first]}" has no connection '
+                    f'to the next road "{net.road_ids[nxt]}" of the route'
+                )
+        req = api_request(
+            trip,
+            net=net,
+            routes=eng.routes,
+            router=eng.router,
+            types=eng.types,
+            rng=eng.rng.stream("vehicle_params"),
+        )
+        self._api_count = api_count
         h = enqueue(eng.vehicles, eng.types, eng.routes, eng.queues, req)
         eng.generated += 1
         uid = int(eng.vehicles.uid[h])
@@ -198,6 +223,7 @@ class EngineCommands:
         elif veh.status[h] == _RUNNING:
             link = int(veh.link[h])
         veh.status[h] = _REMOVED
+        veh.lock_conn[h] = -1  # releases its zone locks (F.3)
         uid = int(veh.uid[h])
         veh.free_deferred(h, between_steps=True)
         eng.removed += 1
@@ -226,6 +252,78 @@ class EngineCommands:
             veh.speed_override[h] = float(speed)
             veh.override_until[h] = math.inf if duration is None else eng.time + float(duration)
         self._log("set_speed", vehicle_id=vehicle_id, speed=speed, duration=duration)
+
+    def set_route(self, vehicle_id: str, roads: Sequence[str]) -> None:
+        """Replace the rest of a vehicle's route by ``roads`` (road ids; F.4).
+
+        ``roads`` must start at the vehicle's current road (its first road while it waits
+        for insertion; on a connector, the road the connector leads to) and be connected.
+        ``valid_mask`` and ``next_conn`` are recomputed: if the current lane cannot reach
+        the new next road, a mandatory lane change follows (until lane changing exists the
+        vehicle waits at the lane end, and the watchdog eventually teleports it). A vehicle
+        committed to its next stop line keeps its planned connector, because its
+        reservation and zone locks refer to it, so the new route must continue through that
+        connector's road. A waiting vehicle with a fixed depart lane needs that lane to
+        reach the new next road. Violations raise ``CommandError``, unknown vehicles and
+        roads ``NotFoundError``.
+        """
+        eng = self._engine
+        net, veh = eng.network, eng.vehicles
+        h = self._handle(vehicle_id)
+        if isinstance(roads, str) or not roads:
+            raise CommandError(
+                f"set_route: roads must be a non-empty list of road ids, got {roads!r}"
+            )
+        for road in roads:
+            if road not in net.road_index:
+                raise NotFoundError(f'unknown road "{road}"{suggest(road, net.road_index)}')
+        new = [net.road_index[r] for r in roads]
+        for a, b in pairwise(new):
+            if (a, b) not in net.road_pair_conns:
+                raise CommandError(
+                    f'route is not connected: no movement from road "{net.road_ids[a]}" '
+                    f'to road "{net.road_ids[b]}"'
+                )
+        old = eng.routes.get(int(veh.route_id[h]))
+        cursor = int(veh.route_cursor[h])
+        running = bool(veh.status[h] == _RUNNING)
+        link = int(veh.link[h])
+        on_conn = running and link >= net.n_lanes
+        kept = cursor + 1 if on_conn else cursor  # roads already driven stay in the route
+        start = int(old[kept])
+        if new[0] != start:
+            where = (
+                "the road its connector leads to"
+                if on_conn
+                else ("its current road" if running else "its first road")
+            )
+            raise CommandError(
+                f'set_route: the new route of vehicle "{vehicle_id}" must start at {where} '
+                f'"{net.road_ids[start]}", not "{roads[0]}"'
+            )
+        nxt = new[1] if len(new) > 1 else -1
+        committed = running and not on_conn and bool(veh.committed[h])
+        if committed:
+            c = int(veh.next_conn[h])
+            if nxt != int(net.link_road[net.conn_to_lane[c - net.n_lanes]]):
+                raise CommandError(
+                    f"vehicle {vehicle_id} is committed to connector {net.link_ids[c]}; "
+                    "the new route must continue through it"
+                )
+        lane = int(veh.depart_lane[h])
+        if not running and lane >= 0 and not valid_mask(net, start, nxt) >> lane & 1:
+            raise CommandError(
+                f'set_route: the depart lane {lane} of vehicle "{vehicle_id}" on road '
+                f'"{net.road_ids[start]}" has no connection to the next road '
+                f'"{net.road_ids[nxt]}" of the new route'
+            )
+        route = [*old[:kept].tolist(), *new]
+        veh.route_id[h] = eng.routes.intern(route)
+        if running and not on_conn:
+            veh.valid_mask[h] = valid_mask(net, start, nxt)
+            if not committed:
+                veh.next_conn[h] = plan_connector(net, link, route, cursor)
+        self._log("set_route", vehicle_id=vehicle_id, roads=list(roads))
 
     # ------------------------------------------------------------------ signals
     def request_phase(self, intersection: int | str, phase: int | str) -> None:
@@ -266,8 +364,8 @@ class EngineCommands:
         j, prog = self._signal(intersection)
         q = self._phase(prog, phase)
         if not eng.held[j]:
-            eng.parked[j] = eng.controllers[j]
-            eng.controllers[j] = eng.make_controller(j, External)
+            eng.parked[j], eng.parked_specs[j] = eng.controllers[j], eng.specs[j]
+            eng.controllers[j], eng.specs[j] = eng.make_controller(j, External)
             eng.held[j] = True
         eng.controllers[j].request_phase(q)  # type: ignore[attr-defined]  # External
         self._log("hold_phase", intersection=eng.network.int_ids[j], phase=q)
@@ -279,7 +377,7 @@ class EngineCommands:
         name = eng.network.int_ids[j]
         if not eng.held[j]:
             raise CommandError(f'intersection "{name}" has no manual hold to release')
-        eng.controllers[j] = eng.parked.pop(j)
+        eng.controllers[j], eng.specs[j] = eng.parked.pop(j), eng.parked_specs.pop(j)
         eng.held[j] = False
         eng.signals.pending[j] = -1  # the hold's request is not the parked controller's
         self._log("release", intersection=name)
@@ -297,11 +395,11 @@ class EngineCommands:
                     "one controller instance cannot run several intersections; pass a "
                     "factory instead (e.g. its class), which is called per intersection"
                 )
-        controller = eng.make_controller(j, ref)
+        controller, spec = eng.make_controller(j, ref)
         if eng.held[j]:
-            eng.parked[j] = controller
+            eng.parked[j], eng.parked_specs[j] = controller, spec
         else:
-            eng.controllers[j] = controller
+            eng.controllers[j], eng.specs[j] = controller, spec
             eng.signals.pending[j] = -1  # the previous controller's request
         self._log("set_controller", intersection=eng.network.int_ids[j], ref=_ref_json(ref))
 
@@ -372,12 +470,12 @@ class EngineCommands:
             return "is reserved for the scenario demand"
         return ""
 
-    def _next_api_id(self) -> str:
-        while True:
-            vid = f"api.{self._api_count}"
-            self._api_count += 1
-            if not self._id_problem(vid):
-                return vid
+    def _next_api_id(self) -> tuple[str, int]:
+        """The next free ``api.{n}`` id and the counter value after it (not consumed)."""
+        n = self._api_count
+        while self._id_problem(f"api.{n}"):
+            n += 1
+        return f"api.{n}", n + 1
 
 
 def _finite_at_least(value: object, low: float) -> bool:

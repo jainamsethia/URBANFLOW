@@ -87,6 +87,8 @@ print(sim.metrics.summary()["travel_time.mean"])
 | `close()`, `with Simulation(...) as sim:` | release; later steps raise |
 | `get_results()` | a `SimulationResult`, valid at any time (partial if not done) |
 | `metrics.summary()` | the flattened summary (see [Simulation model](simulation-model.md#summary)) |
+| `snapshot()`, `restore(snapshot)`, `state_digest()` | [snapshots](#snapshots-and-digests) |
+| `events` | [event callbacks](#events) and counts |
 | `network`, `vehicles`, `lanes`, `roads`, `state`, `intersections`, `signals` | the views below |
 
 ## Vehicles
@@ -98,10 +100,11 @@ sim = Simulation(generate("single_intersection", kind="uncontrolled"), seed=1)
 sim.run(until=120)
 car = next(iter(sim.vehicles))  # running vehicles, uid order
 print(car.id, car.road, car.lane_index, round(car.speed, 2), car.route)
+sim.vehicles.remove(car.id)
 probe = sim.vehicles.add(route=["E_in", "W_out"], id="probe")
 sim.step()  # inserted during this step
 sim.vehicles.set_speed("probe", 5.0, duration=30)
-sim.vehicles.remove(car.id)
+sim.vehicles.set_route("probe", ["E_in", "S_out"])  # turn left instead
 print(sim.vehicles.count("running"), sim.vehicles.ids("removed"))
 ```
 
@@ -114,8 +117,14 @@ print(sim.vehicles.count("running"), sim.vehicles.ids("removed"))
   `running`, `arrived` and `removed`. `uid(id)` and `id_of(uid)` map between the two
   identities; `to_columns()` returns the running vehicles as columns (pandas-ready).
 - Control: `add(route=... | origin=..., destination=..., via=(), vehicle_type="car",
-  id=None, depart_lane="best", depart_speed="max")`, `remove(id)` and
-  `set_speed(id, speed | None, *, duration=None)`. They take effect in the next step.
+  id=None, depart_lane="best", depart_speed="max")`, `remove(id)`,
+  `set_speed(id, speed | None, *, duration=None)` and `set_route(id, roads)`. They take
+  effect in the next step.
+- `set_route(id, roads)` replaces the rest of the route: `roads` must start at the current
+  road (the first road while the vehicle waits; the next road while it is on a connector)
+  and be connected, else `CommandError` (unknown roads: `NotFoundError`). A vehicle
+  admitted across its next stop line must continue through the road its connector leads
+  to ([Simulation model](simulation-model.md#commands)).
 
 A `VehicleView` is a frozen snapshot with the identity (`id`, `uid`, `type`, `vclass`,
 `status`), the type parameters (`length`, `width`, `max_speed`, `max_accel`, `decel`,
@@ -214,6 +223,76 @@ connections, state`: `rank` is the current right of way (the signal state code a
 signalised intersection: G 3, g 2, y 1, r 0; otherwise priority 3/2/1 or uncontrolled 1)
 and `state` is `"G"`, `"g"`, `"y"`, `"r"` or None.
 
+## Events
+
+```python
+from urbanflow import EventType, Simulation, bundled
+
+sim = Simulation.from_scenario(bundled("single_intersection"), duration=300)
+arrivals = []
+sim.events.subscribe(EventType.vehicle_arrived, lambda e: arrivals.append((e.time, e.vehicle)))
+changes = sim.events.subscribe("phase_changed", lambda e: print(e.step, e.intersection, e.data))
+sim.run(until=100)
+changes.unsubscribe()
+sim.run()
+assert len(arrivals) == sim.events.counts()[EventType.vehicle_arrived]
+```
+
+`sim.events.subscribe(types, callback)` registers `callback(event)` for one event type, a
+list of types (names work too) or `None` for every type, and returns a `Subscription`
+with `unsubscribe()`. An `Event` is frozen: `type`, `time` (s; arrivals are interpolated
+inside the step), `step`, `vehicle` (id), `link` (lane or connector id), `intersection`
+(id), each None when the event has none, and `data` (`phase_changed`: `{"phase": index,
+"forced": bool}`). The types are `vehicle_departed`, `vehicle_inserted`,
+`vehicle_entered_link`, `vehicle_exited_link`, `vehicle_stopped`, `vehicle_resumed`,
+`vehicle_arrived`, `vehicle_removed`, `vehicle_teleported` and `phase_changed`.
+
+Callbacks run after the step has completed, in event order. Control calls they make take
+effect in the next step, and an exception they raise propagates out of `step()`/`run()`
+with the state already consistent. Events nobody subscribed to are never built, so
+subscribing costs nothing for other types. Subscriptions survive `reset()`;
+`sim.events.counts()` (events per `EventType`, every type) restarts at each reset.
+
+## Snapshots and digests
+
+```python
+from urbanflow import Simulation, Snapshot, bundled
+
+sim = Simulation.from_scenario(bundled("single_intersection"), seed=7)
+sim.run(until=300)
+snap = sim.snapshot()
+sim.run(until=400)
+after = sim.state_digest()
+sim.restore(snap)  # back at t = 300
+sim.run(until=400)
+assert sim.state_digest() == after  # the same 100 steps again
+
+path = snap.save("t300.ufs")  # engine state only: state.npz + state.json in a zip
+other = Simulation.from_scenario(bundled("single_intersection"), seed=7)
+other.restore(Snapshot.load(path))  # the summary accumulators restart (logged warning)
+other.run(until=400)
+assert other.state_digest() == after
+```
+
+- `snapshot()` returns a `Snapshot(state, metrics, scenario_hash, config, time)`: deep
+  copies of the engine state and of the summary accumulators; `step_count` is also
+  available. A snapshot can be restored many times. After an exception interrupted a
+  step (e.g. Ctrl-C), `snapshot()` and `state_digest()` raise `SimulationError`: the
+  half-applied step cannot be saved; `reset()` or `restore()` an earlier snapshot.
+- `restore(snapshot)` continues from it; `SimulationError` if it comes from another
+  scenario or config (the message names the differing config fields), from a simulation
+  built with other signal controllers (`controllers=`, named per intersection), or if the
+  state is malformed (every index is range-checked). It clears the corrupted flag and
+  every per-step cache.
+- `Snapshot.save(path)` / `Snapshot.load(path)` store the engine state without pickle;
+  the summary accumulators stay in memory, so a loaded snapshot restarts them: travel
+  times, event counts and `vehicles.ids("arrived")` cover only what happens after the
+  restore (and `ids("removed")` then also lists the earlier arrivals). The vehicle counts
+  of the summary are engine counters and continue.
+- `state_digest()` is the sha256 hex of the canonical engine state: equal digests on one
+  platform mean equal states and equal futures
+  ([Simulation model](simulation-model.md#determinism) lists what it covers).
+
 ## Results
 
 ```python
@@ -232,7 +311,8 @@ assert again.summary["vehicles.arrived"] == result.summary["vehicles.arrived"]
 python, platform, machine), `run_id` and `controllers` (the configured signal controller
 of each signalised intersection, `{"type", "params"}`: the scenario's or the
 `controllers=` override, so runs that differ only in their controllers stay
-distinguishable). `to_dict()` is JSON-ready (NaN becomes null);
+distinguishable) and `state_digest` (the engine state digest at the end of the run).
+`to_dict()` is JSON-ready (NaN becomes null);
 `save(directory)` / `load(directory)` round-trip losslessly.
 
 ## Errors
@@ -242,6 +322,6 @@ distinguishable). `to_dict()` is JSON-ready (NaN becomes null);
 | `ScenarioValidationError` | the scenario or the deep checks found errors (`.errors`, `.warnings`, `to_dict()`) |
 | `ConfigError` | an invalid configuration value or option |
 | `NotFoundError` | an unknown file, id or name (a `LookupError`, with a hint) |
-| `SimulationError` | stepping when done, closed or corrupted; features not available yet |
+| `SimulationError` | stepping when done, closed or corrupted; restoring a snapshot of another scenario or config; features not available yet |
 | `CommandError` | an invalid control command (a `ValueError`) |
 | `InvariantViolation` | a `debug_checks` invariant failed |

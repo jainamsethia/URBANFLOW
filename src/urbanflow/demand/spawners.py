@@ -18,8 +18,9 @@ flow draws its next inter-arrival gap after each vehicle's attributes.
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 
@@ -205,6 +206,25 @@ class FlowSpawner:
             self._update_exhausted()
         return out
 
+    def state_dict(self) -> dict[str, Any]:
+        """JSON-safe runtime state: next arrival time, counter, the binomial step, the
+        exhausted flag and the stream's ``bit_generator.state``."""
+        return {
+            "count": self.count,
+            "next_time": self.next_time,
+            "step": self._step,
+            "exhausted": self.exhausted,
+            "rng": self.rng.bit_generator.state,
+        }
+
+    def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        """Restore :meth:`state_dict` output (the generator is restored in place)."""
+        self.count = int(state["count"])
+        self.next_time = float(state["next_time"])
+        self._step = int(state["step"])
+        self.exhausted = bool(state["exhausted"])
+        self.rng.bit_generator.state = dict(state["rng"])
+
     def _spawn(self, t: float) -> SpawnRequest:
         rng = self.rng
         type_idx = self._types[0]
@@ -250,6 +270,15 @@ class TripSchedule:
     @property
     def exhausted(self) -> bool:
         return self._next >= len(self._order)
+
+    def state_dict(self) -> dict[str, Any]:
+        """JSON-safe runtime state: trips emitted so far (their ``trip:{id}`` streams are
+        part of the simulation's :class:`~urbanflow.core.rng.RngStreams` state)."""
+        return {"next": self._next}
+
+    def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        """Restore :meth:`state_dict` output."""
+        self._next = int(state["next"])
 
     def due(self, step: int) -> list[SpawnRequest]:
         """Trips emitted in ``step`` (and in any earlier step not asked for yet)."""

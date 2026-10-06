@@ -186,3 +186,39 @@ def test_running_is_flatnonzero_of_active() -> None:
     assert table.running().tolist() == [1, 4, 5]
     table.free_deferred(4)
     assert table.running().tolist() == [1, 5]
+
+
+def test_state_dict_round_trip() -> None:
+    import json
+
+    t = VehicleTable(2)
+    for i in range(5):
+        h = t.alloc(f"v{i}")
+        t.pos[h] = 10.0 * i
+    t.free_deferred(1)
+    t.recycle()  # handle 1 is free
+    t.free_deferred(3)  # deferred
+    t.free_deferred(4, between_steps=True)  # held
+    state = t.state_dict()
+    cols = state.pop("columns")
+    assert set(cols) == set(COLUMNS) and all(c.shape == (5,) for c in cols.values())
+    state = json.loads(json.dumps(state))  # the rest is JSON-safe
+    assert state["free"] == [1] and state["deferred"] == [3] and state["held"] == [4]
+    assert state["id_to_handle"] == [["v0", 0], ["v2", 2]]
+    assert state["ids"] == ["v0", None, "v2", "v3", "v4"]
+
+    other = VehicleTable(64)
+    for i in range(9):
+        other.alloc(f"x{i}")
+        other.active[i] = True
+    other.load_state_dict({**state, "columns": cols})
+    assert (other.top, other.capacity, other.next_uid) == (5, 64, 5)
+    assert not other.active[5:].any() and other.ids[5:] == [None] * 59  # fresh rows
+    assert other.pos[:5].tolist() == [0.0, 10.0, 20.0, 30.0, 40.0]
+    assert other.handle_of("v2") == 2 and "v3" not in other.id_to_handle
+    assert other.alloc("new") == 1  # the free list is restored (LIFO)
+    other.recycle()
+    assert other.alloc("again") == 3  # the deferred handle, then the held one
+    cols["pos"] = cols["pos"].astype(np.float32)
+    with pytest.raises(ValueError, match="'pos' is missing or malformed"):
+        VehicleTable().load_state_dict({**state, "columns": cols})

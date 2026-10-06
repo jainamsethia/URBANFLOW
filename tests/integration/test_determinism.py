@@ -66,3 +66,20 @@ def test_reset_with_a_seed_reproduces_from_scratch(scenario: Scenario) -> None:
         fresh.step()
         assert _equal(_state(sim), _state(fresh))
     assert sim.get_results().summary == fresh.get_results().summary
+
+
+@pytest.mark.parametrize("kind", ["signalized", "uncontrolled"])
+def test_state_digest_is_equal_every_step_for_equal_seeds(kind: str) -> None:
+    """F.6: the full engine state (signals, zone locks, RNG streams, queues) matches."""
+    scenario = generate("single_intersection", kind=kind, demand_rate=800, duration=400)
+    a, b, c = (Simulation(scenario, seed=s, debug_checks=True) for s in (4, 4, 5))
+    locks = diverged = 0
+    for _ in range(400):
+        for sim in (a, b, c):
+            sim.step()
+        assert a.state_digest() == b.state_digest()
+        diverged += a.state_digest() != c.state_digest()
+        locks += int((a.state.raw["lock_conn"][a.state.raw["active"]] >= 0).sum())
+    assert diverged > 300 and locks > 0  # zone locks were held along the way
+    assert a.get_results().state_digest == b.get_results().state_digest
+    assert a.get_results().summary == b.get_results().summary

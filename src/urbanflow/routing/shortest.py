@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from itertools import pairwise
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import networkx as nx
 
@@ -57,6 +57,13 @@ class ShortestPathRouter:
     ) -> Mapping[int, tuple[int, ...]]:
         """Static routes: never reroutes."""
         return {}
+
+    def state_dict(self) -> dict[str, Any]:
+        """No runtime state: the path cache is a memo of the static road graph."""
+        return {}
+
+    def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        """Nothing to restore (see :meth:`state_dict`)."""
 
     def _solve(self, origin: int, destination: int, via: tuple[int, ...]) -> tuple[int, ...]:
         net, graph = self._net, self._graph

@@ -230,3 +230,162 @@ def test_reset_clears_the_log(engine: Engine) -> None:
     engine.reset()
     assert not engine.commands.command_log and engine.generated == 0
     assert engine.commands.add_vehicle(route=WE) == "api.0"
+
+
+# ------------------------------------------------------------------------------- set_route
+def _roads(e: Engine, h: int) -> list[str]:
+    return [e.network.road_ids[r] for r in e.routes.get(int(e.vehicles.route_id[h]))]
+
+
+def _step_until(e: Engine, done: Callable[[], bool], limit: int = 200) -> None:
+    for _ in range(limit):
+        if done():
+            return
+        e.step()
+    raise AssertionError("condition not reached")
+
+
+def test_set_route_replans_a_running_vehicle(engine: Engine) -> None:
+    e = engine
+    net, veh = e.network, e.vehicles
+    vid = e.commands.add_vehicle(route=WE)
+    e.step()
+    h = veh.handle_of(vid)
+    assert net.link_ids[int(veh.next_conn[h])] == "W_in_0->E_out_0"
+    e.commands.set_route(vid, ["W_in", "N_out"])
+    assert _roads(e, h) == ["W_in", "N_out"] and int(veh.route_cursor[h]) == 0
+    assert net.link_ids[int(veh.next_conn[h])] == "W_in_0->N_out_0"
+    assert veh.valid_mask[h] == 1
+    assert e.commands.command_log[-1] == (
+        1,
+        "set_route",
+        {"vehicle_id": vid, "roads": ["W_in", "N_out"]},
+    )
+    arrived = []
+    while not arrived:
+        e.step()
+        ev = e.events
+        sel = ev.type == EventType.vehicle_arrived.code
+        arrived = [net.link_ids[int(k)] for k in ev.link[sel]]
+    assert arrived == ["N_out_0"]
+
+
+def test_set_route_can_end_on_the_current_road_and_extend_it(engine: Engine) -> None:
+    e = engine
+    veh = e.vehicles
+    vid = e.commands.add_vehicle(route=WE)
+    e.step()
+    h = veh.handle_of(vid)
+    e.commands.set_route(vid, ["W_in"])  # arrive at the end of this lane
+    assert int(veh.next_conn[h]) == -1
+    e.commands.set_route(vid, ("W_in", "S_out"))
+    assert _roads(e, h) == ["W_in", "S_out"] and int(veh.next_conn[h]) >= 0
+
+
+@pytest.mark.parametrize(
+    ("roads", "error", "match"),
+    [
+        (["N_in", "S_out"], CommandError, 'must start at its current road "W_in", not "N_in"'),
+        (["W_in", "E_out", "N_out"], CommandError, 'no movement from road "E_out" to road "N_out"'),
+        (["W_in", "W_out"], CommandError, "route is not connected"),
+        (["W_in", "N_outt"], NotFoundError, r'unknown road "N_outt" \(did you mean "N_out"'),
+        ([], CommandError, "non-empty list of road ids"),
+        ("W_in", CommandError, "non-empty list of road ids"),
+    ],
+)
+def test_set_route_validation(
+    engine: Engine, roads: Any, error: type[Exception], match: str
+) -> None:
+    e = engine
+    vid = e.commands.add_vehicle(route=WE)
+    e.step()
+    h = e.vehicles.handle_of(vid)
+    with pytest.raises(error, match=match):
+        e.commands.set_route(vid, roads)
+    assert _roads(e, h) == WE and len(e.commands.command_log) == 1
+
+
+def test_set_route_of_unknown_or_departed_vehicles(engine: Engine) -> None:
+    e = engine
+    with pytest.raises(NotFoundError, match='unknown vehicle "ghost"'):
+        e.commands.set_route("ghost", WE)
+    vid = e.commands.add_vehicle(route=WE)
+    e.commands.remove_vehicle(vid)
+    with pytest.raises(NotFoundError, match="no longer in the simulation"):
+        e.commands.set_route(vid, WE)
+
+
+def test_a_committed_vehicle_keeps_its_connector(engine: Engine) -> None:
+    e = engine
+    net, veh = e.network, e.vehicles
+    vid = e.commands.add_vehicle(route=WE)
+    e.step()
+    h = veh.handle_of(vid)
+    _step_until(e, lambda: bool(veh.committed[h]))
+    assert int(veh.link[h]) < net.n_lanes  # still on its approach lane
+    conn = int(veh.next_conn[h])
+    with pytest.raises(CommandError) as info:
+        e.commands.set_route(vid, ["W_in", "N_out"])
+    assert str(info.value) == (
+        f"vehicle {vid} is committed to connector W_in_0->E_out_0; "
+        "the new route must continue through it"
+    )
+    with pytest.raises(CommandError, match="committed to connector"):
+        e.commands.set_route(vid, ["W_in"])  # stopping short is not possible either
+    e.commands.set_route(vid, WE)  # through the connector's road: fine
+    assert int(veh.next_conn[h]) == conn and bool(veh.committed[h])
+
+
+def test_set_route_on_a_connector_starts_at_the_next_road(engine: Engine) -> None:
+    e = engine
+    net, veh = e.network, e.vehicles
+    vid = e.commands.add_vehicle(route=WE)
+    e.step()
+    h = veh.handle_of(vid)
+    _step_until(e, lambda: int(veh.link[h]) >= net.n_lanes)
+    with pytest.raises(CommandError, match='must start at the road its connector leads to "E_out"'):
+        e.commands.set_route(vid, WE)
+    e.commands.set_route(vid, ["E_out"])
+    assert _roads(e, h) == WE and int(veh.route_cursor[h]) == 0
+    _step_until(e, lambda: vid not in veh.id_to_handle)  # arrives normally
+
+
+def test_set_route_of_a_waiting_vehicle(
+    make_engine: MakeEngine, junction_builder: Callable[..., ScenarioBuilder]
+) -> None:
+    e = make_engine(junction_builder(lanes=2).build())
+    veh = e.vehicles
+    # W_in: lane 0 (median) turns left to N_out, lane 1 (curb) turns right to S_out
+    vid = e.commands.add_vehicle(route=["W_in", "S_out"], depart_lane=1)
+    h = veh.handle_of(vid)
+    with pytest.raises(CommandError, match='must start at its first road "W_in"'):
+        e.commands.set_route(vid, ["N_in", "S_out"])
+    with pytest.raises(CommandError, match=r"depart lane 1 .* no connection to the next road"):
+        e.commands.set_route(vid, ["W_in", "N_out"])
+    e.commands.set_route(vid, WE)  # both lanes go straight
+    assert _roads(e, h) == WE
+    e.step()
+    assert veh.status[h] == VehicleStatus.running.code
+    assert e.network.link_ids[int(veh.link[h])] == "W_in_1"
+
+
+def test_a_lane_that_cannot_reach_the_new_road_needs_a_lane_change(
+    make_engine: MakeEngine, junction_builder: Callable[..., ScenarioBuilder]
+) -> None:
+    e = make_engine(junction_builder(lanes=2).build())
+    veh = e.vehicles
+    vid = e.commands.add_vehicle(route=["W_in", "S_out"], depart_lane=1)
+    e.step()
+    h = veh.handle_of(vid)
+    e.commands.set_route(vid, ["W_in", "N_out"])
+    assert veh.valid_mask[h] == 0b01 and int(veh.next_conn[h]) == -1  # mandatory change
+
+
+def test_rejected_commands_change_nothing(engine: Engine) -> None:
+    before = engine.digest()
+    with pytest.raises(CommandError):
+        engine.commands.add_vehicle(route=["W_in", "W_out"])
+    with pytest.raises(CommandError):
+        engine.commands.add_vehicle(origin="W_out", destination="E_out")
+    assert engine.digest() == before  # not even the default id counter or an RNG stream
+    assert engine.commands.add_vehicle(route=WE) == "api.0"

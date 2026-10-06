@@ -282,3 +282,41 @@ def test_trips(build: Build) -> None:
     sf = RngStreams(0).stream("trip:late").normal(1.0, 0.1)
     late = build(trips=trips).spawners[0].due(10)[-1]
     assert late.speed_factor == pytest.approx(float(np.clip(sf, 0.8, 1.2)))
+
+
+@pytest.mark.parametrize(
+    "flow",
+    [
+        _flow(period=7.0, count=20),
+        _flow(rate=900.0, arrival="poisson", end=300.0),
+        _flow(rate=1800.0, arrival="binomial", end=300.0),
+    ],
+    ids=["uniform", "poisson", "binomial"],
+)
+def test_flow_state_dict_resumes_exactly(build: Build, flow: dict[str, Any]) -> None:
+    import json
+
+    flow = {**flow, "depart_lane": "random", "depart_speed": 5.0}  # no NaN: requests compare
+    a, b = build(flows=[flow]), build(flows=[flow])
+    sa, sb = a.spawners[0], b.spawners[0]
+    assert isinstance(sa, FlowSpawner) and isinstance(sb, FlowSpawner)
+    [sa.due(n) for n in range(60)]
+    state = json.loads(json.dumps(sa.state_dict()))
+    assert set(state) == {"count", "next_time", "step", "exhausted", "rng"}
+    gen = sb.rng
+    sb.load_state_dict(state)
+    assert sb.rng is gen  # restored in place
+    ahead = [sa.due(n) for n in range(60, 400)]
+    assert [sb.due(n) for n in range(60, 400)] == ahead
+    assert sb.exhausted == sa.exhausted
+
+
+def test_trip_schedule_state_dict(build: Build) -> None:
+    trips = [{"id": f"t{i}", "depart": float(i), "route": ROUTE_E} for i in range(5)]
+    a, b = build(trips=trips), build(trips=trips)
+    sa, sb = a.spawners[0], b.spawners[0]
+    assert isinstance(sa, TripSchedule) and isinstance(sb, TripSchedule)
+    assert [r.vehicle_id for r in sa.due(2)] == ["t0", "t1", "t2"]
+    assert sa.state_dict() == {"next": 3}
+    sb.load_state_dict(sa.state_dict())
+    assert [r.vehicle_id for r in sb.due(10)] == ["t3", "t4"] and sb.exhausted

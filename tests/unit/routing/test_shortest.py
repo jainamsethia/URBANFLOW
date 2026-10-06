@@ -123,3 +123,11 @@ def test_needs_reset_and_never_reroutes(diamond: CompiledNetwork) -> None:
         events=EventBuffer(),
     )
     assert _router(diamond).on_road_entry(np.array([0, 1]), ctx) == {}
+
+
+def test_state_dict_is_empty(diamond: CompiledNetwork) -> None:
+    router = _router(diamond)
+    router.route(_r(diamond, "O_X"), _r(diamond, "Y_D"), ())
+    assert router.state_dict() == {}  # the path cache is a memo of the static graph
+    router.load_state_dict({})
+    assert router.cache  # restoring changes nothing

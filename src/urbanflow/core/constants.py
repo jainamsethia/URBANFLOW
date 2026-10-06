@@ -18,6 +18,9 @@ TIME_EPS: Final = 1e-9  # s; stage ends and step emission compare with -1e-9 (H.
 GEOM_EPS: Final = 1e-9  # dimensionless parameter tolerance in geometry predicates (E.5)
 POSITION_EPS: Final = 1e-6  # m; on-link / overlap tolerance of invariants I3, I4 (F.7)
 SECONDS_PER_HOUR: Final = 3600.0  # veh/h <-> veh/s conversions (E.7 §1.3, J.2)
+# speeds on the grid that maximises the IDM equilibrium flow (core/capacity.py): the peak
+# is smooth, so the grid error is second order, < 1e-5 relative at 1000 points
+CAPACITY_GRID_POINTS: Final = 1000
 
 # --------------------------------------------------------------------------- simulation config
 DT: Final = 1.0  # s; default step (AB 6.1)
@@ -35,6 +38,14 @@ RECORD_CHUNK_ROWS: Final = 1_000_000  # rows per replay chunk (K.3, B.2 #8)
 RECORD_MAX_CHUNK_STEPS: Final = 300  # frames per replay chunk (K.3, B.2 #8)
 RECORD_COMPRESSLEVEL: Final = 1  # deflate level of replay chunks (AB 6.1)
 RECORD_COMPRESSLEVEL_MAX: Final = 9  # zlib maximum
+STATE_COMPRESSLEVEL: Final = 1  # deflate level of saved engine states (F.5; speed over size)
+# largest array a saved engine state may declare (1 Gi elements): bounds the memory a
+# corrupt file can claim before restore checks every shape against the engine (F.5, K.5)
+STATE_MAX_ELEMS: Final = 1 << 30
+# bytes; total decompressed size the members of one npz may declare (core/npz.read_npz, saved
+# states and replay chunks): K.5's 2 GiB limit on a member's declared file_size. Checked from
+# the zip directory before anything is inflated, so a decompression bomb costs nothing
+NPZ_MAX_BYTES: Final = 1 << 31
 
 # --------------------------------------------------------------------------- vehicle model (G.7)
 VEHICLE_LENGTH: Final = 5.0  # m; built-in car (E.7 VehicleType)
@@ -117,10 +128,28 @@ LC_SAFE_DECEL_MAX: Final = 15.0  # m/s²; lc_safe_decel in (0, 15]
 
 # --------------------------------------------------------------------------- intersections (F.3)
 DECISION_MARGIN: Final = 5.0  # m; D_i = v²/(2b) + v·dt + DECISION_MARGIN
-GAP_ACCEPT_MARGIN: Final = 1.0  # s; τ widening every occupancy window
-ETA_END_ACCEL_FACTOR: Final = 0.5  # late-ETA acceleration = factor · a
+# s; τ widening every occupancy window. B.2 #25 (P4 lead decision, overriding F.3's 1.0 s):
+# zone locks (F.3) keep conflict zones exclusive, so the windows only decide gap acceptance
+# and no longer absorb ETA error for safety; 2τ = 1 s is the minimum post-encroachment time
+# left between conflicting vehicles (PET, Allen, Shin & Cooper 1978, TRR 667).
+GAP_ACCEPT_MARGIN: Final = 0.5
+# late-ETA acceleration = factor · a. B.2 #25 (P4 lead decision, overriding F.3's 0.5): with
+# 0.5 the lag a stopped permissive left turner needed against 13.9 m/s opposing traffic was
+# about 9 s (8.8-9.4 s), with 0.75 and τ = 0.5 s about 7 s (6.8-7.4 s), against the HCM 2016
+# critical headway for permitted left turns of 4.1-5.5 s and the IDM car's own clearing time
+# from rest of 5.5-6.1 s. The late ETA bounds the free-road IDM (δ = 4) time over 0-40 m
+# from rest only (margin >= 0.13 s for connector speeds 3-20 m/s); for a vehicle already
+# moving at 0.5-0.9 v_c it can undershoot by up to ~0.12 s (0.5 did too, by ~0.10 s). That
+# is harmless now: the windows only order vehicles, the locks give the safety.
+ETA_END_ACCEL_FACTOR: Final = 0.75
 YELLOW_MAX_DECEL: Final = 3.0  # m/s²; ITE-style dilemma-zone threshold (F.3, G.7)
 STOP_LINE_CLEARANCE: Final = 0.5  # m; g_obs = d + s0 - 0.5 stops the front 0.5 m before a line
+# end-of-green clearing (B.2 #25, P4): permissive-turn "sneakers" committed per approach lane
+# during the yellow that ends a g; only a vehicle held at the line (within DECISION_MARGIN)
+# since before the yellow is eligible, i.e. the lane's queue head, so the quota is one per
+# lane by construction (engine.sneakers holds one eligible uid per lane). HCM (TRB 2016,
+# ch. 19 permitted left turns) assumes 1-2 sneakers per cycle per approach
+SNEAKERS_PER_PHASE: Final = 1
 
 # --------------------------------------------------------------------------- lane changing (G.4)
 LC_NO_DISCRETIONARY_ZONE: Final = 20.0  # m; no discretionary change closer to the stop line

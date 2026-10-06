@@ -3,8 +3,9 @@
 ``SimulationResult.summary`` uses the flattened dotted keys of the metrics summary (B.2
 #13): ``vehicles.generated``, ``travel_time.mean``, ``throughput_vph`` and so on. A result
 saves to ``<directory>/result.json`` and loads back losslessly (NaN is stored as null).
-Timeseries and trip tables, ``state_digest`` and ``export`` arrive with the metrics and
-snapshot subsystems.
+``state_digest`` identifies the final engine state (equal on the same platform exactly when
+two runs ended in the same state). Timeseries and trip tables and ``export`` arrive with
+the metrics subsystem.
 """
 
 from __future__ import annotations
@@ -84,6 +85,10 @@ class SimulationResult:
     "params"}}`` (the scenario's, or the ``controllers=`` override; a custom class or
     factory by its name, with its validated parameters). Commands issued during the run
     (``set_controller``, holds) are not included."""
+    state_digest: str = ""
+    """sha256 hex of the engine state at the end (``Simulation.state_digest()``; empty in
+    results saved before the field existed, and after an interrupted step corrupted the
+    state)."""
 
     # ------------------------------------------------------------------ serialisation
     def to_dict(self) -> dict[str, Any]:
@@ -103,6 +108,7 @@ class SimulationResult:
             "event_counts": dict(self.event_counts),
             "provenance": dict(self.provenance),
             "controllers": {k: dict(v) for k, v in self.controllers.items()},
+            "state_digest": self.state_digest,
             "config": self.config.model_dump(mode="json"),
         }
 
@@ -126,6 +132,7 @@ class SimulationResult:
                 provenance={k: str(v) for k, v in dict(data["provenance"]).items()},
                 run_id=data.get("run_id"),
                 controllers={str(k): dict(v) for k, v in dict(data.get("controllers", {})).items()},
+                state_digest=str(data.get("state_digest", "")),
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise ConfigError(f"malformed UrbanFlow result: {exc}") from None

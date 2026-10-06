@@ -76,3 +76,18 @@ def test_module_never_uses_hash() -> None:
         n for n in ast.walk(tree) if isinstance(n, ast.Call) and getattr(n.func, "id", "") == "hash"
     ]
     assert not calls
+
+
+def test_load_state_dict_restores_in_place() -> None:
+    r = RngStreams(3)
+    kept, dropped = r.stream("flow:a"), r.stream("trip:late")
+    state = r.state_dict()
+    del state["streams"]["trip:late"]
+    expected = kept.random(4)
+    r.load_state_dict(json.loads(json.dumps(state)))
+    assert r.stream("flow:a") is kept  # generators handed out continue from the state
+    assert np.array_equal(kept.random(4), expected)
+    assert r.stream("trip:late") is not dropped  # absent from the state: fresh again
+    assert np.array_equal(
+        r.stream("trip:late").random(2), RngStreams(3).stream("trip:late").random(2)
+    )

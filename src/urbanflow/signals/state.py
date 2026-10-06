@@ -27,11 +27,13 @@ its start time) also sets :data:`~urbanflow.core.events.PHASE_FORCED_BIT` in ``a
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from types import MappingProxyType
+from typing import Any, Final
 
 import numpy as np
-from numpy.typing import NDArray
+from numpy.typing import DTypeLike, NDArray
 
 from urbanflow.core.constants import TIME_EPS
 from urbanflow.core.errors import NotFoundError
@@ -44,7 +46,23 @@ from urbanflow.core.types import (
 )
 from urbanflow.signals.program import SignalProgram, StateArray
 
-__all__ = ["SignalRuntime", "SignalSnapshot"]
+__all__ = ["STATE_ARRAYS", "SignalRuntime", "SignalSnapshot"]
+
+STATE_ARRAYS: Final[Mapping[str, DTypeLike]] = MappingProxyType(
+    {
+        "movement_state": np.uint8,
+        "phase": np.int16,
+        "target": np.int16,
+        "pending": np.int16,
+        "stage": np.uint8,
+        "stage_elapsed": np.float64,
+        "green_elapsed": np.float64,
+        "last_state": np.uint8,
+        "forced": np.bool_,
+    }
+)
+"""The runtime arrays of :meth:`SignalRuntime.state_dict` (snapshots and digests) and their
+dtypes, in order."""
 
 _GREEN, _YELLOW, _ALL_RED = Stage.green.code, Stage.yellow.code, Stage.all_red.code
 _CHARS = "".join(s.value for s in SignalState)  # code -> "r", "y", "g", "G"
@@ -143,6 +161,19 @@ class SignalRuntime:
         codes = self.movement_state[self.program(j).movements].tolist()
         return "".join(_CHARS[c] for c in codes)
 
+    def permissive_yellow(self) -> BoolArray:
+        """Per movement: showing the yellow that ends a permissive (g) green, i.e. y now
+        and g in the phase being left (F.3 end-of-green clearing)."""
+        out = np.zeros(self.movement_state.size, dtype=bool)
+        for prog in self.programs:
+            j = prog.intersection
+            if self.stage[j] == _YELLOW:
+                was_g = prog.phase_state[self.phase[j]] == SignalState.g.code
+                out[prog.movements] = was_g & (
+                    self.movement_state[prog.movements] == SignalState.y.code
+                )
+        return out
+
     def snapshot(self) -> SignalSnapshot:
         """Copies of the current state in the H.2 array form."""
         n = self.phase.size
@@ -166,6 +197,25 @@ class SignalRuntime:
             min_green=min_green,
             max_green=max_green,
         )
+
+    def state_dict(self) -> dict[str, Any]:
+        """The runtime state: ``"arrays"`` (copies of :data:`STATE_ARRAYS`, in that order)
+        and the JSON-safe ``"forced_events"`` (forced jumps not reported yet)."""
+        return {
+            "arrays": {name: getattr(self, name).copy() for name in STATE_ARRAYS},
+            "forced_events": [[j, q] for j, q in self._forced_events],
+        }
+
+    def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        """Restore :meth:`state_dict` output in place; ``ValueError`` if an array is missing
+        or has the wrong shape or dtype."""
+        arrays = state["arrays"]
+        for name in STATE_ARRAYS:
+            current, saved = getattr(self, name), arrays.get(name)
+            if saved is None or saved.shape != current.shape or saved.dtype != current.dtype:
+                raise ValueError(f"signal state array {name!r} is missing or malformed")
+            current[:] = saved
+        self._forced_events = [(int(j), int(q)) for j, q in state["forced_events"]]
 
     # ------------------------------------------------------------------ control
     def request(self, j: int, q: int) -> None:

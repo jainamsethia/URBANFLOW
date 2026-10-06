@@ -12,6 +12,7 @@ from urbanflow.core.types import SIGNAL_CODE_UNSIGNALISED, SignalState, Stage
 from urbanflow.network import CompiledNetwork, compile_network
 from urbanflow.scenario import ScenarioBuilder
 from urbanflow.signals import SignalProgram, SignalRuntime, build_programs
+from urbanflow.signals.state import STATE_ARRAYS
 
 from .conftest import EW, EW_LEFT, EW_PLUS, NS, program_of, runtime_for
 
@@ -227,6 +228,31 @@ def test_movement_states_through_a_transition(
     assert set(rt.state_string(j)) == {"G", "r"}
 
 
+def test_permissive_yellow_marks_only_the_yellow_that_ends_a_g(
+    ew_ns: tuple[CompiledNetwork, SignalProgram],
+) -> None:
+    """F.3 end-of-green clearing: the lefts (g in EW) during YELLOW(EW -> NS), never the
+    G movements' yellow, a green, an all-red or the other direction's yellow."""
+    net, prog = ew_ns
+    j = prog.intersection
+    rt = runtime_for(net, prog)
+    lefts = {net.mov_index["W_in->N_out"], net.mov_index["E_in->S_out"]}
+    _run(rt, j, 5)
+    assert not rt.permissive_yellow().any()  # green
+    rt.request(j, 1)
+    marked = []
+    for n in range(5, 10):
+        _run(rt, j, 1, start=n)
+        marked.append(
+            (Stage.from_code(int(rt.stage[j])), set(np.flatnonzero(rt.permissive_yellow())))
+        )
+    assert marked == [(YELLOW, lefts)] * 3 + [(ALL_RED, set()), (GREEN, set())]
+    rt.request(j, 0)  # NS has no g: its yellow marks nothing
+    for n in range(10, 20):
+        _run(rt, j, 1, start=n)
+        assert not rt.permissive_yellow().any()
+
+
 def test_force_jumps_now_and_emits_a_forced_event_next_step(
     ew_ns: tuple[CompiledNetwork, SignalProgram],
 ) -> None:
@@ -282,3 +308,23 @@ def test_snapshot_reports_the_target_as_green_during_a_transition(
     rt.reset()
     assert (rt.phase[j], rt.target[j], rt.stage[j], rt.green_elapsed[j]) == (0, -1, 0, 0.0)
     assert snap.phase[j] == 0 and snap.target[j] == 1  # snapshots are copies
+
+
+def test_state_dict_round_trip(ew_ns: tuple[CompiledNetwork, SignalProgram]) -> None:
+    net, prog = ew_ns
+    j = prog.intersection
+    rt, other = runtime_for(net, prog), runtime_for(net, prog)
+    _run(rt, j, 8)
+    rt.request(j, 1)
+    _run(rt, j, 1, start=8)  # into yellow
+    rt.force(j, 0)  # an unreported forced jump
+    state = rt.state_dict()
+    assert list(state["arrays"]) == list(STATE_ARRAYS)
+    assert state["forced_events"] == [[j, 0]]
+    other.load_state_dict(state)
+    for name in STATE_ARRAYS:
+        assert np.array_equal(getattr(other, name), getattr(rt, name)), name
+    assert _run(other, j, 40, start=9) == _run(rt, j, 40, start=9)
+    bad = {**state, "arrays": {**state["arrays"], "phase": state["arrays"]["phase"][:0]}}
+    with pytest.raises(ValueError, match="'phase' is missing or malformed"):
+        other.load_state_dict(bad)

@@ -3,12 +3,18 @@
 Thin composition only: the engine owns the state and the step pipeline; the facade adds
 the lifecycle (``done``, ``reset``, ``close``), ``run()`` with progress, per-step caches
 of the read views, the signal controllers chosen with ``controllers=`` and the run summary.
-Control calls made between steps take effect in the next step (AA 5.5).
+Event callbacks (``sim.events``) and snapshots (``snapshot``/``restore``/
+``state_digest``) are here too. Control calls made between steps take effect in the next
+step (AA 5.5).
+
+After each engine step (F.1): the per-step caches are invalidated first, then the summary
+accumulates the step's events, and the event callbacks run last.
 """
 
 from __future__ import annotations
 
 import contextlib
+import copy
 import logging
 import math
 import os
@@ -20,20 +26,22 @@ from typing import Any, Self, Unpack
 import numpy as np
 
 from urbanflow.checks import deep_check
-from urbanflow.control import SignalsAPI
+from urbanflow.control import EventsAPI, SignalsAPI
 from urbanflow.core import constants as C
 from urbanflow.core.config import ConfigOverrides, SimulationConfig, resolve_config
 from urbanflow.core.errors import ConfigError, NotFoundError, SimulationError, suggest
-from urbanflow.core.events import EventType
+from urbanflow.core.events import EventBus, EventType
 from urbanflow.core.rng import RngStreams
 from urbanflow.core.types import FloatArray, IntArray, IntersectionKind
 from urbanflow.engine import Engine
+from urbanflow.engine.state import check_compatible
 from urbanflow.network.compiled import CompiledNetwork
 from urbanflow.results import SimulationResult, provenance
 from urbanflow.routing import Router, router_registry
 from urbanflow.scenario.scenario import Scenario
 from urbanflow.scenario.schema import ScenarioSpec
 from urbanflow.signals import ControllerRef, build_programs
+from urbanflow.snapshot import Snapshot
 from urbanflow.vehicles import VehicleTypes, car_following_registry
 from urbanflow.views import (
     IntersectionCollection,
@@ -100,6 +108,24 @@ class MetricsAPI:
             self._depart.append(veh.depart_time[h])
             self._insert.append(veh.insert_time[h])
             self._arrive.append(events.time[arrived].copy())
+
+    def state_dict(self) -> dict[str, Any]:
+        """A deep copy of the accumulators (in memory; snapshots)."""
+        return copy.deepcopy(
+            {
+                "counts": self._counts,
+                "uids": self._uids,
+                "depart": self._depart,
+                "insert": self._insert,
+                "arrive": self._arrive,
+            }
+        )
+
+    def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        """Replace the accumulators by a copy of :meth:`state_dict` output."""
+        s = copy.deepcopy(dict(state))
+        self._counts, self._uids = s["counts"], s["uids"]
+        self._depart, self._insert, self._arrive = s["depart"], s["insert"], s["arrive"]
 
     def arrived_uids(self) -> IntArray:
         """Uids of the arrived vehicles, in arrival order."""
@@ -274,6 +300,9 @@ class Simulation:
         self.intersections = IntersectionCollection(self._engine, self._cache)
         self.signals = SignalsAPI(self._engine, self._cache)
         """Signal state and control (``sim.signals["J"]``, ``request_phase``, ...)."""
+        self._bus = EventBus()
+        self.events = EventsAPI(self._bus, self.metrics.event_counts)
+        """Event callbacks (``sim.events.subscribe``) and counts since reset."""
         self._closed = False
         self._clear(cfg.seed)
         _log.info(
@@ -345,9 +374,10 @@ class Simulation:
     def reset(self, seed: int | None = None) -> None:
         """Fresh runtime from the cached network; ``seed=None`` reuses the current seed.
 
-        Re-seeds every random stream, clears vehicles, counters and the summary, and
-        rebuilds the configured signal controllers (commands such as ``set_controller`` and
-        manual holds are undone), so repeated ``reset()`` reproduces the run.
+        Re-seeds every random stream, clears vehicles, counters, the summary and the event
+        counts, and rebuilds the configured signal controllers (commands such as
+        ``set_controller`` and manual holds are undone), so repeated ``reset()`` reproduces
+        the run. Event subscriptions are kept.
         """
         if self._closed:
             raise SimulationError("the simulation is closed")
@@ -366,18 +396,34 @@ class Simulation:
                 "call reset() before stepping again"
             )
 
+    def _check_intact(self) -> None:
+        if self._corrupted:
+            raise SimulationError(
+                "the simulation is corrupted (an exception interrupted a step); reset() or "
+                "restore() a snapshot taken before it"
+            )
+
     def _step_once(self) -> None:
         start = wall_clock.perf_counter()
         try:
             self._engine.step()
+            self._cache.clear()  # first: nothing may read the previous step's objects
             self.metrics.update()
         except BaseException as exc:  # e.g. Ctrl-C mid-kernel: must reset()
+            self._cache.clear()
             self._corrupted = True
             self._interrupted = isinstance(exc, KeyboardInterrupt)
             raise
         finally:
             self._wall += wall_clock.perf_counter() - start
-            self._cache.clear()
+        if self._bus.has_subscribers:  # user callbacks last; the step is complete
+            net = self._engine.network
+            self._bus.dispatch(
+                self._engine.events,
+                vehicle_ids=self._engine.vehicles.uid_to_id,
+                link_ids=net.link_ids,
+                intersection_ids=net.int_ids,
+            )
 
     def step(self, n: int = 1) -> None:
         """Advance ``n`` steps (stopping early once :attr:`done`).
@@ -455,6 +501,7 @@ class Simulation:
                 "wall_s": round(result.wall_time, 3),
                 "steps_per_s": round(info().steps_per_s),
                 "arrived": self._engine.arrived,
+                "digest": result.state_digest[: C.SHORT_HASH_LENGTH],
             },
         )
         return result
@@ -469,6 +516,65 @@ class Simulation:
 
     def __exit__(self, *exc: object) -> None:
         self.close()
+
+    # ------------------------------------------------------------------ persistence
+    def snapshot(self) -> Snapshot:
+        """Deep copies of the engine state (vehicles, signals and controllers, demand,
+        RNG streams, counters) and of the summary accumulators (F.5).
+
+        ``SimulationError`` if the simulation is corrupted (an exception interrupted a
+        step): a half-applied step must not be saved and restored as a good state.
+        """
+        self._check_intact()
+        eng = self._engine
+        snap = Snapshot(
+            state=eng.snapshot(),
+            metrics=self.metrics.state_dict(),
+            scenario_hash=self.scenario.content_hash,
+            config=self.config,
+            time=self.time,
+        )
+        _log.debug("snapshot taken", extra={"step": eng.step_count})
+        return snap
+
+    def restore(self, snapshot: Snapshot) -> None:
+        """Continue from ``snapshot``: the following steps equal those after it was taken.
+
+        ``SimulationError`` if it was taken from another scenario, with another config or
+        with other configured signal controllers (``controllers=``).
+        Clears the corrupted flag and every per-step cache. A snapshot loaded from a file
+        has no summary accumulators: they restart empty (a WARNING is logged).
+        """
+        if self._closed:
+            raise SimulationError("the simulation is closed")
+        eng = self._engine
+        check_compatible(eng, snapshot.state)
+        self._cache.clear()
+        try:
+            eng.restore(snapshot.state)
+        except BaseException:
+            self._corrupted = True
+            raise
+        if snapshot.metrics is None:
+            self.metrics.reset()
+            _log.warning(
+                "restored a snapshot loaded from a file (t=%g s): the run summary (travel "
+                "times, event counts, the ids of arrived vehicles) restarts empty",
+                snapshot.time,
+            )
+        else:
+            self.metrics.load_state_dict(snapshot.metrics)
+        self._seed = eng.rng.seed
+        self._corrupted = False
+        self._interrupted = False
+        _log.debug("snapshot restored", extra={"step": eng.step_count})
+
+    def state_digest(self) -> str:
+        """sha256 hex of the canonical engine state (F.5): on the same platform, equal
+        digests mean equal states and equal futures. ``SimulationError`` if the simulation
+        is corrupted (an exception interrupted a step)."""
+        self._check_intact()
+        return self._engine.digest()
 
     # ------------------------------------------------------------------ results
     def get_results(self) -> SimulationResult:
@@ -488,6 +594,7 @@ class Simulation:
             controllers={
                 self._engine.network.int_ids[j]: spec for j, spec in self._engine.configured.items()
             },
+            state_digest="" if self._corrupted else self.state_digest(),
         )
 
     def __repr__(self) -> str:

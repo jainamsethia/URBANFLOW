@@ -109,17 +109,6 @@ def test_stuck_time(junction: World) -> None:
     assert w.veh.stuck_time[held] == 0.0  # continuous halting only
 
 
-def test_lock_conn_is_released_once_the_rear_is_on_a_lane(junction: World) -> None:
-    w, veh = junction, junction.veh
-    conn = w.link("W_in_0->E_out_0")
-    on_conn = w.place("W_in_0->E_out_0", 3.0, 5.0, route=WE)
-    entering = w.place("E_out_0", 4.0, 5.0, route=WE)  # rear 1 m back on the connector
-    left = w.place("E_out_0", 30.0, 5.0, route=WE)
-    veh.lock_conn[[on_conn, entering, left]] = conn
-    _book(w)
-    assert veh.lock_conn[[on_conn, entering, left]].tolist() == [conn, conn, -1]
-
-
 def test_arrived_vehicles_are_freed_deferred(junction: World) -> None:
     w = junction
     h = w.place("E_out_0", 200.0, 10.0, route=("E_out",))

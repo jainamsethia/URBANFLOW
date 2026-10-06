@@ -104,8 +104,8 @@ Defaults are the built-in `car`; `bus`, `truck` and `emergency` override some of
 | b<sub>safe</sub> | `lc_safe_decel` | 4.0 | m/s² |
 | – | `YELLOW_MAX_DECEL` | 3.0 | m/s² |
 | – | `TURN_LATERAL_ACCEL` | 2.0 | m/s² |
-| τ | `GAP_ACCEPT_MARGIN` | 1.0 | s |
-| – | `ETA_END_ACCEL_FACTOR` | 0.5 | – |
+| τ | `GAP_ACCEPT_MARGIN` | 0.5 | s |
+| – | `ETA_END_ACCEL_FACTOR` | 0.75 | – |
 | – | `LC_MANDATORY_BIAS` | 1.0 | m/s² |
 | s<sub>m</sub> | `SAFETY_MARGIN` | 0.5 | m |
 

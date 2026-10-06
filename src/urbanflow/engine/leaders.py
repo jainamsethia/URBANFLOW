@@ -15,7 +15,11 @@ the minimum gap per vehicle:
   the nearest vehicle ahead on each diverging sibling while its rear is within ``d_sep``;
 * **merge siblings**: a vehicle ``j`` on a merging sibling ``c'`` of connector ``c`` leads
   ``i`` on ``c`` iff ``L_c' - pos_j < L_c - pos_i`` (gap ``(L_c - pos_i) - (L_c' - pos_j) -
-  len_j``).
+  len_j``) and ``i``'s front is inside its merge zone ``[L_c - d_sep, L_c]``. Before that
+  zone the paths are more than ``W_max`` apart, and the zone lock (F.3) keeps ``i`` out of
+  it until ``j`` has left ``c'``; without the condition, a vehicle waiting at an earlier
+  zone of a long connector would "overlap" a short sibling's vehicle in the
+  distance-to-end alignment although they are metres apart.
 
 Rears are ``pos - len``. A rear below 0 still hangs over the upstream lane, so it counts as
 inside every diverge zone; a vehicle without a planned connector therefore still sees
@@ -23,6 +27,11 @@ connector vehicles whose rear blocks its lane end. Looking ahead into a lane, th
 is the lane's most upstream body (:func:`~urbanflow.demand.insertion.lane_rears`), which
 includes a vehicle on one of the lane's outgoing connectors whose rear hangs back over
 the lane end (gap ``offset + L + rear_j``), so an empty-looking lane is not free to its end.
+A body whose rear still hangs back over the merging sibling ``c'`` it came from
+(``lock_conn = c'``) is on the path of the follower's connector ``c`` only inside their
+merge zone: unless the follower's front is already in it, the rear counts at most ``L_c -
+z_in`` back (the zone's start), so a vehicle waiting at an earlier zone of ``c`` does not
+"overlap" a long vehicle that is metres away on ``c'``.
 """
 
 from __future__ import annotations
@@ -62,6 +71,8 @@ class ConnectorConflicts:
     """
 
     ptr: IntArray
+    conflict: IntArray
+    """Conflict index (row of the ``conf_*`` arrays)."""
     other: IntArray
     """Link id of the other connector."""
     kind: UIntArray
@@ -82,6 +93,7 @@ def connector_conflicts(
     zone_a, zone_b = net.conf_zone_a[k], net.conf_zone_b[k]
     return ConnectorConflicts(
         ptr=np.searchsorted(owner[keep], np.arange(net.n_conn + 1)),
+        conflict=k[keep],
         other=np.where(side_a, net.conf_b[k], net.conf_a[k])[keep],
         kind=net.conf_kind[k][keep],
         zone=np.where(side_a[:, None], zone_a, zone_b)[keep],
@@ -193,6 +205,8 @@ def compute_leaders(
         speed**2 / (2 * types.decel[ti]) + speed * types.headway[ti] + types.min_gap[ti],
     )
     nc = veh.next_conn[run].astype(np.intp)
+    lock = veh.lock_conn[run].astype(np.intp)
+    mrg = groups.merging
     on_lane = link < n_lanes
     parts: list[tuple[IntArray, IntArray, FloatArray]] = []
 
@@ -211,9 +225,22 @@ def compute_leaders(
         j = tail[conns]
         add(i, j, offset + rear[j], (j >= 0) & (offset < reach[i]))
 
-    def lookahead_lane(i: IntArray, lanes: IntArray, offset: FloatArray) -> None:
+    def lookahead_lane(
+        i: IntArray, lanes: IntArray, offset: FloatArray, conns: IntArray, front: FloatArray
+    ) -> None:
+        """Into ``lanes`` = the ``to_lane`` of ``conns``, ``i``'s front at ``front`` on it."""
         j = body[lanes]
-        add(i, j, offset + lane_rear[lanes], (j >= 0) & (offset < reach[i]))
+        rear_j = lane_rear[lanes].copy()
+        # a rear hanging back over the merging sibling c' it came from (lock_conn) lies on
+        # the path of c only inside their merge zone: before it, the follower sees it at
+        # the zone's start, as a vehicle still on c' (merge siblings, below)
+        hang = np.flatnonzero((j >= 0) & (rear_j < 0))
+        which, e = expand_csr(mrg.ptr, conns[hang] - n_lanes)
+        k = hang[which]
+        hit = (mrg.other[e] == lock[j[k]]) & (front[k] <= mrg.zone[e, 0])
+        k, e = k[hit], e[hit]
+        rear_j[k] = np.maximum(rear_j[k], mrg.zone[e, 0] - lengths[conns[k]])
+        add(i, j, offset + rear_j, (j >= 0) & (offset < reach[i]))
 
     # same link: the successor in the sorted order
     same = slink[1:] == slink[:-1]
@@ -225,7 +252,7 @@ def compute_leaders(
     conn_i = np.flatnonzero(~on_lane)
     conn_c = link[conn_i]
     to = net.conn_to_lane[conn_c - n_lanes].astype(np.intp)
-    lookahead_lane(conn_i, to, d_end[conn_i])
+    lookahead_lane(conn_i, to, d_end[conn_i], conn_c, pos[conn_i])
     far = remaining[conn_i] >= 2
     stop_gap[conn_i[far]] = d_end[conn_i[far]] + lengths[to[far]]
     # committed lane vehicles through their planned connector into its to_lane
@@ -234,7 +261,7 @@ def compute_leaders(
     to2 = net.conn_to_lane[planned - n_lanes].astype(np.intp)
     lookahead(lane_c, planned, d_end[lane_c])
     offset2 = d_end[lane_c] + lengths[planned]
-    lookahead_lane(lane_c, to2, offset2)
+    lookahead_lane(lane_c, to2, offset2, planned, -d_end[lane_c])
     far2 = remaining[lane_c] >= 2
     stop_gap[lane_c[far2]] = offset2[far2] + lengths[to2[far2]]
 
@@ -259,13 +286,12 @@ def compute_leaders(
     j = first_above(div.other[e], pos[i])
     add(i, j, rear[j] - pos[i], (j >= 0) & (rear[j] <= div.other_zone[e, 1]))
     # merge siblings of connector vehicles, aligned by distance to the end
-    mrg = groups.merging
     which, e = expand_csr(mrg.ptr, conn_c - n_lanes)
     i = conn_i[which]
     other = mrg.other[e]
     rem = d_end[i]
     j = first_above(other, lengths[other] - rem)
-    add(i, j, rem - (lengths[other] - pos[j]) - length[j], j >= 0)
+    add(i, j, rem - (lengths[other] - pos[j]) - length[j], (j >= 0) & (pos[i] > mrg.zone[e, 0]))
 
     cand_i = np.concatenate([p[0] for p in parts])
     cand_j = np.concatenate([p[1] for p in parts])

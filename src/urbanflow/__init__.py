@@ -30,6 +30,7 @@ _LAZY: dict[str, tuple[str, str]] = {
     "SimulationConfig": ("urbanflow.core.config", "SimulationConfig"),
     "Simulation": ("urbanflow.simulation", "Simulation"),
     "SimulationResult": ("urbanflow.results", "SimulationResult"),
+    "Snapshot": ("urbanflow.snapshot", "Snapshot"),
     "check": ("urbanflow.checks", "check"),
     "EventType": ("urbanflow.core.events", "EventType"),
     "VehicleStatus": ("urbanflow.core.types", "VehicleStatus"),
@@ -132,4 +133,7 @@ if TYPE_CHECKING:  # pragma: no cover - static typing only
     )
     from urbanflow.simulation import (
         Simulation as Simulation,
+    )
+    from urbanflow.snapshot import (
+        Snapshot as Snapshot,
     )

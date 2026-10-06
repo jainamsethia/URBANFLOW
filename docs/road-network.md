@@ -58,6 +58,13 @@ geometry = render_geometry(net).model_dump(mode="json")
 8. **Road graph.** `urbanflow.network.graph.build_road_graph(net)` returns a
    `networkx.DiGraph` with a node per road and an edge per movement, weighted by the length
    and free-flow time of the target road, built in sorted order for deterministic ties.
+9. **Road capacity** (`road_capacity_vph`, `RoadView.capacity_vph`): the number of lanes
+   times the peak IDM equilibrium flow of the built-in car at the road speed limit
+   v<sub>0</sub>, 3600 · max<sub>v</sub> v / (s<sub>e</sub>(v) + ℓ) with
+   s<sub>e</sub>(v) = (s<sub>0</sub> + vT) / √(1 − (v/v<sub>0</sub>)<sup>δ</sup>)
+   (`urbanflow.core.capacity.idm_capacity_vph`, see
+   [Simulation model](simulation-model.md#road-capacity)): about 1790 veh/h per lane at
+   13.89 m/s.
 
 Compiling the same scenario twice gives identical arrays, and every array is read-only, so
 one `CompiledNetwork` is safely shared across resets and simulations.

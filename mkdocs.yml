@@ -45,4 +45,5 @@ nav:
   - Traffic signals: traffic-signals.md
   - Python API: python-api.md
   - Command line: cli.md
+  - Troubleshooting: troubleshooting.md
   - Contributing: contributing.md

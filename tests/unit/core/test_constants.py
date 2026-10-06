@@ -31,7 +31,9 @@ def _builtin(name: str) -> dict[str, float]:
 
 def test_plan_values() -> None:
     # A few load-bearing numbers quoted verbatim by the plan.
-    assert (C.DECISION_MARGIN, C.GAP_ACCEPT_MARGIN, C.ETA_END_ACCEL_FACTOR) == (5.0, 1.0, 0.5)
+    # tau and the late-ETA factor were revisited with zone locks (B.2 #25 limitation, P4)
+    assert (C.DECISION_MARGIN, C.GAP_ACCEPT_MARGIN, C.ETA_END_ACCEL_FACTOR) == (5.0, 0.5, 0.75)
+    assert C.SNEAKERS_PER_PHASE == 1
     assert (C.YELLOW_MAX_DECEL, C.SAFETY_MARGIN, C.TURN_LATERAL_ACCEL) == (3.0, 0.5, 2.0)
     assert (C.MAX_VEHICLE_WIDTH, C.LATERAL_MARGIN, C.MIN_LANE_LENGTH) == (2.6, 0.4, 5.0)
     assert math.isclose(C.CONFLICT_WIDTH, 3.0)

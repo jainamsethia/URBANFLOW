@@ -6,24 +6,34 @@
 * I3 on-link: ``-1e-6 <= pos <= link_length + 1e-6``;
 * I4 no longitudinal overlap: every leader gap from the step-4 leader search, recomputed
   on the post-advance state, is ``>= -1e-6``;
+* I5 zone exclusivity: no two vehicles on different connectors have bodies (``[pos - len,
+  pos]`` on a connector, or on the lane after it mapped back to their locked connector,
+  ``lock_conn``) inside the same crossing or merging zone (open intervals shrunk by
+  ``1e-6``: a vehicle held at a zone is capped exactly at its ``z_in``), unless one of
+  them is ``forced`` (such overlaps are counted in ``zone_conflicts``). Diverging zones are
+  not checked;
 * I6 conservation: ``generated = backlog + active + arrived + removed``, the table's
   statuses agree, and every running vehicle is on a valid link;
 * I7 route consistency: a lane's road is ``route[cursor]``; a connector's movement goes
   from ``route[cursor]`` to ``route[cursor + 1]``;
 * I8 no ungated crossing: every vehicle that crossed a stop line this step, and every
   vehicle on a connector, is committed;
+* I9 held vehicles stay behind their obstacle: every vehicle held in the step (at a stop
+  line or lane end: the lane end; at a zone: its ``z_in``) has its front, mapped onto the
+  obstacle's link, at most ``1e-6`` past it, except the exempt ones of :class:`Holds`;
 * I10 signal state machine: signalised movement states are r, y, g or G, and a movement
   that was G or g at the end of the previous step is not r now unless it went through
   yellow, i.e. unless the change was a forced ``set_phase`` or its program has yellow = 0;
 * I11 identity: uids unique among live vehicles; handle, id and uid maps consistent.
 
 A failure logs at ERROR and raises :class:`InvariantViolation` ``(rule, step, uids,
-details)``. I5 and I9 arrive with zone locks.
+details)``.
 """
 
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -31,19 +41,40 @@ from numpy.typing import NDArray
 
 from urbanflow.core.constants import LOG_MAX_IDS, POSITION_EPS
 from urbanflow.core.errors import InvariantViolation
-from urbanflow.core.types import IntArray, IntersectionKind, SignalState, VehicleStatus
-from urbanflow.engine.leaders import compute_leaders, remaining_roads
+from urbanflow.core.types import (
+    BoolArray,
+    FloatArray,
+    IntArray,
+    IntersectionKind,
+    SignalState,
+    VehicleStatus,
+)
+from urbanflow.engine.leaders import compute_leaders, expand_csr, remaining_roads
 from urbanflow.vehicles.table import VehicleTable
 
 if TYPE_CHECKING:
     from urbanflow.engine.advance import Advance
     from urbanflow.engine.engine import Engine
 
-__all__ = ["check_always", "check_debug", "check_signals"]
+__all__ = ["Holds", "check_always", "check_debug", "check_signals"]
 
 _log = logging.getLogger("urbanflow.engine")
 _WAITING = VehicleStatus.waiting_insert.code
 _RUNNING = VehicleStatus.running.code
+
+
+@dataclass(frozen=True, slots=True)
+class Holds:
+    """The virtual obstacles of one step's held vehicles (I9)."""
+
+    handles: IntArray
+    link: IntArray
+    """Link of the obstacle point: the lane (stop line or lane end) or the connector (zone)."""
+    pos: FloatArray
+    """Obstacle point on ``link``: the lane length, or the zone's ``z_in``."""
+    exempt: BoolArray
+    """The obstacle appeared this step (not held in the previous one) and ``v^2/(2d) >
+    b_emerg``: it cannot be honoured (the overrun counts in ``safety_cap_violations``)."""
 
 
 def _violation(
@@ -66,7 +97,7 @@ def check_always(veh: VehicleTable, run: IntArray, step: int) -> None:
 
 
 def check_debug(engine: Engine, advance: Advance | None = None) -> None:
-    """I3, I4, I6, I7, I8, I10 and I11 on the committed state of ``engine``.
+    """I3-I11 on the committed state of ``engine``.
 
     ``advance`` is the step's :class:`~urbanflow.engine.advance.Advance` (for I8's list of
     stop-line crossings); without it only connector vehicles are checked.
@@ -131,6 +162,18 @@ def check_debug(engine: Engine, advance: Advance | None = None) -> None:
         crossers = advance.crossed[~advance.crossed_committed]
         raise _violation("I8", step, veh.uid[crossers], "crossed a stop line uncommitted")
 
+    # I9 held vehicles stay behind their obstacle
+    if engine.holds is not None:
+        bad_h = _past_obstacle(engine, engine.holds)
+        if bad_h.size:
+            raise _violation("I9", step, veh.uid[bad_h], "held vehicle past its obstacle")
+
+    # I5 zone exclusivity
+    pairs = _zone_overlaps(engine, run)
+    if pairs:
+        uids = sorted({int(veh.uid[h]) for pair in pairs for h in pair})
+        raise _violation("I5", step, uids, f"{len(pairs)} pair(s) share a conflict zone")
+
     # I4 no longitudinal overlap (the step-4 search on the post-advance state)
     remaining = remaining_roads(veh, engine.routes, run)
     leaders = compute_leaders(net, veh, run, engine.types, remaining, engine.sibling_groups)
@@ -156,6 +199,72 @@ def check_debug(engine: Engine, advance: Advance | None = None) -> None:
     active = np.flatnonzero(veh.active[:top])
     if not np.array_equal(active, np.sort(live[veh.status[live] == _RUNNING])):
         raise _violation("I11", step, [], "active flags disagree with the running vehicles")
+
+
+def _past_obstacle(engine: Engine, holds: Holds) -> IntArray:
+    """I9: running, non-exempt held vehicles whose front is past their obstacle point."""
+    net, veh = engine.network, engine.vehicles
+    n_lanes = net.n_lanes
+    keep = veh.active[holds.handles] & ~holds.exempt
+    h, at, point = holds.handles[keep], holds.link[keep].astype(np.intp), holds.pos[keep]
+    link = veh.link[h].astype(np.intp)
+    zone = at >= n_lanes
+    ci = np.where(zone, at - n_lanes, 0)
+    left = np.where(link >= n_lanes, net.conn_from_lane[np.maximum(link - n_lanes, 0)], -1)
+    shift = np.select(
+        [
+            link == at,
+            zone & (link == net.conn_from_lane[ci]),
+            zone & (link == net.conn_to_lane[ci]),
+            ~zone & (left == at),  # crossed the stop line it was held at
+        ],
+        [0.0, -net.link_length[net.conn_from_lane[ci]], net.link_length[at], net.link_length[at]],
+        np.inf,
+    )
+    past: IntArray = h[veh.pos[h] + shift > point + POSITION_EPS]
+    return past
+
+
+def _zone_overlaps(engine: Engine, run: IntArray) -> list[tuple[int, int]]:
+    """I5: handle pairs on different connectors inside one crossing or merging zone,
+    neither of them ``forced``."""
+    net, veh, zones = engine.network, engine.vehicles, engine.junctions.zones
+    n_lanes = net.n_lanes
+    link = veh.link[run].astype(np.intp)
+    conn = np.where(link >= n_lanes, link, veh.lock_conn[run])
+    k = np.flatnonzero(conn >= 0)
+    c, lk = conn[k].astype(np.intp), link[k]
+    ci = c - n_lanes
+    shift = np.select(
+        [lk == c, lk == net.conn_to_lane[ci], lk == net.conn_from_lane[ci]],
+        [0.0, net.link_length[c], -net.link_length[net.conn_from_lane[ci]]],
+        np.inf,
+    )
+    front = veh.pos[run[k]] + shift
+    rear = front - veh.length[run[k]]
+    which, e = expand_csr(zones.ptr, ci)
+    # POSITION_EPS: a vehicle held at a zone is capped exactly at its z_in (round-off)
+    inside = (rear[which] < zones.zone[e, 1] - POSITION_EPS) & (
+        front[which] > zones.zone[e, 0] + POSITION_EPS
+    )
+    conf, on, who = zones.conflict[e][inside], c[which][inside], run[k[which]][inside]
+    pairs: list[tuple[int, int]] = []
+    if not conf.size:
+        return pairs
+    order = np.lexsort((on, conf))
+    conf, on, who = conf[order], on[order], who[order]
+    starts = np.flatnonzero(np.r_[True, conf[1:] != conf[:-1]])
+    for a, b in zip(starts.tolist(), [*starts[1:].tolist(), conf.size], strict=True):
+        if on[a] == on[b - 1]:
+            continue  # one connector only (car-following separates them)
+        first = on[a:b] == on[a]
+        pairs += [
+            (x, y)
+            for x in who[a:b][first].tolist()
+            for y in who[a:b][~first].tolist()
+            if not (veh.forced[x] or veh.forced[y])
+        ]
+    return pairs
 
 
 def check_signals(engine: Engine) -> None:

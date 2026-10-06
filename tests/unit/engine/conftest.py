@@ -11,7 +11,14 @@ import pytest
 from urbanflow import ScenarioBuilder, generate
 from urbanflow.core.events import EventBuffer
 from urbanflow.core.types import IntArray, SignalState, VehicleStatus
-from urbanflow.engine.intersections import Admission, JunctionIndex, admit, reservations
+from urbanflow.engine.intersections import (
+    Admission,
+    Grants,
+    JunctionIndex,
+    admit,
+    grant_zones,
+    reservations,
+)
 from urbanflow.engine.leaders import Leaders, SiblingGroups, compute_leaders, remaining_roads
 from urbanflow.network import CompiledNetwork, compile_network
 from urbanflow.routing import RouteTable, plan_connector, valid_mask
@@ -89,16 +96,28 @@ class World:
         return compute_leaders(self.net, self.veh, run, self.types, self.remaining(), self.groups)
 
     def admit(
-        self, *, dt: float = 1.0, next_seq: int = 0, signals: dict[str, str] | None = None
+        self,
+        *,
+        dt: float = 1.0,
+        next_seq: int = 0,
+        signals: dict[str, str] | None = None,
+        permissive: Sequence[str] = (),
+        sneakers: np.ndarray | None = None,
     ) -> tuple[Admission, np.ndarray]:
         """F.3 admission; ``signals`` maps movement ids to states ("r", "y", "g", "G") at
-        a signalised junction (unlisted movements are red)."""
+        a signalised junction (unlisted movements are red); ``permissive`` lists the
+        movements whose yellow ends a g, with ``sneakers`` the per-lane uids eligible for
+        end-of-green clearing (a fresh array of -1 if omitted)."""
         run = self.run()
         state = None
         if signals is not None:
             state = np.full(self.net.n_movements, SignalState.r.code, dtype=np.uint8)
             for mid, s in signals.items():
                 state[self.net.mov_index[mid]] = SignalState(s).code
+        marked = np.zeros(self.net.n_movements, dtype=bool)
+        marked[[self.net.mov_index[m] for m in permissive]] = True
+        if sneakers is None:
+            sneakers = np.full(self.net.n_lanes, -1, dtype=np.int64)
         reserved = reservations(self.net, self.veh, self.types, run)
         adm = admit(
             self.net,
@@ -112,8 +131,16 @@ class World:
             dt=dt,
             next_seq=next_seq,
             movement_state=state,
+            permissive=marked,
+            sneakers=sneakers,
         )
         return adm, reserved
+
+    def grant(self, *, dt: float = 1.0) -> Grants:
+        """F.3 zone locks of the committed vehicles on the current state."""
+        return grant_zones(
+            self.net, self.veh, self.types, self.run(), self.leaders(), self.junctions, dt=dt
+        )
 
     def at(self, arr: np.ndarray, h: int) -> float:
         """Value of a run-aligned array for handle ``h``."""

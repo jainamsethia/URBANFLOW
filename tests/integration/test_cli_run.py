@@ -65,6 +65,7 @@ def test_a_60_s_run(workspace: Path, scenario: Path, capsys: pytest.CaptureFixtu
     spec = json.loads((run_dir / "spec.json").read_text(encoding="utf-8"))
     assert spec["run_id"] == run_dir.name and spec["config"]["seed"] == 7
     assert spec["scenario"]["hash"] == result.scenario_hash
+    assert len(result.state_digest) == 64 and f"State digest: {result.state_digest}" in out
 
 
 def test_json_output(workspace: Path, scenario: Path, capsys: pytest.CaptureFixture[str]) -> None:

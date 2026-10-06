@@ -21,6 +21,8 @@ from urbanflow.core.errors import (
     ScenarioValidationError,
     SimulationError,
 )
+from urbanflow.core.events import Event, EventType, Subscription
+from urbanflow.core.types import VehicleStatus
 from urbanflow.engine import Engine
 from urbanflow.routing import ShortestPathRouter
 from urbanflow.signals import ControllerBase, ControllerContext, External, FixedTime
@@ -458,3 +460,101 @@ def test_controller_override_errors() -> None:
     assert Simulation(scenario, controllers={"A": External(), "B": External()})
     unsignalised = generate("single_intersection", kind="uncontrolled")
     assert Simulation(unsignalised, controllers={"*": "external"}).signals.ids == ()
+
+
+# ------------------------------------------------------------------------------- sim.events
+def test_events_api_delivers_frozen_events_with_ids(junction: Scenario) -> None:
+    sim = Simulation(junction, duration=120)
+    seen: list[Event] = []
+    sub = sim.events.subscribe([EventType.vehicle_inserted, "vehicle_arrived"], seen.append)
+    assert isinstance(sub, Subscription) and sub.active
+    sim.run()
+    counts = sim.events.counts()
+    assert set(counts) == set(EventType)
+    by_type = {t: [e for e in seen if e.type is t] for t in EventType}
+    assert len(by_type[EventType.vehicle_inserted]) == counts[EventType.vehicle_inserted] > 0
+    assert len(by_type[EventType.vehicle_arrived]) == counts[EventType.vehicle_arrived] > 0
+    assert counts[EventType.vehicle_arrived] == sim.metrics.summary()["vehicles.arrived"]
+    assert {e.type for e in seen} == {EventType.vehicle_inserted, EventType.vehicle_arrived}
+    first = by_type[EventType.vehicle_inserted][0]
+    assert first.vehicle in sim.vehicles.ids(VehicleStatus.arrived) + sim.vehicles.ids()
+    assert first.link in sim.network.lane_ids and first.intersection is None
+    assert first.data == {} and first.time == (first.step - 1) * sim.dt
+    arrival = by_type[EventType.vehicle_arrived][0]
+    assert (first.step - 1) * sim.dt <= arrival.time <= arrival.step * sim.dt
+    assert counts == {EventType(k): v for k, v in sim.get_results().event_counts.items()}
+
+
+def test_callbacks_run_after_the_step_and_control_takes_effect_next_step() -> None:
+    scenario = _straight(0.0, 5.0)
+    sim = Simulation(scenario, duration=200)
+    log: list[tuple[int, int, str | None]] = []
+
+    def on_insert(event: Event) -> None:
+        # the step is complete: the views already show the new vehicle
+        assert sim.step_count == event.step and event.vehicle in sim.vehicles
+        log.append((event.step, sim.step_count, event.vehicle))
+        sim.vehicles.set_speed(str(event.vehicle), 1.0)
+
+    sim.events.subscribe(EventType.vehicle_inserted, on_insert)
+    sim.run(until=20)
+    assert [v for *_, v in log] == ["v0", "v1"] and all(a == b for a, b, _ in log)
+    assert sim.vehicles["v0"].speed <= 1.0 + 1e-9 and sim.vehicles["v0"].speed_override == 1.0
+
+
+def test_callback_exceptions_propagate_with_a_consistent_state() -> None:
+    sim = Simulation(_straight(0.0, 5.0), duration=200)
+
+    def boom(event: Event) -> None:
+        raise RuntimeError(f"bad callback for {event.vehicle}")
+
+    sub = sim.events.subscribe("vehicle_inserted", boom)
+    with pytest.raises(RuntimeError, match="bad callback for v0"):
+        sim.run()
+    assert sim.step_count == 1 and "v0" in sim.vehicles  # the step completed
+    assert sim.metrics.summary()["vehicles.inserted"] == 1
+    sub.unsubscribe()
+    sim.step()  # not corrupted
+    assert sim.step_count == 2
+
+
+def test_no_dispatch_without_subscribers(
+    junction: Scenario, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sim = Simulation(junction, duration=60)
+    calls = []
+    monkeypatch.setattr(sim._bus, "dispatch", lambda *_, **__: calls.append(1))
+    sim.run(until=30)
+    assert calls == []
+    sub = sim.events.subscribe(None, lambda _: None)
+    sim.step(3)
+    assert len(calls) == 3
+    sub.unsubscribe()
+    sim.step()
+    assert len(calls) == 3
+
+
+def test_subscriptions_survive_reset_and_counts_restart(junction: Scenario) -> None:
+    sim = Simulation(junction, duration=60)
+    seen: list[Event] = []
+    sim.events.subscribe(EventType.vehicle_departed, seen.append)
+    sim.run()
+    first = len(seen)
+    assert first == sim.events.counts()[EventType.vehicle_departed] > 0
+    sim.reset()
+    assert sim.events.counts()[EventType.vehicle_departed] == 0
+    sim.run()
+    assert len(seen) == 2 * first  # same seed, same departures
+
+
+def test_phase_changed_events_decode_the_phase() -> None:
+    sim = Simulation(_two_signals(), duration=200)
+    seen: list[Event] = []
+    sim.events.subscribe(EventType.phase_changed, seen.append)
+    sim.run(until=70)
+    sim.signals.set_phase("A", 0)
+    sim.step()
+    assert seen and all(e.intersection in {"A", "B"} and e.link is None for e in seen)
+    assert all(e.vehicle is None and set(e.data) == {"phase", "forced"} for e in seen)
+    assert seen[-1].data == {"phase": 0, "forced": True} and seen[-1].intersection == "A"
+    assert not any(e.data["forced"] for e in seen[:-1])

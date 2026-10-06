@@ -411,6 +411,14 @@ class VehicleCollection:
         """
         self._engine.commands.set_speed(vehicle_id, speed, duration)
 
+    def set_route(self, vehicle_id: str, roads: list[str] | tuple[str, ...]) -> None:
+        """Replace the rest of the route by ``roads`` (road ids). It must start at the
+        current road (the first road while waiting; the next road on a connector) and be
+        connected; a vehicle committed to its next stop line must keep going through the
+        road its connector leads to. Otherwise ``CommandError``."""
+        self._engine.commands.set_route(vehicle_id, roads)
+        self._cache.clear()
+
 
 # ------------------------------------------------------------------------------- lanes, roads
 @dataclass(frozen=True, slots=True)

@@ -14,10 +14,7 @@ import pytest
 import urbanflow
 from urbanflow.core.constants import (
     DETECTOR_LENGTH,
-    IDM_HEADWAY,
-    IDM_MIN_GAP,
     TURN_LATERAL_ACCEL,
-    VEHICLE_LENGTH,
 )
 from urbanflow.core.errors import ScenarioValidationError, Severity
 from urbanflow.core.types import IntersectionKind, TurnKind
@@ -129,8 +126,9 @@ def test_golden_summary(demo: Scenario, demo_net: CompiledNetwork) -> None:
 
 def test_limits_capacity_and_detectors(demo_net: CompiledNetwork) -> None:
     net = demo_net
-    capacity = 2 * 3600 / (IDM_HEADWAY + (VEHICLE_LENGTH + IDM_MIN_GAP) / 13.89)
-    np.testing.assert_allclose(net.road_capacity_vph, capacity)
+    # delta-aware IDM peak flow of the built-in car at 13.89 m/s: 1792.26 veh/h/lane (not
+    # 3600 / (T + (l + s0)/v) = 2244 veh/h/lane, which drops the (v/v0)^delta term)
+    np.testing.assert_allclose(net.road_capacity_vph, 2 * 1792.2556, rtol=1e-6)
     np.testing.assert_allclose(net.lane_detector_start, 191.6 - DETECTOR_LENGTH)
     assert net.link_speed_limit[net.lane_of("W_in", 1)] == 11.11
     left = net.link_index["N_in_0->E_out_0"]  # ~quarter circle of radius 10 m

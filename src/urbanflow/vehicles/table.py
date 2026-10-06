@@ -12,6 +12,7 @@ deterministic.
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from typing import Any, Final
 
 import numpy as np
@@ -237,6 +238,45 @@ class VehicleTable:
     def running(self) -> IntArray:
         """Handles of running vehicles, ascending: ``flatnonzero(active)``."""
         return np.flatnonzero(self.active[: self._top])
+
+    def state_dict(self) -> dict[str, Any]:
+        """The table's state: ``"columns"`` (copies of every column sliced to :attr:`top`)
+        plus the JSON-safe slot lists and id maps (``ids``, ``id_to_handle`` as ``[id,
+        handle]`` pairs, ``uid_to_id``, ``free``, ``deferred``, ``held``)."""
+        top = self._top
+        return {
+            "columns": {name: getattr(self, name)[:top].copy() for name in COLUMNS},
+            "ids": self.ids[:top],
+            "id_to_handle": [[vid, h] for vid, h in self.id_to_handle.items()],
+            "uid_to_id": list(self.uid_to_id),
+            "free": list(self._free),
+            "deferred": list(self._deferred),
+            "held": list(self._held),
+        }
+
+    def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        """Replace the table by :meth:`state_dict` output (the rows above the high-water
+        mark are fresh). ``ValueError`` if a column is missing or has the wrong dtype or
+        length."""
+        ids: list[str | None] = list(state["ids"])
+        top = len(ids)
+        columns = state["columns"]
+        for name, (dtype, _) in COLUMNS.items():
+            col = columns.get(name)
+            if col is None or col.shape != (top,) or col.dtype != np.dtype(dtype):
+                raise ValueError(f"vehicle column {name!r} is missing or malformed")
+        capacity = max(self._capacity, top)
+        for name, (dtype, fill) in COLUMNS.items():
+            arr = np.full(capacity, fill, dtype=dtype)
+            arr[:top] = columns[name]
+            setattr(self, name, arr)
+        self._capacity, self._top = capacity, top
+        self.ids = ids + [None] * (capacity - top)
+        self.id_to_handle = {str(vid): int(h) for vid, h in state["id_to_handle"]}
+        self.uid_to_id = [str(v) for v in state["uid_to_id"]]
+        self._free = [int(h) for h in state["free"]]
+        self._deferred = [int(h) for h in state["deferred"]]
+        self._held = [int(h) for h in state["held"]]
 
     def handle_of(self, vehicle_id: str) -> int:
         """Handle of a live vehicle; ``NotFoundError`` with a hint if unknown."""

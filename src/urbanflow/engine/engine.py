@@ -3,8 +3,10 @@
 ``Engine.step()`` advances from ``t_n = n dt`` to ``t_{n+1}`` synchronously: decisions in
 sub-steps 4-7 read the state committed at ``t_n`` plus earlier sub-steps' results. The
 sub-steps run in plan order: 0 begin, 1 signals, 2 spawn, 3 insert, 4 leaders,
-6 intersections, 7 longitudinal, 8 advance, 9 bookkeeping (with the ``deadlock_timeout``
-watchdog), 10 finish. Sub-step 5 (lane changes) arrives with lane changing.
+6 intersections (admission with end-of-green clearing, then zone locks), 7 longitudinal,
+8 advance (then the zone locks whose rear has cleared are released), 9 bookkeeping (with
+the ``deadlock_timeout`` watchdog), 10 finish. Sub-step 5 (lane changes) arrives with lane
+changing.
 
 Sub-step 1: every signalised intersection in green asks its controller (``decide``, with
 a lazily filled :class:`~urbanflow.signals.controllers.base.ControllerContext`), then
@@ -26,6 +28,7 @@ import networkx as nx
 import numpy as np
 from pydantic import JsonValue
 
+from urbanflow.core import constants as C
 from urbanflow.core.config import SimulationConfig
 from urbanflow.core.errors import ConfigError, SimulationError
 from urbanflow.core.events import EventBuffer, EventType
@@ -33,16 +36,21 @@ from urbanflow.core.rng import RngStreams
 from urbanflow.core.types import IntersectionKind, Stage
 from urbanflow.demand.insertion import InsertionQueues, enqueue, insert_step, lane_tails
 from urbanflow.demand.spawners import Spawner, build_spawners
+from urbanflow.engine import state as engine_state
 from urbanflow.engine.advance import advance_links
 from urbanflow.engine.bookkeeping import bookkeeping_step
 from urbanflow.engine.commands import EngineCommands
 from urbanflow.engine.intersections import (
+    Admission,
+    Grants,
     JunctionIndex,
     admit,
+    grant_zones,
+    release_locks,
     reservations,
     signal_lookahead,
 )
-from urbanflow.engine.invariants import check_always, check_debug
+from urbanflow.engine.invariants import Holds, check_always, check_debug
 from urbanflow.engine.leaders import SiblingGroups, compute_leaders, remaining_roads
 from urbanflow.engine.longitudinal import expire_overrides, longitudinal_step
 from urbanflow.engine.signalling import LaneStats, detector_occupancy
@@ -64,7 +72,10 @@ from urbanflow.vehicles.car_following import CarFollowingModel
 from urbanflow.vehicles.table import VehicleTable
 from urbanflow.vehicles.types import VehicleTypes
 
-__all__ = ["Engine"]
+__all__ = ["ControllerSpecDict", "Engine"]
+
+ControllerSpecDict = dict[str, JsonValue]
+"""``{"type": registry or class name, "params": validated parameters (JSON form)}``."""
 
 
 def _check_supported(config: SimulationConfig, demand: DemandSpec) -> None:
@@ -139,7 +150,8 @@ class Engine:
         self.sibling_groups = SiblingGroups.build(network)
         """Static merge/diverge groups of the leader search."""
         self.junctions = JunctionIndex.build(network)
-        """Static per-connector data of the admission loop."""
+        """Static per-connector data of admission and zone locks."""
+        self._lane_int = network.link_intersection[: network.n_lanes]
         self.commands = EngineCommands(self)
         """Validated vehicle commands (F.4)."""
         self.queues = InsertionQueues(network)
@@ -179,23 +191,36 @@ class Engine:
         self.red_runs = 0
         self.zone_conflicts = 0
         self.safety_cap_violations = 0
+        self.sneakers = np.full(self.network.n_lanes, -1, dtype=np.int64)
+        """Per lane: uid of the vehicle eligible for end-of-green clearing at its stop line,
+        -1 if none (F.3, B.2 #25): reset to -1 whenever its intersection is not in yellow,
+        then set by the admission of every green step to the candidate it held at the
+        line, so in the yellow it names the one held there since before the yellow."""
+        self.holds: Holds | None = None
+        """Obstacle points of the vehicles held in the last step (invariant I9)."""
         self.commands.reset()
         self.signals.reset()
         self.controllers: dict[int, SignalController] = {}
         """The active controller of each signalised intersection."""
         self.parked: dict[int, SignalController] = {}
         """Configured controllers parked by a manual hold (``hold_phase``)."""
+        self.specs: dict[int, ControllerSpecDict] = {}
+        """``{"type", "params"}`` of each active controller (snapshots re-create them)."""
+        self.parked_specs: dict[int, ControllerSpecDict] = {}
+        """``{"type", "params"}`` of each parked controller."""
         self.held = np.zeros(self.network.n_intersections, dtype=bool)
         """Intersections under a manual hold."""
-        self.configured: dict[int, dict[str, JsonValue]] = {}
+        self.configured: dict[int, ControllerSpecDict] = {}
         """The configured controller of each signalised intersection as ``{"type",
         "params"}`` (its name and validated parameters; results provenance)."""
         for prog in self.signals.programs:
             j = prog.intersection
             ref = self._controller_refs.get(j, prog.controller)
-            self.controllers[j] = self.make_controller(j, ref, initial=True)
+            self.controllers[j], self.specs[j] = self.make_controller(j, ref, initial=True)
+            self.configured[j] = self.specs[j]
         self.signals.end_step()
-        self._detector_seen = np.full(self.network.n_lanes, -np.inf)
+        self.detector_seen = np.full(self.network.n_lanes, -np.inf)
+        """Per lane: the last time its detector was occupied, s (controller contexts)."""
 
     # ------------------------------------------------------------------ state
     @property
@@ -218,11 +243,27 @@ class Engine:
         """Every spawner is past its end or count and nothing waits for insertion."""
         return all(s.exhausted for s in self.spawners) and not len(self.queues)
 
+    # ------------------------------------------------------------------ persistence
+    def snapshot(self) -> engine_state.EngineState:
+        """A deep copy of the runtime state (F.5)."""
+        return engine_state.snapshot(self)
+
+    def restore(self, state: engine_state.EngineState) -> None:
+        """Continue from ``state``; ``SimulationError`` if it was taken from another
+        scenario or config (F.5)."""
+        engine_state.restore(self, state)
+
+    def digest(self) -> str:
+        """sha256 hex of the canonical runtime state (F.5); equal digests on the same
+        platform mean equal futures."""
+        return engine_state.digest(self)
+
     # ------------------------------------------------------------------ signals
     def make_controller(
         self, j: int, ref: ControllerRef, *, initial: bool = False
-    ) -> SignalController:
-        """A controller for signalised intersection ``j`` from ``ref``, already reset.
+    ) -> tuple[SignalController, ControllerSpecDict]:
+        """A controller for signalised intersection ``j`` from ``ref``, already reset, and
+        its ``{"type", "params"}`` (registry name or class name, validated parameters).
 
         ``initial`` (simulation reset) lets it place the runtime state; mid-run installs
         continue from the current state.
@@ -238,11 +279,6 @@ class Engine:
             initial=initial,
             _place=lambda *a, **k: self.signals.place(j, *a, **k),
         )
-        if initial:
-            self.configured[j] = {
-                "type": controller_name(controller),
-                "params": params.model_dump(mode="json"),
-            }
         try:
             controller.reset(setup)
         except Exception as exc:
@@ -250,7 +286,11 @@ class Engine:
                 f'signal controller "{controller_name(controller)}" of {where} failed in '
                 f"reset: {type(exc).__name__}: {exc}"
             ) from exc
-        return controller
+        spec: ControllerSpecDict = {
+            "type": controller_name(controller),
+            "params": params.model_dump(mode="json"),
+        }
+        return controller, spec
 
     def _controller_rng(self, j: int) -> np.random.Generator:
         return self.rng.stream(f"controller:{self.network.int_ids[j]}")
@@ -259,8 +299,8 @@ class Engine:
         """F.1 sub-step 1: controllers decide (in green), then the runtime advances."""
         net, sig, dt = self.network, self.signals, self.config.dt
         occupied = detector_occupancy(net, self.vehicles, run)
-        self._detector_seen[occupied] = t
-        lanes = LaneStats(net, self.vehicles, self.types, run, occupied, t - self._detector_seen)
+        self.detector_seen[occupied] = t
+        lanes = LaneStats(net, self.vehicles, self.types, run, occupied, t - self.detector_seen)
         for prog in sig.programs:
             j = prog.intersection
             if sig.stage[j] != Stage.green.code:
@@ -349,6 +389,11 @@ class Engine:
 
         # 6 intersections
         expire_overrides(veh, run, t)
+        was_held = veh.held[run]
+        permissive = None
+        if self.signals.programs:
+            permissive = self.signals.permissive_yellow()
+            self.sneakers[self.signals.stage[self._lane_int] != Stage.yellow.code] = -1
         admission = admit(
             net,
             veh,
@@ -361,13 +406,19 @@ class Engine:
             dt=dt,
             next_seq=self._next_seq,
             movement_state=self.signals.movement_state if self.signals.programs else None,
+            permissive=permissive,
+            sneakers=self.sneakers,
         )
         self._next_seq = admission.next_seq
         self.forced_commits += admission.forced
         self.red_runs += admission.red_runs
         if admission.commits:  # the newly committed now look past their stop line
             leaders = compute_leaders(net, veh, run, types, remaining, self.sibling_groups)
-        obstacle = admission.obstacle_gap
+        grants = grant_zones(net, veh, types, run, leaders, self.junctions, dt=dt)
+        self.zone_conflicts += grants.conflicts
+        stop_cap = np.minimum(admission.cap_gap, grants.cap_gap)
+        self.holds = _holds(veh, types, run, admission, grants, stop_cap, was_held)
+        obstacle = np.minimum(admission.obstacle_gap, grants.obstacle_gap)
         if self.signals.programs:  # stop lines ending the lookahead at r / y (F.1 step 4)
             ahead = signal_lookahead(
                 net,
@@ -383,7 +434,7 @@ class Engine:
 
         # 7 longitudinal
         v0_start = veh.v0[run].copy()
-        cap = np.minimum(admission.cap_gap, leaders.stop_gap)
+        cap = np.minimum(stop_cap, leaders.stop_gap)
         lon = longitudinal_step(
             net,
             veh,
@@ -414,6 +465,7 @@ class Engine:
         )
         self.arrived += int(adv.arrived.size)
         self.safety_cap_violations += lon.violations + adv.violations
+        release_locks(net, veh, self.junctions, run)
 
         # 9 bookkeeping
         book = bookkeeping_step(
@@ -441,3 +493,24 @@ class Engine:
         if cfg.debug_checks:
             check_debug(self, adv)
         self.signals.end_step()
+
+
+def _holds(
+    veh: VehicleTable,
+    types: VehicleTypes,
+    run: np.ndarray,
+    admission: Admission,
+    grants: Grants,
+    cap: np.ndarray,
+    was_held: np.ndarray,
+) -> Holds:
+    """The obstacle points of this step's held vehicles (stop line, lane end or zone) for
+    I9; exempt: newly held (not held in the previous step) with ``v^2/(2d) > b_emerg``."""
+    zone = grants.hold_link >= 0
+    link = np.where(zone, grants.hold_link, admission.hold_link)
+    k = np.flatnonzero(link >= 0)
+    h = run[k]
+    b_emerg = types.emergency_decel[veh.type_idx[h]] + C.BALLISTIC_FLOOR
+    exempt = ~was_held[k] & (veh.speed[h] ** 2 > 2 * cap[k] * b_emerg)
+    pos = np.where(zone, grants.hold_pos, admission.hold_pos)[k]
+    return Holds(h, link[k], pos, exempt)

@@ -337,3 +337,20 @@ def test_lane_tails(world: World) -> None:
     conn = net.link_index["W_J1_0->J1_J2_0"] - net.n_lanes
     assert tails.conn_last[conn] == c2
     assert c1 != c2
+
+
+def test_queues_state_dict_round_trip(world: World) -> None:
+    import json
+
+    q = world.queues
+    q.push(3, 10)
+    q.push(1, 11)
+    q.push(3, 12)
+    q.push(2, 13)
+    q[2].popleft()  # an empty queue is not part of the state
+    state = json.loads(json.dumps(q.state_dict()))
+    assert state == {"queues": [[1, [11]], [3, [10, 12]]]}
+    other = InsertionQueues(world.net)
+    other.push(5, 99)
+    other.load_state_dict(state)
+    assert other.roads() == [1, 3] and list(other[3]) == [10, 12] and len(other) == 3

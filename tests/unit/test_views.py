@@ -237,6 +237,22 @@ def test_set_speed_takes_effect_next_step() -> None:
     assert sim.vehicles["v"].speed_override is None  # expired after 30 s
 
 
+def test_set_route_through_the_collection(junction: Scenario) -> None:
+    sim = Simulation(junction, seed=3)
+    sim.vehicles.add(route=["E_in", "W_out"], id="probe")
+    sim.step()
+    cached = sim.vehicles["probe"]
+    sim.vehicles.set_route("probe", ["E_in", "S_out"])
+    view = sim.vehicles["probe"]
+    assert view.route == ("E_in", "S_out") and cached.route == ("E_in", "W_out")
+    assert view.next_road == "S_out"
+    with pytest.raises(CommandError, match='must start at its current road "E_in"'):
+        sim.vehicles.set_route("probe", ["W_in", "E_out"])
+    while "probe" in sim.vehicles:
+        sim.step()
+    assert "probe" in sim.vehicles.ids("arrived")
+
+
 # ------------------------------------------------------------------------------- lanes, roads
 def test_lane_count_conservation(junction: Scenario) -> None:
     sim = Simulation(junction, seed=7)

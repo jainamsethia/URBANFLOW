@@ -69,7 +69,8 @@ class CompiledNetwork:
     """Trimmed reference length, m."""
     road_speed_limit: FloatArray
     road_capacity_vph: FloatArray
-    """``n * 3600 / (T + (l + s0) / v)`` with the built-in car defaults."""
+    """``n * q_max(v)``: IDM peak equilibrium flow per lane of the built-in car at the road
+    speed limit (:func:`~urbanflow.core.capacity.idm_capacity_vph`), veh/h."""
 
     # ------------------------------------------------------------------ links
     link_kind: UIntArray

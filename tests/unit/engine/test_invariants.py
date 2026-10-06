@@ -13,6 +13,7 @@ from urbanflow.core.errors import InvariantViolation, SimulationError
 from urbanflow.core.types import SignalState, VehicleStatus
 from urbanflow.engine import Engine, check_always, check_debug
 from urbanflow.engine.advance import Advance
+from urbanflow.engine.invariants import Holds
 from urbanflow.scenario import ScenarioBuilder
 
 
@@ -192,3 +193,96 @@ def test_i10_passes_a_whole_signalised_run(signalled: Engine) -> None:
     for _ in range(200):  # debug checks run every step: several full cycles, no violation
         signalled.step()
     assert signalled.red_runs == 0
+
+
+# --------------------------------------------------------------------------- I5 and I9
+@pytest.fixture
+def pair(
+    make_engine: Callable[..., Engine], junction_builder: Callable[..., ScenarioBuilder]
+) -> Engine:
+    """Two vehicles inserted on W_in_0 (to E_out) and N_in_0 (to S_out), nothing else."""
+    b = junction_builder()
+    b.trip("we", 0.0, route=["W_in", "E_out"])
+    b.trip("ns", 0.0, route=["N_in", "S_out"])
+    e = make_engine(b.build())
+    e.step()
+    e.holds = None  # the hand-made states below are not the step's holds
+    return e
+
+
+def _onto(e: Engine, vid: str, link: str, pos: float) -> int:
+    """Move ``vid`` onto a connector of its route (committed) or its exit lane."""
+    net, veh = e.network, e.vehicles
+    h = veh.id_to_handle[vid]
+    lk = net.link_index[link]
+    veh.link[h], veh.pos[h] = lk, pos
+    on_conn = lk >= net.n_lanes
+    veh.committed[h] = on_conn
+    veh.next_conn[h] = lk if on_conn else -1
+    veh.route_cursor[h] = 0 if on_conn else 1
+    return h
+
+
+def test_i5_zone_exclusivity(pair: Engine) -> None:
+    """W->E crosses N->S at [2.1, 5.1] on W->E and [5.3, 8.3] on N->S."""
+    e, veh = pair, pair.vehicles
+    a = _onto(e, "we", "W_in_0->E_out_0", 4.0)  # body [-1, 4]
+    b = _onto(e, "ns", "N_in_0->S_out_0", 7.0)  # body [2, 7]
+    _violates("I5", lambda: check_debug(e), int(veh.uid[a]))
+    veh.forced[b] = True  # a forced grant's overlap is counted in zone_conflicts instead
+    check_debug(e)
+    veh.forced[b] = False
+    veh.pos[a] = 1.5  # before the zone: fine
+    check_debug(e)
+    # P4 review repro: held at the zone, capped exactly at z_in; round-off leaves the front
+    # 1e-15 m past it. Within POSITION_EPS it is not inside (as for every other invariant)
+    we, ns = e.network.link_index["W_in_0->E_out_0"], e.network.link_index["N_in_0->S_out_0"]
+    z_in = next(z[1] for z in e.junctions.conflicts[we - e.network.n_lanes] if z[0] == ns)
+    veh.pos[a] = z_in + 1e-12
+    check_debug(e)
+    veh.pos[a] = z_in + 1e-3
+    _violates("I5", lambda: check_debug(e), int(veh.uid[a]))
+    veh.pos[a] = 4.0
+    # on its exit lane, a body is mapped back onto the connector it has locked
+    b = _onto(e, "ns", "S_out_0", 1.0)  # rear 1 - 5 + 10.4 = 6.4 on N->S
+    check_debug(e)  # no lock: the rear has passed every zone (lock_conn is released)
+    veh.lock_conn[b] = e.network.link_index["N_in_0->S_out_0"]
+    _violates("I5", lambda: check_debug(e), int(veh.uid[b]))
+
+
+def test_i9_held_vehicles_stay_behind_their_obstacle(pair: Engine) -> None:
+    e, veh, net = pair, pair.vehicles, pair.network
+    conn = net.link_index["W_in_0->E_out_0"]
+    a = _onto(e, "we", "W_in_0->E_out_0", 1.0)
+    h = np.array([a])
+
+    def hold(link: int, pos: float, exempt: bool = False) -> None:
+        e.holds = Holds(h, np.array([link]), np.array([pos]), np.array([exempt]))
+
+    hold(conn, 2.1)  # held at its first zone
+    check_debug(e)
+    veh.pos[a] = 2.5
+    _violates("I9", lambda: check_debug(e), int(veh.uid[a]))
+    hold(conn, 2.1, exempt=True)  # the obstacle appeared when it could not stop any more
+    check_debug(e)
+    lane = net.link_index["W_in_0"]
+    hold(lane, float(net.link_length[lane]))  # held at the stop line, found beyond it
+    _violates("I9", lambda: check_debug(e), int(veh.uid[a]))
+    _onto(e, "we", "E_out_0", 3.0)
+    hold(conn, 2.1)  # held at a zone, found on the exit lane
+    _violates("I9", lambda: check_debug(e), int(veh.uid[a]))
+
+
+def test_i5_and_i9_pass_a_saturated_uncontrolled_run(
+    make_engine: Callable[..., Engine], junction_builder: Callable[..., ScenarioBuilder]
+) -> None:
+    b = junction_builder()
+    for i, (a, z) in enumerate((("W", "E"), ("N", "S"), ("E", "N"), ("S", "W"))):
+        b.flow(f"f{i}", route=[f"{a}_in", f"{z}_out"], period=4.0)
+    e = make_engine(b.build())
+    held = 0
+    for _ in range(300):  # debug checks every step
+        e.step()
+        assert e.holds is not None
+        held += int(e.holds.handles.size)
+    assert held > 0 and e.arrived > 100

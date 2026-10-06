@@ -137,13 +137,77 @@ def test_merge_alignment_by_distance_to_end(junction: World) -> None:
     w = junction
     length = w.net.link_length
     straight, right = "W_in_0->E_out_0", "S_in_0->E_out_0"
-    i = w.place(straight, 2.0, 5.0, route=("W_in", "E_out"))
+    zone = next(
+        z for z in w.junctions.conflicts[w.link(straight) - w.net.n_lanes] if z[0] == w.link(right)
+    )
+    i = w.place(straight, zone[1] + 1.0, 5.0, route=("W_in", "E_out"))  # inside the merge zone
     j = w.place(right, 3.0, 2.0, route=("S_in", "E_out"))
-    rem_i = float(length[w.link(straight)]) - 2.0
+    rem_i = float(length[w.link(straight)]) - float(w.veh.pos[i])
     rem_j = float(length[w.link(right)]) - 3.0
     assert rem_j < rem_i
     assert _lead(w, i) == (j, pytest.approx(rem_i - rem_j - 5.0), 2.0)
     assert _lead(w, j)[0] == -1  # i is farther from the merge point
+
+
+def test_no_merge_leader_before_the_merge_zone(junction: World) -> None:
+    """P4 repro: a left turner waiting at its first crossing zone (0.78 m into a 10.7 m
+    connector) and a right turner entering the 5.6 m sibling that merges with it "overlap"
+    by distance to the end (9.9 m < 5.1 m + 5 m) although they are metres apart. Before
+    its merge zone the paths are more than W_max apart and the zone lock orders them."""
+    w = junction
+    left, right = "N_in_0->E_out_0", "S_in_0->E_out_0"
+    z_in = next(
+        z[1] for z in w.junctions.conflicts[w.link(left) - w.net.n_lanes] if z[0] == w.link(right)
+    )
+    i = w.place(left, 0.78, 0.0, route=("N_in", "E_out"))
+    j = w.place(right, 0.57, 2.3, route=("S_in", "E_out"))
+    rem_i = float(w.net.link_length[w.link(left)]) - 0.78
+    rem_j = float(w.net.link_length[w.link(right)]) - 0.57
+    assert z_in > 0.78 and rem_j < rem_i < rem_j + C.VEHICLE_LENGTH  # would overlap
+    assert _lead(w, i)[0] == -1
+    w.veh.pos[i] = z_in + 0.1  # inside its merge zone: aligned again
+    rem_i = float(w.net.link_length[w.link(left)]) - z_in - 0.1
+    w.veh.pos[j] = float(w.net.link_length[w.link(right)]) - (rem_i - 2.0)
+    assert _lead(w, i)[:2] == (j, pytest.approx(2.0 - C.VEHICLE_LENGTH))
+
+
+def test_a_rear_hanging_back_over_a_merging_sibling_counts_from_the_merge_zone(
+    junction: World,
+) -> None:
+    """P4 review repro (2x2 grid with trucks, I4 "gap -0.735 m"): a bus that left the
+    short right-turn connector still hangs back ~10 m over it. A left turner waiting at its
+    first zone 0.78 m into its 10.7 m connector saw that rear as if it lay on its own path
+    (gap (L - 0.78) + pos - 12 < 0) although the paths only meet in the merge zone."""
+    w = junction
+    left, right = w.link("N_in_0->E_out_0"), w.link("S_in_0->E_out_0")
+    length = w.net.link_length
+    z_in = next(z[1] for z in w.junctions.conflicts[left - w.net.n_lanes] if z[0] == right)
+    bus = w.place("E_out_0", 1.6, 2.6, route=("E_out",), vtype="bus")
+    w.veh.lock_conn[bus] = right  # came from the right turn, lock still held
+    rear = 1.6 - float(w.veh.length[bus])
+    assert rear < z_in - float(length[left])  # hangs back past the merge zone's start
+    i = w.place("N_in_0->E_out_0", 0.78, 0.0, route=("N_in", "E_out"))
+    assert z_in > 0.78 and float(length[left]) - 0.78 + rear < 0  # the old, false overlap
+    assert _lead(w, i)[:2] == (bus, pytest.approx(z_in - 0.78))
+    # a committed lane vehicle looking through the left turn: the same clamp
+    d = 3.0
+    lane = w.place("N_in_0", float(length[w.link("N_in_0")]) - d, 8.0, route=("N_in", "E_out"))
+    w.veh.committed[lane] = True
+    assert _lead(w, lane)[:2] == (i, pytest.approx(d + 0.78 - C.VEHICLE_LENGTH))
+    w.veh.pos[i] = z_in + 0.5  # inside the merge zone: the whole rear is on its path
+    assert _lead(w, i)[:2] == (bus, pytest.approx(float(length[left]) - z_in - 0.5 + rear))
+    w.veh.pos[i] = 0.78
+    w.veh.lock_conn[bus] = -1  # unknown origin: conservative, the whole rear
+    assert _lead(w, i)[:2] == (bus, pytest.approx(float(length[left]) - 0.78 + rear))
+    w.veh.lock_conn[bus] = left  # hangs back over the follower's own connector: whole rear
+    assert _lead(w, i)[:2] == (bus, pytest.approx(float(length[left]) - 0.78 + rear))
+    w2 = World(w.net)
+    bus2 = w2.place("E_out_0", 1.6, 2.6, route=("E_out",), vtype="bus")
+    w2.veh.lock_conn[bus2] = right
+    lane2 = w2.place("N_in_0", float(length[w.link("N_in_0")]) - d, 8.0, route=("N_in", "E_out"))
+    w2.veh.committed[lane2] = True
+    gap = d + float(length[left]) + z_in - float(length[left])
+    assert _lead(w2, lane2)[:2] == (bus2, pytest.approx(gap))
 
 
 def test_diverge_zone(junction: World) -> None:
@@ -214,14 +278,15 @@ def _reference(w: World) -> dict[int, tuple[int, float, float]]:
     net, veh = w.net, w.veh
     n_lanes, length = net.n_lanes, net.link_length
     diverge: dict[tuple[int, int], float] = {}
-    merge: set[tuple[int, int]] = set()
+    merge: dict[tuple[int, int], float] = {}  # (a, b) -> start of the merge zone on a
     for k in range(net.n_conflicts):
         a, b = int(net.conf_a[k]), int(net.conf_b[k])
         if net.conf_kind[k] == ConflictKind.diverging:
             diverge[a, b] = float(net.conf_zone_b[k][1])
             diverge[b, a] = float(net.conf_zone_a[k][1])
         elif net.conf_kind[k] == ConflictKind.merging:
-            merge |= {(a, b), (b, a)}
+            merge[a, b] = float(net.conf_zone_a[k][0])
+            merge[b, a] = float(net.conf_zone_b[k][0])
     run = w.run().tolist()
     remaining = dict(zip(run, w.remaining().tolist(), strict=True))
     out: dict[int, tuple[int, float, float]] = {}
@@ -236,16 +301,17 @@ def _reference(w: World) -> dict[int, tuple[int, float, float]]:
         d_end = float(length[li]) - pi
         nc = int(veh.next_conn[i])
         on_lane = li < n_lanes
-        path: list[tuple[int, float]] = []
+        # (link, offset, connector leading into it or -1, i's front on that connector)
+        path: list[tuple[int, float, int, float]] = []
         stop = math.inf
         if not on_lane:
             to = int(net.conn_to_lane[li - n_lanes])
-            path = [(to, d_end)]
+            path = [(to, d_end, li, pi)]
             if remaining[i] >= 2:
                 stop = d_end + float(length[to])
         elif veh.committed[i] and nc >= 0:
             to = int(net.conn_to_lane[nc - n_lanes])
-            path = [(nc, d_end), (to, d_end + float(length[nc]))]
+            path = [(nc, d_end, -1, 0.0), (to, d_end + float(length[nc]), nc, -d_end)]
             if remaining[i] >= 2:
                 stop = d_end + float(length[nc] + length[to])
         ptr = net.lane_out_ptr
@@ -259,11 +325,21 @@ def _reference(w: World) -> dict[int, tuple[int, float, float]]:
             gaps: list[float] = []
             if lj == li and (pj, int(veh.uid[j])) > (pi, int(veh.uid[i])):
                 gaps.append(rj - pi)
-            gaps += [off + rj for lk, off in path if lj == lk and off < reach]
+            for lk, off, via, front in path:
+                if lj != lk or off >= reach:
+                    continue
+                start = merge.get((via, int(veh.lock_conn[j])))
+                if rj < 0 and start is not None and front <= start:
+                    # hangs back over a merging sibling: on via's path only in the zone
+                    gaps.append(off + max(rj, start - float(length[via])))
+                else:
+                    gaps.append(off + rj)
             if lj >= n_lanes and rj < 0:  # rear hanging back over its from-lane's end
                 back = int(net.conn_from_lane[lj - n_lanes])
                 gaps += [
-                    off + float(length[lk]) + rj for lk, off in path if lk == back and off < reach
+                    off + float(length[lk]) + rj
+                    for lk, off, _, _ in path
+                    if lk == back and off < reach
                 ]
             if on_lane and lj in out_conns:
                 limit = math.inf if lj == nc else diverge.get((nc, lj), 0.0)
@@ -271,7 +347,12 @@ def _reference(w: World) -> dict[int, tuple[int, float, float]]:
                     gaps.append(d_end + rj)
             if not on_lane and (li, lj) in diverge and pj > pi and rj <= diverge[li, lj]:
                 gaps.append(rj - pi)
-            if not on_lane and (li, lj) in merge and float(length[lj]) - pj < d_end:
+            if (
+                not on_lane
+                and (li, lj) in merge
+                and float(length[lj]) - pj < d_end
+                and pi > merge[li, lj]  # i's front inside its merge zone
+            ):
                 gaps.append(d_end - (float(length[lj]) - pj) - lenj)
             for g in gaps:
                 if best is None or (g, int(veh.uid[j])) < (best[0], int(veh.uid[best[1]])):
@@ -311,6 +392,9 @@ def _traffic(draw: st.DrawFn, net: CompiledNetwork) -> World:
             )
             if on_lane and w.veh.next_conn[h] >= 0:
                 w.veh.committed[h] = draw(st.booleans())
+            into = (np.flatnonzero(net.conn_to_lane == lk) + net.n_lanes).tolist()
+            if on_lane and into and draw(st.booleans()):  # still holds the lock it came by
+                w.veh.lock_conn[h] = draw(st.sampled_from(into))
     return w
 
 

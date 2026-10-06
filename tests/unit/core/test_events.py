@@ -1,19 +1,25 @@
-"""EventType codes and the columnar EventBuffer (plan B.2 #12, F.8)."""
+"""EventType codes, the columnar EventBuffer and the EventBus (plan B.2 #12, F.8)."""
 
 from __future__ import annotations
 
+import dataclasses
 import typing
+from typing import Any
 
 import numpy as np
 import pytest
 
 import urbanflow
+from urbanflow.core import events as events_module
 from urbanflow.core.config import RecordEvent
+from urbanflow.core.errors import NotFoundError
 from urbanflow.core.events import (
     COLUMNS,
     NO_VEHICLE,
     PHASE_FORCED_BIT,
+    Event,
     EventBuffer,
+    EventBus,
     EventType,
     decode_phase_aux,
     phase_aux,
@@ -143,3 +149,130 @@ def test_phase_changed_aux_encoding() -> None:
     buf = EventBuffer()  # fits the i32 aux column
     buf.append(EventType.phase_changed, 1, 0.0, intersection=0, aux=phase_aux(2, forced=True))
     assert decode_phase_aux(int(buf.aux[0])) == (2, True) and buf.link[0] == -1
+
+
+# ------------------------------------------------------------------------------- EventBus
+VEHICLES = ["a", "b", "c"]
+LINKS = ["L0", "L1", "C0"]
+INTERSECTIONS = ["J"]
+
+
+def _buffer() -> EventBuffer:
+    buf = EventBuffer()
+    buf.append(EventType.vehicle_inserted, 3, 2.0, handle=5, uid=1, link=0)
+    buf.append(EventType.phase_changed, 3, 2.0, intersection=0, aux=phase_aux(1, forced=True))
+    buf.append(EventType.vehicle_exited_link, 3, 2.25, handle=5, uid=1, link=0, intersection=-1)
+    buf.append(EventType.vehicle_arrived, 3, 2.5, handle=0, uid=2, link=1)
+    return buf
+
+
+def _dispatch(bus: EventBus, buf: EventBuffer) -> None:
+    bus.dispatch(buf, vehicle_ids=VEHICLES, link_ids=LINKS, intersection_ids=INTERSECTIONS)
+
+
+def test_bus_materialises_events_with_ids() -> None:
+    bus, seen = EventBus(), []
+    bus.subscribe(None, seen.append)
+    _dispatch(bus, _buffer())
+    assert [e.type for e in seen] == [
+        EventType.vehicle_inserted,
+        EventType.phase_changed,
+        EventType.vehicle_exited_link,
+        EventType.vehicle_arrived,
+    ]
+    inserted, phase, _, arrived = seen
+    assert inserted == Event(EventType.vehicle_inserted, 2.0, 3, "b", "L0", None, {})
+    assert phase == Event(
+        EventType.phase_changed, 2.0, 3, None, None, "J", {"phase": 1, "forced": True}
+    )
+    assert (arrived.vehicle, arrived.link, arrived.time) == ("c", "L1", 2.5)
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        arrived.time = 0.0  # type: ignore[misc]
+
+
+def test_event_data_is_read_only_for_every_subscriber() -> None:
+    """P4 review: one Event goes to every subscriber, so a callback mutating ``data``
+    changed what later subscribers saw for phase_changed."""
+    bus, seen = EventBus(), []
+
+    def vandal(e: Event) -> None:
+        with pytest.raises(TypeError):
+            e.data["phase"] = 0  # type: ignore[index]
+
+    bus.subscribe("phase_changed", vandal)
+    bus.subscribe(None, lambda e: seen.append(dict(e.data)))
+    _dispatch(bus, _buffer())
+    assert seen == [{}, {"phase": 1, "forced": True}, {}, {}]
+
+
+def test_bus_filters_by_type_and_keeps_subscription_order() -> None:
+    bus, calls = EventBus(), []
+    bus.subscribe(EventType.vehicle_arrived, lambda e: calls.append(("arrived", e.vehicle)))
+    bus.subscribe(
+        ["vehicle_inserted", EventType.vehicle_arrived], lambda e: calls.append(("both", e.vehicle))
+    )
+    bus.subscribe("phase_changed", lambda e: calls.append(("phase", e.data["phase"])))
+    _dispatch(bus, _buffer())
+    assert calls == [("both", "b"), ("phase", 1), ("arrived", "c"), ("both", "c")]
+
+
+def test_unsubscribe_is_idempotent_and_works_during_dispatch() -> None:
+    bus, calls = EventBus(), []
+
+    def once(e: Event) -> None:
+        calls.append(e.type)
+        sub.unsubscribe()
+
+    sub = bus.subscribe(None, once)
+    later = bus.subscribe(EventType.vehicle_arrived, lambda _: bus.subscribe(None, calls.append))
+    assert sub.active and bus.has_subscribers
+    _dispatch(bus, _buffer())
+    assert calls == [EventType.vehicle_inserted]  # the one added mid-dispatch waits
+    assert not sub.active
+    sub.unsubscribe()
+    later.unsubscribe()
+    _dispatch(bus, _buffer())
+    assert len(calls) == 1 + 4
+    assert "active=False" in repr(later) and "vehicle_arrived" in repr(later)
+
+
+def test_no_events_are_built_for_unsubscribed_types(monkeypatch: pytest.MonkeyPatch) -> None:
+    built: list[object] = []
+    real = events_module.Event
+
+    def counting(*args: Any, **kwargs: Any) -> Event:
+        built.append(args or kwargs)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(events_module, "Event", counting)
+    bus = EventBus()
+    _dispatch(bus, _buffer())  # no subscribers at all
+    sub = bus.subscribe(EventType.vehicle_teleported, built.append)
+    _dispatch(bus, _buffer())  # subscribers, but not for these types
+    assert built == []
+    sub.unsubscribe()
+    bus.subscribe(EventType.vehicle_arrived, lambda _: None)
+    _dispatch(bus, _buffer())
+    assert len(built) == 1  # only the arrival
+
+
+def test_callback_errors_propagate() -> None:
+    bus, calls = EventBus(), []
+
+    def boom(e: Event) -> None:
+        raise RuntimeError("user bug")
+
+    bus.subscribe(EventType.vehicle_inserted, boom)
+    bus.subscribe(None, calls.append)
+    with pytest.raises(RuntimeError, match="user bug"):
+        _dispatch(bus, _buffer())
+    assert calls == []  # the rest of that dispatch is skipped
+
+
+def test_subscribe_validation() -> None:
+    bus = EventBus()
+    with pytest.raises(NotFoundError, match=r'unknown event type "vehicle_arived" \(did you mean'):
+        bus.subscribe("vehicle_arived", print)
+    with pytest.raises(TypeError, match="callable"):
+        bus.subscribe(None, "print")  # type: ignore[arg-type]
+    assert not bus.has_subscribers

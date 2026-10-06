@@ -275,3 +275,43 @@ def test_signalised_single_intersection_1800_s(make_engine: MakeEngine) -> None:
     # a green starts every 34 s of the 30/3/1 cycle: at 34, 68, ..., 1768 s (not forced)
     assert changes == [(1, False), (0, False)] * 26
     assert a.step_count == 1800 and (a.generated, a.arrived) == (b.generated, b.arrived)
+
+
+# --------------------------------------------------------------------------- end of green
+def test_end_of_green_clearing_serves_a_starving_permissive_left(
+    make_engine: MakeEngine, junction_builder: Builder
+) -> None:
+    """B.2 #25 limitation: opposing W -> E traffic every 3 s never leaves the gap a stopped
+    E -> S left turner needs, so it waits at the line through the green; in the yellow
+    that ends its g it commits (at most one per lane and yellow) and clears on its zone
+    locks. Debug checks (I5, I9) run every step."""
+    b = junction_builder(kind="signalized", duration=600.0)
+    b.signal("J", template="two_phase", green=30.0, yellow=3.0, all_red=1.0)
+    b.vehicle_type("det", **DET)
+    b.flow("we", route=["W_in", "E_out"], period=3.0, vehicle_type="det")
+    b.flow("left", route=["E_in", "S_out"], period=80.0, begin=5.0, vehicle_type="det")
+    e = make_engine(b.build())
+    veh, net = e.vehicles, e.network
+    lane = net.link_index["E_in_0"]
+    states: list[tuple[Stage, int]] = []
+    eligible = -1  # uid held at the line in the last green step
+    for _ in range(600):
+        on_lane = veh.running()[veh.link[veh.running()] == lane]
+        waiting = set(on_lane[~veh.committed[on_lane]].tolist())
+        e.step()
+        committed = {h for h in waiting if veh.active[h] and veh.committed[h]}
+        stage = Stage.from_code(int(e.signals.stage[J]))
+        states.append((stage, len(committed)))
+        if stage is YELLOW:  # only the vehicle waiting since before the yellow sneaks
+            assert {int(veh.uid[h]) for h in committed} <= {eligible}
+        else:
+            eligible = int(e.sneakers[lane])
+            if eligible >= 0:  # held at its line in this green step
+                h = veh.id_to_handle[veh.uid_to_id[eligible]]
+                assert veh.held[h] and veh.link[h] == lane
+    yellow_commits = [n for stage, n in states if stage is YELLOW]
+    assert sum(yellow_commits) >= 6 and max(yellow_commits) <= C.SNEAKERS_PER_PHASE
+    assert e.teleported == 0 and e.zone_conflicts == 0 and e.red_runs == 0
+    # 8 left turners (one per 80 s, fewer than the 68 s cycles): all but the last served
+    still = [vid for vid in veh.id_to_handle if vid.startswith("left.")]
+    assert len(still) <= 1, still

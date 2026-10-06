@@ -72,6 +72,8 @@ def test_multi_hop_in_one_step(corridor_world: World) -> None:
     assert w.veh.next_conn[h] == conn
     w.veh.commit_seq[h] = 4
     w.veh.link_waiting_time[h] = 3.0
+    w.veh.granted[h] = w.veh.forced[h] = True  # a force grant (engine/intersections.py)
+    w.veh.lock_conn[h] = conn
     dx = 1.0 + float(length[conn]) + 3.0
     v = dx / 2.0
     w.veh.speed[h] = v
@@ -79,8 +81,9 @@ def test_multi_hop_in_one_step(corridor_world: World) -> None:
     assert (int(w.veh.link[h]), float(w.veh.pos[h])) == (to, pytest.approx(3.0))
     assert w.veh.route_cursor[h] == 1
     assert not w.veh.committed[h] and w.veh.commit_seq[h] == -1
-    assert w.veh.link_waiting_time[h] == 0.0
-    assert w.veh.lock_conn[h] == conn  # kept across lane entry: the rear is still on it
+    assert not w.veh.granted[h] and w.veh.link_waiting_time[h] == 0.0
+    # kept across lane entry (the rear is still on the connector), and so is forced
+    assert w.veh.lock_conn[h] == conn and w.veh.forced[h]
     assert w.veh.next_conn[h] == plan_connector(net, to, w.routes.get(0), 1)
     assert w.veh.v0[h] == pytest.approx(desired_speed(net, w.veh, w.types, np.array([h]))[0])
     assert adv.crossed.tolist() == [h] and adv.crossed_committed.tolist() == [True]
@@ -107,7 +110,7 @@ def test_connector_entry_refreshes_v0(corridor_world: World) -> None:
     assert w.net.link_ids[int(w.veh.link[h])] == "J1_J2_2->J2_S_0"
     assert w.veh.v0[h] == pytest.approx(w.net.link_speed_limit[w.veh.link[h]])
     assert w.veh.route_cursor[h] == 0 and w.veh.committed[h]
-    assert w.veh.lock_conn[h] == w.veh.link[h]  # connector entry locks it (F.3 foe scan)
+    assert w.veh.lock_conn[h] == -1  # locks come from zone grants, not connector entry
 
 
 @pytest.mark.parametrize(
@@ -125,8 +128,9 @@ def test_interpolated_arrival(
     lane = float(w.net.link_length[w.link("E_out_0")])
     h = w.place("E_out_0", lane - start, v_start, route=("E_out",))
     w.veh.speed[h] = v_new
+    w.veh.lock_conn[h] = w.link("W_in_0->E_out_0")
     adv = _advance(w, [dx], [v_start], time=20.0)
-    assert adv.arrived.tolist() == [h]
+    assert adv.arrived.tolist() == [h] and w.veh.lock_conn[h] == -1  # released on arrival
     assert w.veh.status[h] == VehicleStatus.arrived.code and not w.veh.active[h]
     assert w.veh.pos[h] == lane and adv.dx[0] == pytest.approx(start)
     assert _events(w) == [

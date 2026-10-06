@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import ClassVar, Protocol
+from typing import Any, ClassVar, Protocol
 
 import networkx as nx
 import numpy as np
@@ -65,6 +65,19 @@ class RouteTable:
             raise NotFoundError(f"unknown route id {route_id} ({len(self.routes)} routes)")
         return self.routes[route_id]
 
+    def state_dict(self) -> dict[str, Any]:
+        """JSON-safe state: ``{"routes": [[road, ...], ...]}`` in id order."""
+        return {"routes": [r.tolist() for r in self.routes]}
+
+    def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        """Replace the table by :meth:`state_dict` output (same ids)."""
+        self.routes.clear()
+        self._ids.clear()
+        for roads in state["routes"]:
+            self.intern(roads)
+        if len(self.routes) != len(state["routes"]):
+            raise ValueError("route table state has duplicate routes")
+
 
 @dataclass(frozen=True, slots=True)
 class RoutingContext:
@@ -82,7 +95,12 @@ class RoutingContext:
 
 
 class Router(Protocol):
-    """A route source (I.1); register with ``@register_router("name")``."""
+    """A route source (I.1); register with ``@register_router("name")``.
+
+    A router with runtime state (e.g. travel-time estimates) also implements
+    ``state_dict() -> dict`` (JSON-safe) and ``load_state_dict(state)``, which snapshots,
+    restores and ``state_digest`` use; a router without them is treated as stateless.
+    """
 
     name: ClassVar[str]
 

@@ -8,13 +8,12 @@ within one step: lane -> planned connector -> the connector's ``to_lane`` -> ...
 * an uncommitted vehicle is never advanced past a stop line: ``pos = L``, ``v = 0``, counted
   in ``safety_cap_violations`` (reachable only after a counted violation);
 * lane entry: ``route_cursor += 1``, ``v0``, ``valid_mask``, ``next_conn`` (I.2),
-  ``committed``/``granted``/``forced``/``commit_seq`` cleared, ``link_waiting_time = 0``,
-  then the router's ``on_road_entry`` reroute hook. ``v0`` is also refreshed on connector
-  entry (it is the desired speed on the current link, E.4);
-* connector entry sets ``lock_conn`` to the connector: it is kept across the lane entry
-  until bookkeeping sees the rear leave the connector, so admission still treats the
-  vehicle as a foe of that connector's zones (F.3). (Zone grants replace this with
-  the E.4 set-on-grant rule.)
+  ``committed``/``granted``/``commit_seq`` cleared, ``link_waiting_time = 0``, then the
+  router's ``on_road_entry`` reroute hook. ``v0`` is also refreshed on connector entry (it
+  is the desired speed on the current link, E.4). ``lock_conn`` (set on the zone grant,
+  F.3) is kept until the rear has passed the connector's last zone, and so is ``forced``
+  while a lock is held: the forced grant still covers the rear (I5 exemption);
+* an arrival releases its zone lock (``lock_conn = -1``).
 
 Crossing times assume constant acceleration within the step (``(v' - v)/dt``, or the
 constant deceleration of an in-step stop): the time to cover ``x`` from speed ``v`` is
@@ -82,7 +81,7 @@ def _enter_lanes(
     veh.v0[handles] = desired_speed(net, veh, types, handles)
     veh.committed[handles] = False
     veh.granted[handles] = False
-    veh.forced[handles] = False
+    veh.forced[handles] &= veh.lock_conn[handles] >= 0  # the rear may still be in a zone
     veh.commit_seq[handles] = -1
     veh.link_waiting_time[handles] = 0
     _replan(net, veh, routes, handles)
@@ -181,6 +180,7 @@ def advance_links(
         if done.size:
             veh.status[done] = _ARRIVED
             veh.active[done] = False
+            veh.lock_conn[done] = -1
             veh.pos[done] = lengths[link[last]]
             moved[active[last]] -= over[last]
             arrived.append(done)
@@ -207,7 +207,6 @@ def advance_links(
         crossed_committed.append(committed[hop_lane])
         veh.pos[into_conn] -= lengths[link[hop_lane]]
         veh.link[into_conn] = conn
-        veh.lock_conn[into_conn] = conn
         veh.v0[into_conn] = desired_speed(net, veh, types, into_conn)
         # connector -> its to_lane (a new road)
         into_lane = h[hop_conn]

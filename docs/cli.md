@@ -125,6 +125,9 @@ the config file `[simulation]` < `--set` < the dedicated options. The run direct
 `spec.json` (scenario identity, seed, resolved config, `--controller` choices), `scenario.json` (an exact copy),
 `env.json` (Python, platform, CPU, RAM, versions), `result.json` (the full result, loadable
 with `SimulationResult.load`) and `summary.json`, the nested summary, written last.
+The printed `State digest` (also `state_digest` in `result.json` and in `--json` output)
+is the sha256 of the final engine state: two runs with equal digests on the same platform
+ended in exactly the same state.
 Run ids look like `20260923T141502-grid-3x3-s7-a1f0` (UTC time, scenario, seed, random
 suffix). Ctrl-C stops the run, saves the partial results with `interrupted: true` and
 exits 130.
@@ -139,13 +142,14 @@ Loaded single_intersection: 1 intersection, 8 roads, 16 lanes, 16 connectors  (h
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━┓
 ┃ Metric                      ┃       Value ┃
 ┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━┩
-│ Vehicles departed / arrived │   386 / 346 │
-│ Vehicles en route / waiting │      40 / 0 │
-│ Throughput                  │ 2,076 veh/h │
-│ Mean travel time            │      48.3 s │
+│ Vehicles departed / arrived │   386 / 345 │
+│ Vehicles en route / waiting │      41 / 0 │
+│ Throughput                  │ 2,070 veh/h │
+│ Mean travel time            │      51.9 s │
 │ Teleports                   │           0 │
-│ Wall time                   │      0.62 s │
+│ Wall time                   │      0.48 s │
 └─────────────────────────────┴─────────────┘
+State digest: c831f98be7f625dcc42aac30f92dc6ef6fae2c45c048c48b75eede3cc1ad7668
 Run saved: runs/20260929T110843-single-intersection-s7-0b3c
 ```
 

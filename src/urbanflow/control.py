@@ -1,4 +1,5 @@
-"""Control namespaces of a simulation: ``sim.signals`` (plan AA 5.4, H.2, F.4).
+"""Control namespaces of a simulation: ``sim.signals`` and ``sim.events`` (plan AA 5.4,
+H.2, F.4, F.8).
 
 Reads return snapshot copies (:class:`~urbanflow.views.SignalView`,
 :class:`~urbanflow.views.PhaseInfo`) or read-only arrays cached for the current step.
@@ -9,13 +10,14 @@ index), phases by index or phase id; indices may be Python or numpy integers.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from typing import TYPE_CHECKING
 
 import numpy as np
 
 from urbanflow.core.constants import TIME_EPS
 from urbanflow.core.errors import CommandError, NotFoundError
+from urbanflow.core.events import EventBus, EventCallback, EventType, Subscription
 from urbanflow.core.types import IntArray, Stage, UIntArray
 from urbanflow.signals import ControllerRef, SignalController
 from urbanflow.views import (
@@ -30,7 +32,7 @@ from urbanflow.views import (
 if TYPE_CHECKING:
     from urbanflow.engine import Engine
 
-__all__ = ["SignalsAPI"]
+__all__ = ["EventsAPI", "SignalsAPI", "Subscription"]
 
 
 class SignalsAPI:
@@ -153,3 +155,31 @@ class SignalsAPI:
         it replaces the parked controller. ``reset()`` restores the configured ones."""
         self._engine.commands.set_controller(intersection, ref)
         self._cache.clear()
+
+
+class EventsAPI:
+    """``sim.events``: callbacks for engine events and cumulative counts (AA 5.4, F.8).
+
+    Callbacks receive frozen :class:`~urbanflow.core.events.Event` objects (ids, never
+    engine indices) after each step has completed, in event order; control calls made
+    from a callback take effect in the next step, and a callback's exception propagates
+    out of ``step()`` with the state already consistent (AA 5.5). Events of types nobody
+    subscribed to are never materialised. Subscriptions survive ``reset()``.
+    """
+
+    def __init__(self, bus: EventBus, counts: Callable[[], Mapping[str, int]]) -> None:
+        self._bus = bus
+        self._counts = counts
+
+    def subscribe(
+        self,
+        types: EventType | str | Iterable[EventType | str] | None,
+        callback: EventCallback,
+    ) -> Subscription:
+        """Call ``callback(event)`` for every event of ``types`` (a type, several, or None
+        for all); ``.unsubscribe()`` on the result stops it."""
+        return self._bus.subscribe(types, callback)
+
+    def counts(self) -> dict[EventType, int]:
+        """Events per type, cumulative since the last reset (every type, zeros included)."""
+        return {EventType(name): n for name, n in self._counts().items()}

@@ -94,3 +94,21 @@ def test_router_registry() -> None:
         events=EventBuffer(),
     )
     assert Fixed().on_road_entry(np.array([1]), ctx) == {1: (3, 4)}
+
+
+def test_state_dict_round_trip_keeps_ids() -> None:
+    import json
+
+    table = RouteTable()
+    for roads in ([0, 2, 5], [1, 3], [4]):
+        table.intern(roads)
+    state = json.loads(json.dumps(table.state_dict()))
+    assert state == {"routes": [[0, 2, 5], [1, 3], [4]]}
+    other = RouteTable()
+    other.intern([9, 9, 9])
+    other.load_state_dict(state)
+    assert len(other) == 3 and other.get(1).tolist() == [1, 3]
+    assert other.lengths.tolist() == [3, 2, 1]
+    assert other.intern([4]) == 2 and other.intern([7]) == 3  # interning continues
+    with pytest.raises(ValueError, match="duplicate"):
+        other.load_state_dict({"routes": [[1], [1]]})

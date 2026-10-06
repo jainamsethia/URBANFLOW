@@ -82,6 +82,10 @@ Vehicles react to the light at their stop line (details in
 [Simulation model](simulation-model.md#signalised-intersections)): on red they stop; on
 yellow they stop if that needs at most 3 m/s², and otherwise cross if the exit lane has
 room and the conflicts are clear; on green, permissive movements yield to protected ones.
+When a permissive movement's green ends, one vehicle per approach lane that has been
+waiting at the line may still turn during the yellow ([end-of-green
+clearing](simulation-model.md#signalised-intersections)); zone locks keep it clear of the
+opposing traffic.
 A vehicle still upstream of the approach (on the previous connector) applies the same
 yellow test, so it never brakes hard for a yellow it will drive through. A vehicle that
 has committed to cross never checks the light again, which is what the all-red clears.
@@ -256,3 +260,8 @@ print(sim.run().summary["travel_time.mean"])
 - Set `accepts_requests = True` and add `request_phase(phase)` to let `request_phase`
   commands reach your controller. An exception raised in `decide` stops the run with a
   `SimulationError` naming the intersection.
+- A controller that keeps state between decisions (counters, timers, learned values)
+  returns it as JSON-safe data from `state_dict()` and takes it back in
+  `load_state_dict(d)`; snapshots, `restore` and `state_digest` use them. A snapshot
+  records `{type, params, state_dict}` per intersection, so restoring into a simulation
+  that no longer runs the controller needs it registered by name.

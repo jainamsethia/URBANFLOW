@@ -6,7 +6,6 @@
   ``vehicle_resumed`` event;
 * ``waiting_time`` (trip-cumulative) and ``link_waiting_time`` (reset on link entry) grow
   by ``dt`` while halting;
-* ``lock_conn`` is cleared once the rear is on a lane (past every zone of the connector);
 * ``stuck_time`` counts continuous halting while ``held`` or on a connector;
 * **watchdog** (``deadlock_timeout > 0``): every vehicle with ``stuck_time >=
   deadlock_timeout`` is teleported, connector vehicles first, then by uid. On its last
@@ -83,7 +82,6 @@ def bookkeeping_step(
     veh.waiting_time[live] += wait
     veh.link_waiting_time[live] += wait
     on_lane = veh.link[live] < net.n_lanes
-    veh.lock_conn[live[on_lane & (veh.pos[live] >= veh.length[live])]] = -1
     stuck = halting & (veh.held[live] | ~on_lane)
     veh.stuck_time[live] = np.where(stuck, veh.stuck_time[live] + dt, 0.0)
     for kind, h in (

@@ -170,7 +170,7 @@ def test_foe_that_left_the_connector_until_its_rear_clears_the_zone(junction: Wo
     w = junction
     left = w.link("W_in_0->N_out_0")
     j = w.place("N_out_0", 1.0, 0.8, route=("N_out",))  # rear 4 m back on the connector
-    w.veh.lock_conn[j] = left  # set on connector entry (engine/advance.py)
+    w.veh.lock_conn[j] = left  # its zone lock (engine/intersections.py::grant_zones)
     i = w.place("E_in_0", _lane_end(w, "E_in_0") - 0.3, 0.0, route=("E_in", "W_out"))
     zone = next(
         z for z in w.junctions.conflicts[w.veh.next_conn[i] - w.net.n_lanes] if z[0] == left
@@ -484,3 +484,116 @@ def test_lookahead_obstacle_needs_the_stop_test_of_admission(series_net: Compile
     assert gap(SignalState.r, 0.99 * v_r) == pytest.approx(obstacle)
     assert math.isinf(gap(SignalState.r, 1.01 * v_r))  # cannot stop: admission decides
     assert math.isinf(gap(SignalState.G, 0.5 * v_y))
+
+
+# --------------------------------------------------------------------------- end-of-green clearing
+LEFT = ("E_in", "S_out")  # g in EW_GREEN, opposing W_in -> E_out
+EW_YELLOW = {"W_in->E_out": "y", "E_in->W_out": "y", "E_in->S_out": "y", "W_in->N_out": "y"}
+
+
+def _sneaker(w: World, *, d: float = 0.5) -> int:
+    """A left turner stopped ``d`` m before the line."""
+    return w.place("E_in_0", _lane_end(w, "E_in_0") - d, 0.0, route=LEFT)
+
+
+def _eligible(w: World, *handles: int) -> np.ndarray:
+    """Per-lane end-of-green eligibility as the engine keeps it in the yellow: the uids of
+    ``handles``, held at their line in the last green step (-1 elsewhere)."""
+    out = np.full(w.net.n_lanes, -1, dtype=np.int64)
+    for h in handles:
+        out[w.veh.link[h]] = w.veh.uid[h]
+    return out
+
+
+def test_a_sneaker_commits_in_the_yellow_that_ends_its_g(signalised: World) -> None:
+    """F.3 end-of-green clearing: exit space only, no gap check; after every other
+    candidate of the step, so the opposing dilemma vehicle commits first."""
+    w = signalised
+    lane = _lane_end(w, "W_in_0")
+    i = _sneaker(w)
+    j = w.place("W_in_0", lane - 20.0, V, route=WE)  # dilemma: 4.8 m/s^2 > 3 to stop
+    sneakers = _eligible(w, i)
+    adm, reserved = w.admit(signals=EW_YELLOW, permissive=["E_in->S_out"], sneakers=sneakers)
+    assert w.veh.committed[j] and w.veh.committed[i] and not w.veh.forced[i]
+    assert w.veh.commit_seq[j] < w.veh.commit_seq[i]
+    assert (adm.commits, adm.sneakers, adm.forced) == (2, 1, 0)
+    assert sneakers[w.link("E_in_0")] == -1 and not w.veh.held[i]  # consumed
+    assert reserved[w.link("S_out_0")] == pytest.approx(C.VEHICLE_LENGTH + C.IDM_MIN_GAP)
+    # the same state in green: the gap check holds it (j arrives in ~1.4 s), and being
+    # held at the line on a g movement makes it eligible for the coming yellow
+    w2 = World(w.net)
+    i = _sneaker(w2)
+    w2.place("W_in_0", lane - 20.0, V, route=WE, committed=True)
+    sneakers = np.full(w.net.n_lanes, -1, dtype=np.int64)
+    w2.admit(signals=EW_GREEN, permissive=[], sneakers=sneakers)
+    assert not w2.veh.committed[i] and w2.veh.held[i]
+    assert sneakers.tolist() == _eligible(w2, i).tolist()
+    adm, _ = w2.admit(signals=EW_YELLOW, permissive=["E_in->S_out"], sneakers=sneakers)
+    assert w2.veh.committed[i] and adm.sneakers == 1
+
+
+def test_a_vehicle_that_reaches_the_line_in_the_yellow_does_not_sneak(signalised: World) -> None:
+    """P4 review repro (B.2 #25: it must have waited at the line since before the yellow):
+    a left turner still approaching at the end of the green is not eligible; it brakes for
+    the yellow (2.56 m/s, 4.07 m out: held), and once stopped at the line it stays held."""
+    w = signalised
+    i = w.place("E_in_0", _lane_end(w, "E_in_0") - 60.0, 10.0, route=LEFT)
+    sneakers = np.full(w.net.n_lanes, -1, dtype=np.int64)
+    w.admit(signals=EW_GREEN, permissive=[], sneakers=sneakers)  # free approach (d > D)
+    assert not w.veh.held[i] and (sneakers == -1).all()
+    w.veh.pos[i], w.veh.speed[i] = _lane_end(w, "E_in_0") - 4.07, 2.56
+    for _ in range(2):  # braking in the yellow, then stopped at the line
+        adm, _ = w.admit(signals=EW_YELLOW, permissive=["E_in->S_out"], sneakers=sneakers)
+        assert not w.veh.committed[i] and w.veh.held[i] and adm.sneakers == 0
+        assert (sneakers == -1).all()
+        w.veh.pos[i], w.veh.speed[i] = _lane_end(w, "E_in_0") - 0.5, 0.0
+
+
+@pytest.mark.parametrize(
+    ("case", "signals", "permissive"),
+    [
+        ("not held before", EW_YELLOW, ["E_in->S_out"]),
+        ("another vehicle eligible", EW_YELLOW, ["E_in->S_out"]),
+        ("away from the line", EW_YELLOW, ["E_in->S_out"]),
+        ("exit blocked", EW_YELLOW, ["E_in->S_out"]),
+        ("protected yellow", EW_YELLOW, []),
+        ("red", {}, ["E_in->S_out"]),
+    ],
+)
+def test_no_sneaking_otherwise(
+    signalised: World, case: str, signals: dict[str, str], permissive: list[str]
+) -> None:
+    w = signalised
+    i = _sneaker(w, d=10.0 if case == "away from the line" else 0.5)
+    sneakers = _eligible(w, i)
+    if case == "not held before":
+        sneakers[:] = -1
+    if case == "another vehicle eligible":
+        sneakers[w.link("E_in_0")] += 1
+    if case == "exit blocked":
+        w.place("S_out_0", 4.0, 0.0, route=("S_out",))
+    before = sneakers.copy()
+    adm, _ = w.admit(signals=signals, permissive=permissive, sneakers=sneakers)
+    assert not w.veh.committed[i] and w.veh.held[i] and adm.sneakers == 0
+    assert sneakers.tolist() == before.tolist()  # still eligible (blocked exit: next step)
+
+
+def test_at_most_the_quota_per_lane_and_yellow(signalised: World) -> None:
+    w = signalised
+    first = _sneaker(w)
+    sneakers = _eligible(w, first)
+    w.admit(signals=EW_YELLOW, permissive=["E_in->S_out"], sneakers=sneakers)
+    assert w.veh.committed[first]
+    second = _sneaker(w, d=0.4)  # the next one reaches the line in the same yellow
+    w.veh.pos[first] = 3.0
+    w.veh.link[first] = w.link("E_in_0->S_out_0")
+    w.admit(signals=EW_YELLOW, permissive=["E_in->S_out"], sneakers=sneakers)
+    assert not w.veh.committed[second] and w.veh.held[second]
+    assert C.SNEAKERS_PER_PHASE == 1  # one eligible uid per lane, consumed by the commit
+    # the next green holds it at the line (opposing traffic), so the next yellow serves it
+    w.place("W_in_0", _lane_end(w, "W_in_0") - 20.0, V, route=WE, committed=True)
+    sneakers[:] = -1  # the engine's reset outside the yellow
+    w.admit(signals=EW_GREEN, permissive=[], sneakers=sneakers)
+    assert not w.veh.committed[second] and sneakers[w.link("E_in_0")] == w.veh.uid[second]
+    w.admit(signals=EW_YELLOW, permissive=["E_in->S_out"], sneakers=sneakers)
+    assert w.veh.committed[second]
