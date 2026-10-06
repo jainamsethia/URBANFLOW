@@ -36,3 +36,6 @@ site/
 *.swp
 .DS_Store
 Thumbs.db
+
+# Local tool settings
+.claude/

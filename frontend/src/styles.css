@@ -1,0 +1,6 @@
+@import "tailwindcss";
+
+html, body, #root { height: 100%; }
+body { font-family: ui-sans-serif, system-ui, "Segoe UI", sans-serif; }
+select, input, button { color: inherit; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
