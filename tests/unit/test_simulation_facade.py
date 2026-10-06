@@ -164,12 +164,12 @@ def test_endless_run_drains_through_the_watchdog(
     flow = {"id": "f", "route": ["W_J1", "J1_J2", "J2_E"], "rate": 600, "end": 120}
     doc = corridor_doc(flows=[flow])
     doc["simulation"]["duration"] = None
-    sim = Simulation(Scenario.from_dict(doc), deadlock_timeout=60.0)
+    sim = Simulation(Scenario.from_dict(doc), deadlock_timeout=60.0, lane_changing=False)
     s = sim.run(until=3000.0).summary  # bounded, in case it never drains
     assert sim.done and sim.time < 3000.0
     assert s["vehicles.teleported"] > 0
     assert s["vehicles.arrived"] == s["vehicles.generated"] == s["vehicles.inserted"] == 20
-    stuck = Simulation(Scenario.from_dict(doc), deadlock_timeout=0.0)  # 0: watchdog off
+    stuck = Simulation(Scenario.from_dict(doc), deadlock_timeout=0.0, lane_changing=False)
     s = stuck.run(until=3000.0).summary
     assert not stuck.done and s["vehicles.teleported"] == 0
     assert s["vehicles.arrived"] < s["vehicles.generated"]

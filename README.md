@@ -9,7 +9,8 @@ replays and a web workbench.
 ## What works today
 
 - **Microscopic engine** (vectorised NumPy, deterministic): IDM car-following with a
-  Gipps-style safe-speed cap, ballistic integration, conflict-aware intersections
+  Gipps-style safe-speed cap, ballistic integration, MOBIL lane changing (discretionary
+  and route-mandatory, no shadow vehicles), conflict-aware intersections
   (gap acceptance with time windows, "don't block the box" exit space, conflict-zone
   locks), priority / uncontrolled / signalised junctions, a deadlock watchdog, and
   debug-mode invariants (no overlaps, zone exclusivity, conservation, ...).
@@ -32,7 +33,7 @@ replays and a web workbench.
   view and replay viewer.
 - **Snapshots** (save/restore any state) and **state digests** for bit-exact reproducibility.
 
-Not built yet (planned): lane changing (MOBIL), more generators (corridor, downtown, rush
+Not built yet (planned): more generators (corridor, downtown, rush
 hour), Webster and emergency preemption, transit, the CityFlow importer, the visual
 scenario editor, the experiment database/dashboards and the benchmark suite.
 
@@ -98,33 +99,39 @@ obs, reward, terminated, truncated, info = env.step(info["action_mask"].argmax()
 
 ## Measured results (reproduce with the commands shown)
 
+All measured with lane changing on (the default).
+
 Controller comparison, `grid_3x3`, 1800 s, 3 seeds, paired against `fixed_time`
 (`uv run urbanflow compare grid_3x3 -c fixed_time -c actuated -c max_pressure --seeds 3 --duration 1800`):
 
 | metric | fixed_time | actuated | max_pressure |
 |---|---|---|---|
-| mean travel time (s) | 101.2 | 88.1 (-12.9 %) | 82.9 (-18.1 %) |
-| mean delay (s) | 40.2 | 27.1 (-32.6 %) | 21.9 (-45.5 %) |
-| mean waiting time (s) | 22.2 | 9.4 (-57.5 %) | 7.7 (-65.1 %) |
+| mean travel time (s) | 99.4 | 86.5 (-12.9 %) | 81.0 (-18.5 %) |
+| mean delay (s) | 38.4 | 25.5 (-33.6 %) | 20.0 (-48.1 %) |
+| mean waiting time (s) | 21.3 | 8.4 (-60.6 %) | 6.9 (-67.5 %) |
+| stops per vehicle | 1.4 | 1.0 (-24.9 %) | 0.8 (-39.7 %) |
 
 Tabular Q-learning, single intersection with 3:1 asymmetric demand, 60 training episodes,
 5 held-out evaluation seeds (`uv run python examples/reinforcement_learning/q_learning_single.py`):
 
 | policy | mean waiting (s) | mean travel time (s) |
 |---|---|---|
-| random | 42.7 | 124.9 |
-| fixed cycle (30 s) | 39.8 | 101.8 |
-| max-pressure | 27.1 | 82.6 |
-| Q-learning | 20.6 | 80.8 |
+| random | 43.5 | 125.8 |
+| fixed cycle (30 s) | 46.1 | 110.2 |
+| max-pressure | 18.5 | 69.1 |
+| Q-learning | 23.6 | 88.5 |
+
+The tabular learner (60 short episodes, a 7-feature state) clearly beats random and
+fixed-cycle control but not max-pressure on this junction.
 
 Multi-agent: nine independent tabular Q-learners on `grid_3x3` (PettingZoo env, 40 training
 episodes of 900 s, 3 held-out seeds; `uv run python examples/reinforcement_learning/independent_q_grid.py`):
 
 | policy | mean waiting (s) | mean travel time (s) |
 |---|---|---|
-| fixed-time cycle (30 s) | 22.2 | 100.8 |
-| max-pressure | 8.0 | 83.3 |
-| independent Q-learning | 6.1 | 83.6 |
+| fixed-time cycle (30 s) | 21.7 | 99.6 |
+| max-pressure | 7.4 | 81.5 |
+| independent Q-learning | 5.0 | 80.5 |
 
 Numbers come from this machine (Windows 11 ARM64, Python 3.13); they are deterministic for
 a given seed and platform.

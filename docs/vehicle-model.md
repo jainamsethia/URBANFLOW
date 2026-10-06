@@ -84,6 +84,30 @@ Speeds never go negative, and no deceleration exceeds b<sub>emerg</sub>. Violati
 happen after something broke the invariant v² / (2b̂) ≤ C (a forced speed, a teleport, a
 forced commit); they are counted, never hidden.
 
+## Lane changing: MOBIL
+
+Each step (after the leader search, before intersection admission) every running vehicle
+on a lane that is not committed to its stop line, off its 3 s cooldown and not dwelling may
+change to an adjacent lane, keeping its relative position on the road.
+
+- **Mandatory** changes: the current lane has no connector to the next road of the route.
+  The vehicle moves toward the nearest lane that has one, up to the stop line; until a
+  gap appears it waits at the lane end. **Discretionary** changes (overtaking) happen only
+  farther than 20 m from the stop line and never leave a lane that serves the route.
+- **Safety**: positive gaps to the new leader and follower, the space reserved by
+  vehicles committed into the target lane left free, no cut-in ahead of a committed
+  follower, the safe-speed inequality for the vehicle behind its new leader and for the
+  new follower behind it, and the new follower's deceleration within `lc_safe_decel`.
+- **Incentive** (Kesting, Treiber & Helbing 2007):
+  ã<sub>i</sub> − a<sub>i</sub> + p[(ã<sub>n</sub> − a<sub>n</sub>) + (ã<sub>o</sub> − a<sub>o</sub>)]
+  &gt; Δa<sub>th</sub> − β, with β = min(10, 1.0 · 200 / max(d, 1)) m/s² for mandatory
+  changes (urgency grows toward the stop line) and p = 0 for mandatory changes closer
+  than 50 m.
+- Changes execute one by one (mandatory first, then by incentive, then uid); the
+  neighbours of an executed change decide again next step. The change is instantaneous
+  for the physics; a lateral offset fades out over 2 s for drawing only. There are no
+  shadow vehicles, so lane counts are exact. `lane_changing=False` turns it off.
+
 ## Parameters
 
 Defaults are the built-in `car`; `bus`, `truck` and `emergency` override some of them (see

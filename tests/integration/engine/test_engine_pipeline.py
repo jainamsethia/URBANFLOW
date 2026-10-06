@@ -48,7 +48,12 @@ def test_sub_step_order_is_observable_in_events(
     make_engine: MakeEngine, junction_builder: Builder
 ) -> None:
     e = make_engine(_busy(junction_builder), seed=3)
-    phase = {E.vehicle_departed: 2, E.vehicle_inserted: 3, E.vehicle_exited_link: 8}
+    phase = {
+        E.vehicle_departed: 2,
+        E.vehicle_inserted: 3,
+        E.vehicle_changed_lane: 5,
+        E.vehicle_exited_link: 8,
+    }
     phase |= {E.vehicle_arrived: 8, E.vehicle_stopped: 9, E.vehicle_resumed: 9}
     seen: set[int] = set()
     for _ in range(300):
@@ -68,7 +73,7 @@ def test_sub_step_order_is_observable_in_events(
         assert order == sorted(order), order
         assert set(ev.step.tolist()) <= {e.step_count}
         seen |= set(order)
-    assert seen == {2, 3, 8, 9}
+    assert seen == {2, 3, 5, 8, 9}  # 5: lane changes
 
 
 def test_signal_programs_must_cover_every_signalized_intersection(

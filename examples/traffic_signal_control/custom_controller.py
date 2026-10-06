@@ -2,7 +2,7 @@
 
     uv run python examples/traffic_signal_control/custom_controller.py
 
-The ``longest_queue`` controller switches, every ``check_every`` seconds of green, to the
+The ``most_halted`` controller switches, every ``check_every`` seconds of green, to the
 phase that serves the most halted vehicles. The engine still enforces min-green, yellow
 and all-red, so a controller can never create an unsafe transition.
 """
@@ -24,19 +24,19 @@ from urbanflow.signals import (
 )
 
 
-class LongestQueueParams(BaseModel):
+class MostHaltedParams(BaseModel):
     check_every: float = 10.0
     """Seconds of green between decisions."""
 
 
-@register_controller("longest_queue")
-class LongestQueue(ControllerBase):
+@register_controller("most_halted")
+class MostHalted(ControllerBase):
     """Switch to the phase serving the most halted vehicles."""
 
-    Params = LongestQueueParams
+    Params = MostHaltedParams
 
     def reset(self, setup: ControllerSetup) -> None:
-        self.check_every = cast(LongestQueueParams, setup.params).check_every
+        self.check_every = cast(MostHaltedParams, setup.params).check_every
 
     def decide(self, ctx: ControllerContext) -> int | None:
         if ctx.green_elapsed < max(ctx.min_green, self.check_every):
@@ -47,7 +47,7 @@ class LongestQueue(ControllerBase):
 
 def main() -> None:
     duration = 300 if os.environ.get("URBANFLOW_EXAMPLE_QUICK") == "1" else 1800
-    for controller in ("fixed_time", "longest_queue", "max_pressure"):
+    for controller in ("fixed_time", "most_halted", "max_pressure"):
         sim = Simulation.from_scenario(
             bundled("grid_3x3"), controllers={"*": controller}, seed=3, duration=duration
         )

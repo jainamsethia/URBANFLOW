@@ -118,7 +118,7 @@ def test_stops_before_the_lane_end(make_engine: MakeEngine) -> None:
     """A vehicle on a lane without a connector to its next road waits at the lane end.
 
     ``M_0`` is the only lane ``W_in`` reaches, but only ``M_1`` connects to ``E_out`` (a
-    mandatory lane change, which the vehicle cannot make yet).
+    mandatory lane change, which is switched off here).
     """
     b = ScenarioBuilder("dead_end", duration=600)
     b.vehicle_type("det", **DET)
@@ -132,7 +132,7 @@ def test_stops_before_the_lane_end(make_engine: MakeEngine) -> None:
     b.movement("J1", "W_in", "M", connections=[(0, 0)])
     b.movement("J2", "M", "E_out", connections=[(1, 0)])
     b.trip("v", 0.0, route=["W_in", "M", "E_out"], vehicle_type="det")
-    e = make_engine(b.build(), dt=0.5)
+    e = make_engine(b.build(), dt=0.5, lane_changing=False)
     veh = e.vehicles
     decel = []
     for _ in range(120):
@@ -167,3 +167,26 @@ def test_multi_hop_in_one_step(
         hops.append(entered)
     assert [conn, net.link_index["E_out_0"]] in hops
     assert np.isfinite(e.vehicles.pos).all()
+
+
+def test_mandatory_lane_change_reaches_the_connecting_lane(make_engine: MakeEngine) -> None:
+    """The same dead end with lane changing on: the vehicle moves to M_1 and arrives."""
+    b = ScenarioBuilder("dead_end", duration=600)
+    b.vehicle_type("det", **DET)
+    b.boundary("W", (-100.0, 0.0))
+    b.intersection("J1", (0.0, 0.0), kind="uncontrolled")
+    b.intersection("J2", (200.0, 0.0), kind="uncontrolled")
+    b.boundary("E", (300.0, 0.0))
+    b.road("W_in", "W", "J1")
+    b.road("M", "J1", "J2", lanes=2)
+    b.road("E_out", "J2", "E")
+    b.movement("J1", "W_in", "M", connections=[(0, 0)])
+    b.movement("J2", "M", "E_out", connections=[(1, 0)])
+    b.trip("v", 0.0, route=["W_in", "M", "E_out"], vehicle_type="det")
+    e = make_engine(b.build(), dt=0.5)
+    changed = 0
+    for _ in range(240):
+        e.step()
+        changed += int(np.count_nonzero(e.events.type == EventType.vehicle_changed_lane.code))
+    assert e.arrived == 1 and changed == 1
+    assert e.teleported == 0 and e.safety_cap_violations == 0

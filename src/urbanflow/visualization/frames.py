@@ -162,8 +162,8 @@ def build_frame(
     flags = (
         veh.halting[run] * FLAG_HALTING
         | (veh.accel[run] < -C.BRAKE_FLAG_DECEL) * FLAG_BRAKING
-        | (lat > 0) * FLAG_LC_LEFT
-        | (lat < 0) * FLAG_LC_RIGHT
+        | (lat < 0) * FLAG_LC_LEFT  # moving toward the median: still drawn curb-side
+        | (lat > 0) * FLAG_LC_RIGHT
         | (veh.dwell_left[run] > 0) * FLAG_DWELLING
         | veh.held[run] * FLAG_HELD
     ).astype(np.uint8)

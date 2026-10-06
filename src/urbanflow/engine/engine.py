@@ -51,6 +51,7 @@ from urbanflow.engine.intersections import (
     signal_lookahead,
 )
 from urbanflow.engine.invariants import Holds, check_always, check_debug
+from urbanflow.engine.lane_changes import decay_lane_change_state, lane_change_step
 from urbanflow.engine.leaders import SiblingGroups, compute_leaders, remaining_roads
 from urbanflow.engine.longitudinal import expire_overrides, longitudinal_step
 from urbanflow.engine.signalling import LaneStats, detector_occupancy
@@ -387,6 +388,26 @@ class Engine:
         remaining = remaining_roads(veh, self.routes, run)
         leaders = compute_leaders(net, veh, run, types, remaining, self.sibling_groups)
 
+        # 5 lane changes (then the leaders again)
+        if cfg.lane_changing:
+            changes = lane_change_step(
+                net,
+                veh,
+                types,
+                self.car_following,
+                self.routes,
+                run,
+                leaders,
+                reserved,
+                events,
+                dt=dt,
+                step=tag,
+                time=t,
+                rng=self._model_rng,
+            )
+            if changes.handles.size:
+                leaders = compute_leaders(net, veh, run, types, remaining, self.sibling_groups)
+
         # 6 intersections
         expire_overrides(veh, run, t)
         was_held = veh.held[run]
@@ -486,6 +507,7 @@ class Engine:
         )
         self.teleported += int(book.teleported.size)
         self.arrived += int(book.arrived.size)
+        decay_lane_change_state(veh, veh.running(), net, dt)
 
         # 10 finish
         self._step_count = tag
