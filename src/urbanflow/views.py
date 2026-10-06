@@ -546,6 +546,19 @@ class LaneCollection(_Indexed[LaneView]):
 
         return _cached(self._cache, "lane_occupancy", build)
 
+    def waiting_times(self) -> FloatArray:
+        """Per lane: summed time the vehicles on it have spent halting on it, s."""
+
+        def build() -> FloatArray:
+            veh, n = self._engine.vehicles, len(self.ids)
+            run = np.flatnonzero(veh.active)
+            link = veh.link[run]
+            lanes = link < n
+            weights = veh.link_waiting_time[run][lanes].astype(np.float64)
+            return _frozen(np.bincount(link[lanes], weights, minlength=n))
+
+        return _cached(self._cache, "lane_waiting", build)
+
     def queue_lengths(self) -> IntArray:
         """Stop-line queue per lane: contiguous halting vehicles from the front (J.3)."""
         return self._stats().queue
