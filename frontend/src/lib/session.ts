@@ -11,6 +11,9 @@ export interface VehicleMeta {
 }
 
 export interface Status {
+  kind: "live" | "replay";
+  first_step?: number;
+  last_step?: number;
   state: string;
   step: number;
   time: number;

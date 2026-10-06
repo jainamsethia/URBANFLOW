@@ -22,6 +22,7 @@ def serve(
     token_file: Annotated[
         Path | None, typer.Option("--token-file", help="Read the API token from a file.")
     ] = None,
+    replay: Annotated[str | None, typer.Option(hidden=True)] = None,
 ) -> None:
     """Start the web workbench (API + UI)."""
     import socket
@@ -58,6 +59,8 @@ def serve(
 
         settings = settings.model_copy(update={"api_token": SecretStr(token)})
     url = f"http://{'127.0.0.1' if host in ('0.0.0.0', '::') else host}:{port}/"  # noqa: S104
+    if replay:
+        url += f"?replay={replay}"
     console.print(f"UrbanFlow workbench on {url}  (Ctrl+C to stop)", markup=False)
     if open_browser:
         webbrowser.open(url)

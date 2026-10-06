@@ -154,13 +154,14 @@ def _register_commands() -> None:
         doctor,
         generate,
         init,
+        replay,
         run,
         schema,
         serve,
         validate,
     )
 
-    for module in (init, validate, generate, schema, run, compare, serve, doctor):
+    for module in (init, validate, generate, schema, run, replay, compare, serve, doctor):
         module.register(app)
 
 

@@ -20,6 +20,7 @@ import os
 import time as wall_clock
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Self, Unpack
 
 import numpy as np
@@ -36,6 +37,7 @@ from urbanflow.engine import Engine
 from urbanflow.engine.state import check_compatible
 from urbanflow.metrics import MetricsManager
 from urbanflow.network.compiled import CompiledNetwork
+from urbanflow.replay.recorder import ReplayRecorder
 from urbanflow.results import SimulationResult, provenance
 from urbanflow.routing import Router, router_registry
 from urbanflow.scenario.scenario import Scenario
@@ -123,8 +125,6 @@ def _controller_overrides(
 
 def _check_supported(config: SimulationConfig) -> None:
     """Config features scheduled for later versions fail by name instead of being ignored."""
-    if config.record.enabled:
-        raise ConfigError("recording replays (record.enabled) is not available in this version")
     if config.metrics.collectors != ("default",):
         names = ", ".join(config.metrics.collectors)
         raise ConfigError(
@@ -157,9 +157,14 @@ class Simulation:
         *,
         controllers: Mapping[str, ControllerRef] | None = None,
         router: str | Router | None = None,
+        record: bool | str | os.PathLike[str] | Mapping[str, Any] = False,
         **overrides: Unpack[ConfigOverrides],
     ) -> None:
         self.scenario = _as_scenario(scenario)
+        self._recorder: ReplayRecorder | None = None
+        if isinstance(record, Mapping):  # a RecordConfig override, e.g. {"enabled": True}
+            overrides["record"] = record
+            record = False
         name = (
             router
             if router is None or isinstance(router, str)
@@ -217,6 +222,9 @@ class Simulation:
         """Event callbacks (``sim.events.subscribe``) and counts since reset."""
         self._closed = False
         self._clear(cfg.seed)
+        if record is not False or cfg.record.enabled:
+            target = cfg.record.path if record is True or record is False else record
+            self.start_recording(target)
         _log.info(
             "simulation initialised",
             extra={
@@ -298,6 +306,10 @@ class Simulation:
             raise ConfigError(f"seed must be >= 0 (got {seed})")
         self._engine.reset(seed)
         self._clear(seed)
+        if self._recorder is not None:  # a reset starts the recording over
+            path = self._recorder.path
+            self._recorder.discard()
+            self._recorder = ReplayRecorder(self, path, every=self.config.record.every)
 
     def _check_steppable(self) -> None:
         if self._closed:
@@ -321,6 +333,8 @@ class Simulation:
             self._engine.step()
             self._cache.clear()  # first: nothing may read the previous step's objects
             self.metrics.update()
+            if self._recorder is not None:
+                self._recorder.record()
         except BaseException as exc:  # e.g. Ctrl-C mid-kernel: must reset()
             self._cache.clear()
             self._corrupted = True
@@ -420,6 +434,8 @@ class Simulation:
 
     def close(self) -> None:
         """Release the simulation; later ``step``/``run``/``reset`` raise. Idempotent."""
+        if self._recorder is not None and not self._closed:
+            self._recorder.close()
         self._closed = True
         self._cache.clear()
 
@@ -428,6 +444,32 @@ class Simulation:
 
     def __exit__(self, *exc: object) -> None:
         self.close()
+
+    # ------------------------------------------------------------------ recording
+    def start_recording(self, path: str | os.PathLike[str] | None = None) -> None:
+        """Record a replay from the current step to ``path`` (default: a ``.ufr`` in the
+        workspace ``replays`` directory named after the scenario and seed)."""
+        if self._recorder is not None:
+            raise SimulationError(f"already recording to {self._recorder.path}")
+        if path is None:
+            from urbanflow.core.settings import load_settings
+
+            stamp = wall_clock.strftime("%Y%m%dT%H%M%S")
+            path = load_settings().replays_dir / f"{self.scenario.name}-s{self._seed}-{stamp}.ufr"
+        self._recorder = ReplayRecorder(self, path, every=self.config.record.every)
+
+    def stop_recording(self) -> Path:
+        """Finish the recording and pack it; returns the ``.ufr`` path."""
+        if self._recorder is None:
+            raise SimulationError("not recording (pass record= or call start_recording())")
+        path = self._recorder.close()
+        self._recorder = None
+        return path
+
+    @property
+    def recording(self) -> Path | None:
+        """Where the current recording goes, or None."""
+        return None if self._recorder is None else self._recorder.path
 
     # ------------------------------------------------------------------ persistence
     def snapshot(self) -> Snapshot:

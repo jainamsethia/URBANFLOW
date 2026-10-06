@@ -102,6 +102,7 @@ export const api = {
   meta: () => call<Meta>("/meta"),
   scenarios: () => call<ScenarioRef[]>("/scenarios"),
   sessions: () => call<SessionInfo[]>("/sessions"),
+  replays: () => call<{ name: string; size_bytes: number; source: string }[]>("/replays"),
   createSession: (body: Record<string, unknown>) =>
     call<SessionInfo>("/sessions", { method: "POST", body: JSON.stringify(body) }),
   deleteSession: (id: string) => call<void>(`/sessions/${id}`, { method: "DELETE" }),

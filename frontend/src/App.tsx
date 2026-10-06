@@ -5,6 +5,7 @@ import { api, type Geometry, type Meta, type ScenarioRef, type SessionInfo } fro
 import { SessionController, type Snapshot } from "./lib/session";
 
 const SPEEDS: (number | null)[] = [1, 5, 10, 25, 50, 100, 250, 1000, null];
+const REPLAY_SPEEDS: number[] = [-250, -50, -10, 1, 5, 10, 25, 50, 100, 250, 1000];
 
 function useSnapshot(ctl: SessionController | null): Snapshot | null {
   const sub = useCallback((fn: () => void) => (ctl ? ctl.subscribe(fn) : () => {}), [ctl]);
@@ -73,6 +74,45 @@ function NewSession({
   );
 }
 
+function OpenReplay({ onCreated }: { onCreated: (s: SessionInfo) => void }) {
+  const [replays, setReplays] = useState<{ name: string }[]>([]);
+  const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const refresh = () =>
+    api.replays().then((r) => {
+      setReplays(r);
+      setName((cur) => cur || r[r.length - 1]?.name || "");
+    });
+  useEffect(() => {
+    refresh().catch(() => {});
+  }, []);
+  const open = async () => {
+    setError(null);
+    try {
+      onCreated(await api.createSession({ replay: name }));
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  return (
+    <div className="flex items-end gap-2 text-sm">
+      <label>
+        <span className="block text-[11px] text-slate-400">Replays</span>
+        <select className="max-w-48 rounded bg-slate-800 p-1" value={name} onFocus={() => refresh()} onChange={(e) => setName(e.target.value)}>
+          {replays.length === 0 && <option value="">none recorded</option>}
+          {replays.map((r) => (
+            <option key={r.name}>{r.name}</option>
+          ))}
+        </select>
+      </label>
+      <button disabled={!name} onClick={open} className="rounded bg-violet-700 px-3 py-1 font-medium hover:bg-violet-600 disabled:opacity-40">
+        Open replay
+      </button>
+      {error && <span className="max-w-xs truncate text-xs text-red-400" title={error}>{error}</span>}
+    </div>
+  );
+}
+
 export default function App() {
   const [meta, setMeta] = useState<Meta | null>(null);
   const [scenarios, setScenarios] = useState<ScenarioRef[]>([]);
@@ -91,7 +131,11 @@ export default function App() {
       .then(([m, s, existing]) => {
         setMeta(m);
         setScenarios(s);
-        if (existing.length) setSession(existing[existing.length - 1]!);
+        const wanted = new URLSearchParams(location.search).get("replay");
+        if (wanted) {
+          history.replaceState(null, "", location.pathname);
+          api.createSession({ replay: wanted }).then(setSession).catch((e) => setFatal(String(e)));
+        } else if (existing.length) setSession(existing[existing.length - 1]!);
       })
       .catch((e) => setFatal(String(e)));
   }, []);
@@ -119,6 +163,7 @@ export default function App() {
     send({ type: "select", kind, id });
   };
   const playing = status?.state === "playing";
+  const isReplay = status?.kind === "replay";
   const signalised = Object.keys(status?.controllers ?? {});
   const liveController = signalised.length ? status!.controllers[signalised[0]!] : "";
 
@@ -133,6 +178,7 @@ export default function App() {
           <span className="text-xs text-slate-500">v{meta.version} · {meta.project}</span>
         </div>
         <NewSession meta={meta} scenarios={scenarios} onCreated={setSession} />
+        <OpenReplay onCreated={setSession} />
         {session && (
           <div className="ml-auto flex items-center gap-3 text-sm">
             <span className={`rounded px-2 py-0.5 text-xs ${playing ? "bg-emerald-800" : status?.state === "ended" ? "bg-slate-700" : status?.state === "error" ? "bg-red-800" : "bg-amber-800"}`}>
@@ -151,20 +197,23 @@ export default function App() {
           <button onClick={() => send({ type: playing ? "pause" : "play" })} className="w-20 rounded bg-sky-700 py-1 hover:bg-sky-600" disabled={!snap?.connected}>
             {playing ? "❚❚ Pause" : "▶ Play"}
           </button>
+          {isReplay && (
+            <button onClick={() => send({ type: "step", n: -1 })} className="rounded bg-slate-800 px-2 py-1 hover:bg-slate-700" title="Step back">-1</button>
+          )}
           <button onClick={() => send({ type: "step", n: 1 })} className="rounded bg-slate-800 px-2 py-1 hover:bg-slate-700">+1</button>
           <button onClick={() => send({ type: "step", n: 60 })} className="rounded bg-slate-800 px-2 py-1 hover:bg-slate-700">+60</button>
           <button onClick={() => confirm("Reset the simulation?") && send({ type: "reset" })} className="rounded bg-slate-800 px-2 py-1 hover:bg-slate-700">Reset</button>
           <label className="ml-2 flex items-center gap-1 text-xs text-slate-400">
             Speed
             <select className="rounded bg-slate-800 p-1 text-slate-100" value={String(status?.steps_per_second ?? "max")} onChange={(e) => send({ type: "set_speed", steps_per_second: e.target.value === "max" ? null : +e.target.value })}>
-              {SPEEDS.map((s) => (
+              {(isReplay ? REPLAY_SPEEDS : SPEEDS).map((s) => (
                 <option key={String(s)} value={s == null ? "max" : String(s)}>
-                  {s == null ? "max" : `${s} steps/s`}
+                  {s == null ? "max" : s < 0 ? `rewind ${-s}/s` : `${s} steps/s`}
                 </option>
               ))}
             </select>
           </label>
-          {signalised.length > 0 && (
+          {signalised.length > 0 && !isReplay && (
             <label className="ml-2 flex items-center gap-1 text-xs text-slate-400">
               Signals
               <select className="rounded bg-slate-800 p-1 text-slate-100" value={liveController} onChange={(e) => send({ type: "set_controller", controller: e.target.value })}>
@@ -193,7 +242,7 @@ export default function App() {
             >
               <option value="veh:type">Vehicles by type</option>
               <option value="veh:speed">Vehicles by speed</option>
-              {meta.lane_metrics.map((m) => (
+              {!isReplay && meta.lane_metrics.map((m) => (
                 <option key={m.code} value={`lane:${m.code}`}>
                   Lanes: {m.label}
                   {m.unit ? ` (${m.unit})` : ""}
@@ -201,6 +250,17 @@ export default function App() {
               ))}
             </select>
           </label>
+          {isReplay && status && (
+            <input
+              type="range"
+              aria-label="Replay timeline"
+              className="ml-2 min-w-48 flex-1 accent-violet-500"
+              min={status.first_step ?? 0}
+              max={status.last_step ?? 0}
+              value={status.step}
+              onChange={(e) => send({ type: "seek", step: +e.target.value })}
+            />
+          )}
           {snap?.error && <span className="ml-2 truncate text-xs text-red-400" title={snap.error}>{snap.error}</span>}
         </div>
       )}

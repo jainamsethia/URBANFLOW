@@ -58,6 +58,8 @@ class SessionCreate(BaseModel):
     source: Literal["bundled", "workspace"] = "bundled"
     generator: str | None = Field(default=None, max_length=64)
     params: dict[str, Any] = Field(default_factory=dict)
+    replay: str | None = Field(default=None, max_length=64)
+    """A workspace replay by name (see ``GET /replays``)."""
     controller: str | None = Field(default=None, max_length=64)
     seed: int | None = Field(default=None, ge=0, le=2**63 - 1)
     duration: float | None = Field(default=None, gt=0, le=7 * 86400)
@@ -65,10 +67,12 @@ class SessionCreate(BaseModel):
 
     @model_validator(mode="after")
     def _one_source(self) -> SessionCreate:
-        if (self.scenario is None) == (self.generator is None):
-            raise ValueError('give exactly one of "scenario" or "generator"')
-        if self.scenario is not None and not _NAME.match(self.scenario):
-            raise ValueError("invalid scenario name")
+        given = [x for x in (self.scenario, self.generator, self.replay) if x is not None]
+        if len(given) != 1:
+            raise ValueError('give exactly one of "scenario", "generator" or "replay"')
+        for name in (self.scenario, self.replay):
+            if name is not None and not _NAME.match(name):
+                raise ValueError("invalid name")
         return self
 
 
@@ -207,9 +211,36 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
             raise NotFoundError(f"no workspace scenario {name!r}")
         return Scenario.load(path), name
 
+    def _replays() -> dict[str, Path]:
+        """Workspace replays by name: ``replays/<name>.ufr`` and ``runs/<run_id>/replay.ufr``."""
+        found: dict[str, Path] = {}
+        if settings.runs_dir.is_dir():
+            for f in sorted(settings.runs_dir.glob("*/replay.ufr")):
+                found[f.parent.name] = f
+        if settings.replays_dir.is_dir():
+            for f in sorted(settings.replays_dir.glob("*.ufr")):
+                found[f.stem] = f
+        return {k: v for k, v in found.items() if _NAME.match(k)}
+
+    @app.get(f"{API}/replays")
+    def replays() -> list[dict[str, Any]]:
+        return [
+            {"name": name, "size_bytes": path.stat().st_size, "source": path.parent.name}
+            for name, path in _replays().items()
+        ]
+
     def _create(req: SessionCreate) -> Session:
         from urbanflow import Simulation
 
+        if req.replay is not None:
+            from urbanflow.replay import ReplayReader
+            from urbanflow.server.session import ReplaySession
+
+            path = _replays().get(req.replay)
+            if path is None:
+                raise NotFoundError(f"no workspace replay {req.replay!r}")
+            reader = ReplayReader(path)
+            return ReplaySession(reader, req.label or f"replay: {req.replay}", req.replay)
         scenario, name = _build(req)
         overrides: dict[str, Any] = {}
         if req.seed is not None:
@@ -246,17 +277,23 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
 
     @app.get(f"{API}/sessions/{{sid}}/geometry")
     def geometry(sid: str) -> Response:
+        from urbanflow.server.session import ReplaySession
         from urbanflow.visualization import render_geometry
 
         s = _session(sid)
+        if isinstance(s, ReplaySession):
+            return Response(s.reader.geometry_json(), media_type="application/json")
         body = render_geometry(s.sim.network.compiled).model_dump_json()
         return Response(body, media_type="application/json")
 
     @app.get(f"{API}/sessions/{{sid}}/summary")
     def summary(sid: str) -> dict[str, Any]:
-        from urbanflow.server.session import _finite
+        from urbanflow.server.session import ReplaySession, _finite
 
         s = _session(sid)
+        if isinstance(s, ReplaySession):
+            result = s.reader.summary() or {}
+            return {"summary": result.get("summary", {}), "history": {}}
         return {"summary": _finite(s.sim.metrics.summary()), "history": _history(s)}
 
     @app.post(f"{API}/compare")

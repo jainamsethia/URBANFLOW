@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import math
 import secrets
 import time
@@ -24,11 +25,12 @@ import numpy as np
 from fastapi import WebSocket
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
-from urbanflow.core.errors import UrbanFlowError
+from urbanflow.core.errors import CommandError, UrbanFlowError
+from urbanflow.replay import ReplayReader
 from urbanflow.simulation import Simulation
-from urbanflow.visualization import LaneMetric, RegistryTracker, encode_frame
+from urbanflow.visualization import LaneMetric, RegistryTracker, decode_frame, encode_frame
 
-__all__ = ["ClientMessage", "Session", "SessionInfo"]
+__all__ = ["ClientMessage", "ReplaySession", "Session", "SessionInfo"]
 
 DISPLAY_FPS: Final = 20.0
 METRICS_HZ: Final = 2.0
@@ -53,13 +55,19 @@ class Pause(_Msg):
 
 class Step(_Msg):
     type: Literal["step"]
-    n: int = Field(default=1, ge=1, le=10_000)
+    n: int = Field(default=1, ge=-10_000, le=10_000)
+    """Negative steps go back (replay sessions only)."""
+
+
+class Seek(_Msg):
+    type: Literal["seek"]
+    step: int = Field(ge=0)
 
 
 class SetSpeed(_Msg):
     type: Literal["set_speed"]
-    steps_per_second: float | None = Field(default=10.0, gt=0, le=MAX_SPS)
-    """``None`` = as fast as possible."""
+    steps_per_second: float | None = Field(default=10.0, ge=-MAX_SPS, le=MAX_SPS)
+    """``None`` = as fast as possible; negative rewinds (replay sessions only)."""
 
 
 class Reset(_Msg):
@@ -97,7 +105,7 @@ class Select(_Msg):
 
 
 ClientMessage = (
-    Play | Pause | Step | SetSpeed | Reset | SetController | HoldPhase | ReleasePhase
+    Play | Pause | Step | Seek | SetSpeed | Reset | SetController | HoldPhase | ReleasePhase
     | Subscribe | Select
 )  # fmt: skip
 _ADAPTER: Final[TypeAdapter[ClientMessage]] = TypeAdapter(ClientMessage)
@@ -130,9 +138,16 @@ class _Client:
 class Session:
     """One live simulation plus its subscribers."""
 
+    kind: str = "live"
+    controllers: dict[str, str]
+
     def __init__(self, sim: Simulation, label: str, scenario: str) -> None:
-        self.id = secrets.token_hex(8)
         self.sim = sim
+        self._init_common(label, scenario)
+        self.controllers = {j: str(sim.signals[j].controller) for j in sim.signals.ids}
+
+    def _init_common(self, label: str, scenario: str) -> None:
+        self.id = secrets.token_hex(8)
         self.label = label
         self.scenario = scenario
         self.state: State = "paused"
@@ -149,7 +164,7 @@ class Session:
         self._closed = False
         self._task: asyncio.Task[None] | None = None
         self.last_activity = time.monotonic()
-        self.controllers = {j: str(sim.signals[j].controller) for j in sim.signals.ids}
+        self.controllers = {}
 
     # ------------------------------------------------------------------ lifecycle
     def start(self) -> None:
@@ -167,6 +182,9 @@ class Session:
             with contextlib.suppress(Exception):
                 await c.ws.close(code=4410)
         self.clients.clear()
+        self._release()
+
+    def _release(self) -> None:
         self.sim.close()
 
     def info(self) -> SessionInfo:
@@ -197,7 +215,8 @@ class Session:
                 if self.sps is None:
                     n = MAX_STEPS_PER_TICK
                 else:
-                    budget = min(budget + (now - last) * self.sps, self.sps)  # no burst
+                    rate = abs(self.sps)
+                    budget = min(budget + (now - last) * rate, rate)  # no burst
                     n = int(budget)
                     budget -= n
                 if n:
@@ -237,16 +256,17 @@ class Session:
             return
         now = time.monotonic()
         async with self._lock:
-            sim = self.sim
             changed = (
-                sim.step_count != self._sent_step or force or any(c.fresh for c in self.clients)
+                self._current_step() != self._sent_step
+                or force
+                or any(c.fresh for c in self.clients)
             )
             texts: list[dict[str, Any]] = []
             if now >= self._next_status or force:
                 texts.append({"type": "status", **self._status()})
                 self._next_status = now + 1.0 / STATUS_HZ
             if now >= self._next_metrics and changed:
-                texts.append({"type": "metrics", "values": _finite(sim.metrics.latest())})
+                texts.append({"type": "metrics", "values": _finite(self._latest_metrics())})
                 sel = self._selection()
                 if sel is not None:
                     texts.append(sel)
@@ -262,8 +282,8 @@ class Session:
                 added, removed = c.tracker.delta(uids, reset=c.fresh)
                 deltas.append((added, removed, c.fresh))
             wanted = sorted({int(u) for d in deltas if d is not None for u in d[0].tolist()})
-            meta = dict(zip(wanted, zip(*sim.vehicle_meta(wanted), strict=True), strict=True))
-            self._sent_step = sim.step_count
+            meta = self._meta(wanted)
+            self._sent_step = self._current_step()
         for c, d in zip(list(self.clients), deltas, strict=True):
             msgs = list(texts)
             if d is not None:
@@ -291,9 +311,22 @@ class Session:
             except Exception:
                 self.detach(c.ws)
 
+    def _current_step(self) -> int:
+        return self.sim.step_count
+
+    def _latest_metrics(self) -> dict[str, float]:
+        return self.sim.metrics.latest()
+
+    def _meta(self, uids: list[int]) -> dict[int, tuple[str, int, int]]:
+        if not uids:
+            return {}
+        rows = zip(*self.sim.vehicle_meta(uids), strict=True)
+        return dict(zip(uids, rows, strict=True))
+
     def _status(self) -> dict[str, Any]:
         sim = self.sim
         return {
+            "kind": self.kind,
             "state": self.state,
             "step": sim.step_count,
             "time": sim.time,
@@ -392,6 +425,12 @@ class Session:
             case Pause():
                 if self.state == "playing":
                     self.state = "paused"
+            case Step(n=n) if n < 0:
+                raise CommandError("stepping back needs a replay session")
+            case Seek():
+                raise CommandError("seeking needs a replay session")
+            case SetSpeed(steps_per_second=sps) if sps is not None and sps <= 0:
+                raise CommandError("rewinding needs a replay session; speed must be > 0")
             case Step(n=n):
                 if self.state in ("paused", "playing"):
                     self.state = "paused"
@@ -422,6 +461,169 @@ class Session:
             case Select(kind=kind, id=ident):
                 self.selection = (kind, ident)
                 self._next_metrics = 0.0
+
+
+class ReplaySession(Session):
+    """Plays a recorded ``.ufr`` with the live protocol plus seek, step back and rewind."""
+
+    kind = "replay"
+
+    def __init__(self, reader: ReplayReader, label: str, name: str) -> None:
+        self.reader = reader
+        self._init_common(label, name)
+        recorded = reader.manifest.get("controllers", {})
+        self.controllers = {str(k): str(v) for k, v in recorded.items()}
+        self._index = 0
+        self._dt = float(reader.manifest.get("dt", 1.0))
+        self._vehicles = reader.vehicles()
+        self._series = reader.timeseries()
+        geo = json.loads(reader.geometry_json())
+        self._road_ids: list[str] = list(geo["roads"]["id"])
+        self._mov_ids: list[str] = list(geo["movements"]["id"])
+        self._mov_int: list[str] = list(geo["movements"]["intersection"])
+        self._last: bytes = b""
+
+    def _release(self) -> None:
+        self.reader.close()
+
+    def info(self) -> SessionInfo:
+        """The REST view."""
+        steps = self.reader.steps
+        return SessionInfo(
+            id=self.id,
+            label=self.label,
+            scenario=self.scenario,
+            state=self.state,
+            step=self._current_step(),
+            time=self._current_step() * self._dt,
+            end_time=steps[-1] * self._dt if steps else None,
+            dt=self._dt,
+            steps_per_second=self.sps,
+            vehicles=self._count(),
+            controllers=dict(self.controllers),
+            subscribers=len(self.clients),
+        )
+
+    def _count(self) -> int:
+        return int.from_bytes(self._last[32:36], "little") if self._last else 0
+
+    def _current_step(self) -> int:
+        return self.reader.steps[self._index] if self.reader.steps else 0
+
+    def _latest_metrics(self) -> dict[str, float]:
+        table = self._series
+        if not table or not table["time"].size:
+            return {}
+        t = self._current_step() * self._dt
+        k = int(np.searchsorted(table["time"], t + 1e-9, side="right")) - 1
+        if k < 0:
+            return {}
+        return {name: float(col[k]) for name, col in table.items()}
+
+    def _meta(self, uids: list[int]) -> dict[int, tuple[str, int, int]]:
+        return {u: self._vehicles.get(u, ("", -1, -1)) for u in uids}
+
+    def _step_n(self, n: int, deadline: float | None) -> None:
+        del deadline
+        direction = -1 if self.sps is not None and self.sps < 0 else 1
+        self._move(direction * n)
+
+    def _move(self, frames: int) -> None:
+        last = len(self.reader.steps) - 1
+        target = min(max(self._index + frames, 0), last)
+        if target != self._index + frames and self.state == "playing":
+            self.state = "paused"  # reached an end
+        self._index = target
+
+    def _frame_bytes(self) -> tuple[bytes, np.ndarray]:
+        data = self.reader.frame_bytes(self._index)
+        self._last = data
+        n = int.from_bytes(data[32:36], "little")
+        header = int.from_bytes(data[6:8], "little")
+        return data, np.frombuffer(data, dtype="<u4", count=n, offset=header)
+
+    def _status(self) -> dict[str, Any]:
+        steps = self.reader.steps
+        return {
+            "kind": self.kind,
+            "state": self.state,
+            "step": self._current_step(),
+            "time": self._current_step() * self._dt,
+            "end_time": steps[-1] * self._dt if steps else None,
+            "first_step": steps[0] if steps else 0,
+            "last_step": steps[-1] if steps else 0,
+            "steps_per_second": self.sps,
+            "vehicles": self._count(),
+            "lane_metric": 0,
+            "controllers": dict(self.controllers),
+            "error": self.error,
+        }
+
+    def _selection(self) -> dict[str, Any] | None:
+        kind, ident = self.selection
+        if kind == "none" or not self._last:
+            return None
+        frame = decode_frame(self._last)[0]
+        if kind == "vehicle":
+            uid = next((u for u, m in self._vehicles.items() if m[0] == ident), None)
+            hit = np.flatnonzero(frame.uid == uid) if uid is not None else np.zeros(0)
+            if uid is None or not hit.size:
+                return {"type": "selection", "kind": kind, "id": ident, "available": False}
+            i = int(hit[0])
+            _vid, vtype, dest = self._vehicles[uid]
+            road = self._road_ids[dest] if 0 <= dest < len(self._road_ids) else None
+            detail = {"type": vtype, "speed": float(frame.speed[i]), "destination": road}
+            return {
+                "type": "selection",
+                "kind": kind,
+                "id": ident,
+                "available": True,
+                "detail": _jsonable(detail),
+            }
+        codes = "rygG"
+        signals = frame.signals
+        states = {
+            m: codes[int(signals[k])]
+            for k, m in enumerate(self._mov_ids)
+            if signals is not None and self._mov_int[k] == ident and signals[k] < len(codes)
+        }
+        return {
+            "type": "selection",
+            "kind": kind,
+            "id": ident,
+            "available": bool(states),
+            "detail": {
+                "controller": self.controllers.get(ident, "unsignalised"),
+                "movement_states": states,
+                "phases": [],
+            },
+        }
+
+    async def _apply(self, msg: ClientMessage) -> None:
+        match msg:
+            case Play():
+                at_end = self._index >= len(self.reader.steps) - 1
+                if at_end and (self.sps is None or self.sps > 0):
+                    self._index = 0
+                self.state = "playing"
+            case Pause():
+                self.state = "paused"
+            case Step(n=n):
+                self.state = "paused"
+                self._move(n)
+            case Seek(step=step):
+                self._index = self.reader.index_at(step)
+            case SetSpeed(steps_per_second=sps):
+                self.sps = sps
+            case Reset():
+                self.state, self._index = "paused", 0
+            case Subscribe():
+                self.lane_metric = LaneMetric.none  # replays carry no lane values
+            case Select(kind=kind, id=ident):
+                self.selection = (kind, ident)
+                self._next_metrics = 0.0
+            case _:
+                raise CommandError("signal control is not available while replaying a recording")
 
 
 def _first(exc: ValidationError) -> str:

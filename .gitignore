@@ -16,7 +16,9 @@ htmlcov/
 
 # UrbanFlow runtime state
 .urbanflow/
-runs/
+/runs/
+/replays/
+/scenarios/
 *.ufr.d/
 benchmarks/results/
 secrets/
@@ -39,3 +41,4 @@ Thumbs.db
 
 # Local tool settings
 .claude/
+*.tsbuildinfo

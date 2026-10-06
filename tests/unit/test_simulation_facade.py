@@ -122,9 +122,15 @@ def test_deep_check_errors_raise(junction: Scenario) -> None:
     assert [(i.code, i.path) for i in info.value.errors] == [("E904", "simulation.car_following")]
 
 
+def test_record_config_starts_a_recording(junction: Scenario, tmp_path: Path) -> None:
+    target = tmp_path / "r.ufr"
+    sim = Simulation(junction, record={"enabled": True, "path": str(target)}, duration=20)
+    assert sim.recording == target
+    sim.run()
+    assert sim.stop_recording() == target and target.is_file()
+
+
 def test_unsupported_features_fail_by_name(junction: Scenario) -> None:
-    with pytest.raises(ConfigError, match=r"record.enabled"):
-        Simulation(junction, record={"enabled": True})
     with pytest.raises(ConfigError, match="custom metric collectors"):
         Simulation(junction, metrics={"collectors": ["default", "speeding"]})
     with pytest.raises(ConfigError, match="unknown field"):

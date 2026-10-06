@@ -121,6 +121,12 @@ def run(
             "--set", help="KEY=VALUE config override (repeatable; dotted keys, JSON values)."
         ),
     ] = None,
+    record: Annotated[
+        bool,
+        typer.Option(
+            "--record", help="Record a replay (run dir replay.ufr, or the workspace replays/)."
+        ),
+    ] = False,
     export: Annotated[
         Path | None,
         typer.Option(
@@ -176,13 +182,25 @@ def run(
         artifacts.write_scenario(loaded)
         artifacts.write_env(sim.config.accel)
     show_progress = sys.stderr.isatty() if progress is None else progress
+    replay_path = None
+    if record:
+        replay_path = (
+            artifacts.directory / "replay.ufr"
+            if artifacts is not None
+            else settings.replays_dir / f"{loaded.name}-s{sim.seed}.ufr"
+        )
+        sim.start_recording(replay_path)
     interrupted = False
     try:
         with sim:
             result = sim.run(until, progress=show_progress)
+            if replay_path is not None:
+                replay_path = sim.stop_recording()
     except KeyboardInterrupt:
         interrupted = True
         result = sim.get_results()
+        if replay_path is not None and sim.recording is not None:
+            replay_path = sim.stop_recording()
     if artifacts is not None:
         result = artifacts.write_result(result)
     if export is not None:
@@ -199,6 +217,8 @@ def run(
             console.print(f"Run saved: {_shown(artifacts.directory)}", markup=False)
         if export is not None:
             console.print(f"Exported: {_shown(export)}", markup=False)
+        if replay_path is not None:
+            console.print(f"Replay: {_shown(replay_path)}", markup=False)
     if interrupted:
         where = "" if artifacts is None else f"; partial results in {_shown(artifacts.directory)}"
         err_console.print(
