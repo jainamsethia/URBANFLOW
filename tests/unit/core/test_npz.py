@@ -177,7 +177,7 @@ def test_decompression_bombs_are_rejected_from_the_directory(
     from the zip directory and checked against ``max_bytes`` before anything is inflated
     or allocated (np.empty is never reached)."""
     bomb = _saved({"x": np.zeros(1 << 20, dtype=np.int64)})
-    assert len(bomb) < 64 * 1024
+    assert len(bomb) * 50 < 8 << 20  # > 50:1 (zlib builds differ: ~8 kB to ~80 kB)
     with monkeypatch.context() as patch:
         patch.setattr(np, "empty", lambda *_a, **_k: pytest.fail("allocated"))
         with pytest.raises(ValueError, match=r"declare \d+ bytes, more than the limit 1048576"):

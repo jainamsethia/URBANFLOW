@@ -65,8 +65,12 @@ def test_non_finite_constants_are_rejected(text: str, line: int) -> None:
     ("text", "fragment"),
     [
         ('{"x": ' + "1" * 5000 + "}", "integer string conversion"),  # Python's digit limit
-        # nesting depth: RecursionError up to Python 3.13, our depth cap on 3.14+
-        ('{"x": ' + "[" * 100_000 + "]" * 100_000 + "}", ("recursion", "nesting deeper than")),
+        # nesting depth: RecursionError (<= 3.13), a C stack-overflow error (3.14 on Windows)
+        # or our depth cap (3.14 elsewhere)
+        (
+            '{"x": ' + "[" * 100_000 + "]" * 100_000 + "}",
+            ("recursion", "nesting deeper than", "Stack overflow"),
+        ),
         ('{"x": ' + "[" * 64 + "]" * 64 + "}", "nesting deeper than 64 levels"),  # hashable
     ],
     ids=["digit-limit", "nesting", "depth-cap"],
