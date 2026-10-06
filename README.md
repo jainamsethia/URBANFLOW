@@ -76,19 +76,21 @@ timeline.
 ```python
 from urbanflow import Simulation, bundled
 
-with Simulation.from_scenario(bundled("grid_3x3"), controllers={"*": "max_pressure"},
-                              duration=1800, seed=1) as sim:
+with Simulation.from_scenario(
+    bundled("grid_3x3"), controllers={"*": "max_pressure"}, duration=1800, seed=1
+) as sim:
     sim.run(until=60)
-    print(sim.signals["r1c1"])          # phase, stage, movement states
+    print(sim.signals["r1c1"])  # phase, stage, movement states
     result = sim.run()
 print(result.summary["delay.mean"], result.summary["throughput_vph"])
-result.export("out", format="csv")     # timeseries, intersections, trips
+result.export("out", format="csv")  # timeseries, intersections, trips
 ```
 
 Reinforcement learning:
 
 ```python
 from urbanflow.rl import TrafficSignalEnv
+
 env = TrafficSignalEnv("single_intersection", episode_length=900, reward="queue")
 obs, info = env.reset(seed=0)
 obs, reward, terminated, truncated, info = env.step(info["action_mask"].argmax())
