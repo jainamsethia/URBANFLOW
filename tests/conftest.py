@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable, Iterator, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
-
-import os
 
 import pytest
 from hypothesis import HealthCheck, settings
