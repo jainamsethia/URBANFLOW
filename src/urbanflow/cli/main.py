@@ -149,9 +149,18 @@ def state(ctx: typer.Context) -> CliState:
 
 
 def _register_commands() -> None:
-    from urbanflow.cli.commands import doctor, generate, init, run, schema, validate
+    from urbanflow.cli.commands import (
+        compare,
+        doctor,
+        generate,
+        init,
+        run,
+        schema,
+        serve,
+        validate,
+    )
 
-    for module in (init, validate, generate, schema, run, doctor):
+    for module in (init, validate, generate, schema, run, compare, serve, doctor):
         module.register(app)
 
 
