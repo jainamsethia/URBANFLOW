@@ -83,7 +83,7 @@ def test_init_uses_the_global_workspace(tmp_path: Path, workspace: Path) -> None
 @pytest.mark.parametrize(
     ("argv", "code", "message"),
     [
-        (["init", "--template", "gird"], 5, "available: single_intersection"),
+        (["init", "--template", "gird"], 5, "available: grid_3x3, grid_4x4, single_intersection"),
         (["init", "--name", "../evil"], 4, "--name must be a plain file name"),
     ],
 )

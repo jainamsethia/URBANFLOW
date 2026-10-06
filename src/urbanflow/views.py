@@ -30,7 +30,6 @@ from numpy.typing import NDArray
 from urbanflow.core import constants as C
 from urbanflow.core.errors import NotFoundError, suggest
 from urbanflow.core.types import (
-    DriveSide,
     FloatArray,
     IntArray,
     IntersectionKind,
@@ -47,6 +46,7 @@ from urbanflow.scenario.schema import DepartLane, DepartSpeed
 from urbanflow.signals import FixedTime, SignalProgram, controller_name
 from urbanflow.signals.controllers import realised_cycle, stage_steps
 from urbanflow.vehicles.table import COLUMNS
+from urbanflow.visualization.frames import vehicle_xy
 from urbanflow.visualization.geometry import render_geometry
 
 if TYPE_CHECKING:
@@ -88,21 +88,6 @@ def _cached[T](cache: StepCache, key: str, build: Callable[[], T]) -> T:
 def _frozen[A: NDArray[Any]](arr: A) -> A:
     arr.setflags(write=False)
     return arr
-
-
-def vehicle_xy(
-    net: CompiledNetwork, links: IntArray, pos: FloatArray, lat_offset: NDArray[Any]
-) -> tuple[FloatArray, FloatArray]:
-    """World ``(xy (N, 2), heading (N,))`` of front bumpers at ``pos`` along ``links``.
-
-    ``lat_offset`` (m, positive toward the median) shifts the point along the unit normal;
-    headings are radians counter-clockwise from +x.
-    """
-    xy, heading = net.point_at(links, pos)
-    toward_median = 1.0 if net.drive_side is DriveSide.right else -1.0  # left of travel
-    normal = np.column_stack((-np.sin(heading), np.cos(heading))) * toward_median
-    world: FloatArray = xy + np.asarray(lat_offset, dtype=np.float64)[:, None] * normal
-    return world + net.origin, heading
 
 
 # ------------------------------------------------------------------------------- vehicles

@@ -18,6 +18,8 @@ pytestmark = pytest.mark.acceptance
 
 # name -> (lanes, connectors, [crossing, merging, diverging] conflicts)
 GOLDEN: dict[str, tuple[int, int, list[int]]] = {
+    "grid_3x3": (96, 144, [324, 72, 72]),  # 9 junctions x the single-junction counts
+    "grid_4x4": (160, 256, [576, 128, 128]),
     "single_intersection": (16, 16, [36, 8, 8]),
 }
 

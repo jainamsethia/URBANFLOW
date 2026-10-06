@@ -42,6 +42,19 @@ SUMMARY_KEYS = {
     "travel_time.p95",
     "travel_time.std",
     "throughput_vph",
+    "total_time_mean",
+    "insertion_delay_mean",
+    "att_censored",
+    "delay.mean",
+    "delay.median",
+    "delay.p95",
+    "waiting_time_mean",
+    "stops_mean",
+    "space_mean_speed",
+    "vkt",
+    "vht",
+    "queue.mean_total_veh",
+    "queue.max_lane_veh",
 }
 
 

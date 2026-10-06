@@ -51,10 +51,13 @@ def test_a_60_s_run(workspace: Path, scenario: Path, capsys: pytest.CaptureFixtu
     assert f"Run saved: {Path('runs') / run_dir.name}" in out
     assert sorted(p.name for p in run_dir.iterdir()) == [
         "env.json",
+        "intersections.csv",
         "result.json",
         "scenario.json",
         "spec.json",
         "summary.json",
+        "timeseries.csv",
+        "trips.csv",
     ]
     assert (run_dir / "scenario.json").read_bytes() == scenario.read_bytes()
     result = SimulationResult.load(run_dir)

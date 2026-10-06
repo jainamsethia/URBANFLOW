@@ -121,6 +121,13 @@ def run(
             "--set", help="KEY=VALUE config override (repeatable; dotted keys, JSON values)."
         ),
     ] = None,
+    export: Annotated[
+        Path | None,
+        typer.Option(
+            "--export",
+            help="Also write the timeseries table here (.csv, .json or .parquet).",
+        ),
+    ] = None,
     json_output: Annotated[
         bool, typer.Option("--json", help="Print only the result as JSON on stdout.")
     ] = False,
@@ -178,6 +185,10 @@ def run(
         result = sim.get_results()
     if artifacts is not None:
         result = artifacts.write_result(result)
+    if export is not None:
+        from urbanflow.metrics.export import write_table
+
+        write_table(result.tables["timeseries"], export)
     if json_output:
         run_dir = None if artifacts is None else str(artifacts.directory)
         emit_json({**result.to_dict(), "run_dir": run_dir})
@@ -186,6 +197,8 @@ def run(
         console.print(f"State digest: {result.state_digest}", markup=False)
         if artifacts is not None:
             console.print(f"Run saved: {_shown(artifacts.directory)}", markup=False)
+        if export is not None:
+            console.print(f"Exported: {_shown(export)}", markup=False)
     if interrupted:
         where = "" if artifacts is None else f"; partial results in {_shown(artifacts.directory)}"
         err_console.print(

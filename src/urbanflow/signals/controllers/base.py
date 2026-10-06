@@ -340,10 +340,15 @@ class ControllerContext:
         return out
 
     @cached_property
+    def conn_from_lane(self) -> IntArray:
+        """Lane link id each connector leaves from."""
+        net = self._lanes.net
+        return net.conn_from_lane[self.connectors - net.n_lanes]
+
+    @cached_property
     def conn_in_count(self) -> IntArray:
         """Vehicles on each connector's from-lane (Varaiya pressure input)."""
-        net = self._lanes.net
-        return self._lanes.count[net.conn_from_lane[self.connectors - net.n_lanes]]
+        return self._lanes.count[self.conn_from_lane]
 
     @cached_property
     def conn_out_count(self) -> IntArray:

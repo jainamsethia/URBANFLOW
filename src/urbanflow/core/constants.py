@@ -18,6 +18,10 @@ TIME_EPS: Final = 1e-9  # s; stage ends and step emission compare with -1e-9 (H.
 GEOM_EPS: Final = 1e-9  # dimensionless parameter tolerance in geometry predicates (E.5)
 POSITION_EPS: Final = 1e-6  # m; on-link / overlap tolerance of invariants I3, I4 (F.7)
 SECONDS_PER_HOUR: Final = 3600.0  # veh/h <-> veh/s conversions (E.7 §1.3, J.2)
+METRES_PER_KM: Final = 1000.0  # m <-> km (VKT, density; J.2)
+METRICS_HISTORY_POINTS: Final = (
+    600  # max points of MetricsManager.history (N: snapshot metrics_history)
+)
 # speeds on the grid that maximises the IDM equilibrium flow (core/capacity.py): the peak
 # is smooth, so the grid error is second order, < 1e-5 relative at 1000 points
 CAPACITY_GRID_POINTS: Final = 1000
@@ -290,3 +294,8 @@ RATIO_SUM_TOLERANCE: Final = 1e-9  # turn ratios must sum to 1 within this
 SINGLE_ARM_LENGTH: Final = 250.0  # m; single_intersection arm length
 SINGLE_DEMAND_RATE: Final = 600.0  # veh/h per approach
 SINGLE_TURN_RATIOS: Final = (0.15, 0.7, 0.15)  # (far, straight, near) turn shares
+GRID_MAX_DIM: Final = 30  # max rows / cols of the grid generator (E.10)
+GRID_SPACING: Final = 300.0  # m; grid block length
+GRID_BOUNDARY_LENGTH: Final = 150.0  # m; grid entry/exit road length
+GRID_ENTRY_RATE: Final = 300.0  # veh/h per grid entry road
+GRID_TURN_RATIOS: Final = (0.1, 0.8, 0.1)  # (far, straight, near) shares at the first node

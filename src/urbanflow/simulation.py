@@ -14,12 +14,11 @@ accumulates the step's events, and the event callbacks run last.
 from __future__ import annotations
 
 import contextlib
-import copy
 import logging
 import math
 import os
 import time as wall_clock
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any, Self, Unpack
 
@@ -32,9 +31,10 @@ from urbanflow.core.config import ConfigOverrides, SimulationConfig, resolve_con
 from urbanflow.core.errors import ConfigError, NotFoundError, SimulationError, suggest
 from urbanflow.core.events import EventBus, EventType
 from urbanflow.core.rng import RngStreams
-from urbanflow.core.types import FloatArray, IntArray, IntersectionKind
+from urbanflow.core.types import IntersectionKind
 from urbanflow.engine import Engine
 from urbanflow.engine.state import check_compatible
+from urbanflow.metrics import MetricsManager
 from urbanflow.network.compiled import CompiledNetwork
 from urbanflow.results import SimulationResult, provenance
 from urbanflow.routing import Router, router_registry
@@ -52,6 +52,7 @@ from urbanflow.views import (
     StepCache,
     VehicleCollection,
 )
+from urbanflow.visualization.frames import Frame, LaneMetric, build_frame
 
 __all__ = ["ControllerRef", "MetricsAPI", "ProgressCallback", "ProgressInfo", "Simulation"]
 
@@ -77,97 +78,8 @@ class ProgressInfo:
 ProgressCallback = Callable[[ProgressInfo], None]
 
 
-class MetricsAPI:
-    """``sim.metrics``: the run summary, accumulated from each step's events.
-
-    ponytail: summary only (counts and arrived-trip travel times); the metrics subsystem
-    replaces it with timeseries, lane and trip tables behind the same ``summary()``.
-    """
-
-    def __init__(self, engine: Engine) -> None:
-        self._engine = engine
-        self.reset()
-
-    def reset(self) -> None:
-        """Forget everything (called on simulation reset)."""
-        self._counts = np.zeros(len(EventType), dtype=np.int64)
-        self._uids: list[IntArray] = []
-        self._depart: list[FloatArray] = []
-        self._insert: list[FloatArray] = []
-        self._arrive: list[FloatArray] = []
-
-    def update(self) -> None:
-        """Account the events of the step that just finished."""
-        events, veh = self._engine.events, self._engine.vehicles
-        kind = events.type
-        self._counts += np.bincount(kind, minlength=len(EventType))[: len(EventType)]
-        arrived = kind == _ARRIVED
-        if arrived.any():
-            h = events.handle[arrived].astype(np.intp)  # rows stay intact until next step
-            self._uids.append(events.uid[arrived].astype(np.int64))
-            self._depart.append(veh.depart_time[h])
-            self._insert.append(veh.insert_time[h])
-            self._arrive.append(events.time[arrived].copy())
-
-    def state_dict(self) -> dict[str, Any]:
-        """A deep copy of the accumulators (in memory; snapshots)."""
-        return copy.deepcopy(
-            {
-                "counts": self._counts,
-                "uids": self._uids,
-                "depart": self._depart,
-                "insert": self._insert,
-                "arrive": self._arrive,
-            }
-        )
-
-    def load_state_dict(self, state: Mapping[str, Any]) -> None:
-        """Replace the accumulators by a copy of :meth:`state_dict` output."""
-        s = copy.deepcopy(dict(state))
-        self._counts, self._uids = s["counts"], s["uids"]
-        self._depart, self._insert, self._arrive = s["depart"], s["insert"], s["arrive"]
-
-    def arrived_uids(self) -> IntArray:
-        """Uids of the arrived vehicles, in arrival order."""
-        return np.concatenate(self._uids) if self._uids else np.zeros(0, dtype=np.int64)
-
-    def event_counts(self) -> dict[str, int]:
-        """Events per type name, cumulative since reset."""
-        return {t.value: int(n) for t, n in zip(EventType, self._counts.tolist(), strict=True)}
-
-    def summary(self) -> dict[str, float]:
-        """Flattened summary (B.2 #13): vehicle counts, travel time over arrived trips
-        (``arrive - insert``) and network throughput. Trips departing before
-        ``metrics.warmup`` and arrivals before it are excluded from the travel-time and
-        throughput figures (J.1)."""
-        eng = self._engine
-        warmup = eng.config.metrics.warmup
-        depart = np.concatenate(self._depart) if self._depart else np.zeros(0)
-        arrive = np.concatenate(self._arrive) if self._arrive else np.zeros(0)
-        insert = np.concatenate(self._insert) if self._insert else np.zeros(0)
-        travel = (arrive - insert)[depart >= warmup]
-        window = eng.time - warmup
-        nan = math.nan
-        return {
-            "vehicles.generated": eng.generated,
-            "vehicles.inserted": int(self._counts[_INSERTED]),
-            "vehicles.arrived": eng.arrived,
-            "vehicles.en_route": int(np.count_nonzero(eng.vehicles.active)),
-            "vehicles.backlog": eng.backlog,
-            "vehicles.removed": eng.removed,
-            "vehicles.teleported": eng.teleported,
-            "travel_time.mean": float(travel.mean()) if travel.size else nan,
-            "travel_time.median": float(np.median(travel)) if travel.size else nan,
-            "travel_time.p95": (
-                float(np.percentile(travel, C.SUMMARY_PERCENTILE)) if travel.size else nan
-            ),
-            "travel_time.std": float(travel.std()) if travel.size else nan,
-            "throughput_vph": (
-                C.SECONDS_PER_HOUR * int(np.count_nonzero(arrive >= warmup)) / window
-                if window > 0
-                else nan
-            ),
-        }
+MetricsAPI = MetricsManager
+"""``sim.metrics`` (the metrics manager; name kept for the public API)."""
 
 
 def _as_scenario(
@@ -291,7 +203,7 @@ class Simulation:
         self._n_steps = None if duration is None else math.floor(duration / dt + C.TIME_EPS)
         self._cache: StepCache = {}
         self.metrics = MetricsAPI(self._engine)
-        """Run summary (``sim.metrics.summary()``)."""
+        """Metrics: ``summary()``, ``timeseries()``, ``intersections()``, ``trips()``."""
         self.network = NetworkInfo(network, self._engine.graph)
         self.vehicles = VehicleCollection(self._engine, self._cache, self.metrics.arrived_uids)
         self.lanes = LaneCollection(self._engine, self._cache)
@@ -569,6 +481,26 @@ class Simulation:
         self._interrupted = False
         _log.debug("snapshot restored", extra={"step": eng.step_count})
 
+    def frame(self, *, lane_metric: int = 0, signals: bool = True) -> Frame:
+        """The render :class:`~urbanflow.visualization.Frame` of the current step
+        (``lane_metric`` is a :class:`~urbanflow.visualization.LaneMetric` code)."""
+        self._check_intact()
+        return build_frame(self._engine, signals=signals, lane_metric=LaneMetric(lane_metric))
+
+    def vehicle_meta(self, uids: Iterable[int]) -> tuple[list[str], list[int], list[int]]:
+        """``(ids, type indices, destination road indices)`` of vehicles by uid (B.2 #23);
+        unknown or finished vehicles get ``("", -1, -1)``."""
+        eng = self._engine
+        veh, routes = eng.vehicles, eng.routes.routes
+        ids, types, dests = [], [], []
+        for uid in uids:
+            vid = veh.uid_to_id[uid] if 0 <= uid < len(veh.uid_to_id) else ""
+            h = veh.id_to_handle.get(vid, -1)
+            ids.append(vid)
+            types.append(int(veh.type_idx[h]) if h >= 0 else -1)
+            dests.append(int(routes[int(veh.route_id[h])][-1]) if h >= 0 else -1)
+        return ids, types, dests
+
     def state_digest(self) -> str:
         """sha256 hex of the canonical engine state (F.5): on the same platform, equal
         digests mean equal states and equal futures. ``SimulationError`` if the simulation
@@ -589,6 +521,7 @@ class Simulation:
             wall_time=self._wall,
             interrupted=self._interrupted,
             summary=self.metrics.summary(),
+            tables=self.metrics.tables(),
             event_counts=self.metrics.event_counts(),
             provenance=provenance(),
             controllers={

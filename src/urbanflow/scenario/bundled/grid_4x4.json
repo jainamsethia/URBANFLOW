@@ -1,0 +1,1873 @@
+{
+  "format": "urbanflow.scenario",
+  "version": "1.0",
+  "meta": {
+    "name": "grid_4x4",
+    "description": "4x4 signalized grid, 2 lane(s) per direction.",
+    "generator": {
+      "name": "grid",
+      "params": {
+        "rows": 4,
+        "cols": 4,
+        "spacing": 300.0,
+        "row_spacing": null,
+        "col_spacing": null,
+        "lanes": 2,
+        "speed_limit": 13.89,
+        "boundary_length": 150.0,
+        "controller": "fixed_time",
+        "template": "two_phase",
+        "green": 30.0,
+        "entry_rate": 300.0,
+        "turn_ratios": {
+          "far": 0.1,
+          "straight": 0.8,
+          "near": 0.1
+        },
+        "arrival": "poisson",
+        "duration": 3600.0
+      },
+      "urbanflow_version": "0.1.0"
+    }
+  },
+  "simulation": {
+    "duration": 3600.0
+  },
+  "network": {
+    "drive_side": "right",
+    "lane_width": 3.2,
+    "speed_limit": 13.89,
+    "intersections": [
+      {
+        "id": "r0c0",
+        "point": [
+          0.0,
+          0.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          },
+          "phases": [
+            {
+              "id": "p0",
+              "green": {
+                "bW0_r0c0->r0c0_bS0": "G",
+                "bW0_r0c0->r0c0_r0c1": "G",
+                "bW0_r0c0->r0c0_r1c0": "g",
+                "r0c1_r0c0->r0c0_bS0": "g",
+                "r0c1_r0c0->r0c0_bW0": "G",
+                "r0c1_r0c0->r0c0_r1c0": "G"
+              },
+              "duration": 30.0
+            },
+            {
+              "id": "p1",
+              "green": {
+                "bS0_r0c0->r0c0_bW0": "g",
+                "bS0_r0c0->r0c0_r0c1": "G",
+                "bS0_r0c0->r0c0_r1c0": "G",
+                "r1c0_r0c0->r0c0_bS0": "G",
+                "r1c0_r0c0->r0c0_bW0": "G",
+                "r1c0_r0c0->r0c0_r0c1": "g"
+              },
+              "duration": 30.0
+            }
+          ],
+          "template": "two_phase"
+        }
+      },
+      {
+        "id": "r0c1",
+        "point": [
+          300.0,
+          0.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          },
+          "phases": [
+            {
+              "id": "p0",
+              "green": {
+                "r0c0_r0c1->r0c1_bS1": "G",
+                "r0c0_r0c1->r0c1_r0c2": "G",
+                "r0c0_r0c1->r0c1_r1c1": "g",
+                "r0c2_r0c1->r0c1_bS1": "g",
+                "r0c2_r0c1->r0c1_r0c0": "G",
+                "r0c2_r0c1->r0c1_r1c1": "G"
+              },
+              "duration": 30.0
+            },
+            {
+              "id": "p1",
+              "green": {
+                "bS1_r0c1->r0c1_r0c0": "g",
+                "bS1_r0c1->r0c1_r0c2": "G",
+                "bS1_r0c1->r0c1_r1c1": "G",
+                "r1c1_r0c1->r0c1_bS1": "G",
+                "r1c1_r0c1->r0c1_r0c0": "G",
+                "r1c1_r0c1->r0c1_r0c2": "g"
+              },
+              "duration": 30.0
+            }
+          ],
+          "template": "two_phase"
+        }
+      },
+      {
+        "id": "r0c2",
+        "point": [
+          600.0,
+          0.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          },
+          "phases": [
+            {
+              "id": "p0",
+              "green": {
+                "r0c1_r0c2->r0c2_bS2": "G",
+                "r0c1_r0c2->r0c2_r0c3": "G",
+                "r0c1_r0c2->r0c2_r1c2": "g",
+                "r0c3_r0c2->r0c2_bS2": "g",
+                "r0c3_r0c2->r0c2_r0c1": "G",
+                "r0c3_r0c2->r0c2_r1c2": "G"
+              },
+              "duration": 30.0
+            },
+            {
+              "id": "p1",
+              "green": {
+                "bS2_r0c2->r0c2_r0c1": "g",
+                "bS2_r0c2->r0c2_r0c3": "G",
+                "bS2_r0c2->r0c2_r1c2": "G",
+                "r1c2_r0c2->r0c2_bS2": "G",
+                "r1c2_r0c2->r0c2_r0c1": "G",
+                "r1c2_r0c2->r0c2_r0c3": "g"
+              },
+              "duration": 30.0
+            }
+          ],
+          "template": "two_phase"
+        }
+      },
+      {
+        "id": "r0c3",
+        "point": [
+          900.0,
+          0.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          },
+          "phases": [
+            {
+              "id": "p0",
+              "green": {
+                "bE0_r0c3->r0c3_bS3": "g",
+                "bE0_r0c3->r0c3_r0c2": "G",
+                "bE0_r0c3->r0c3_r1c3": "G",
+                "r0c2_r0c3->r0c3_bE0": "G",
+                "r0c2_r0c3->r0c3_bS3": "G",
+                "r0c2_r0c3->r0c3_r1c3": "g"
+              },
+              "duration": 30.0
+            },
+            {
+              "id": "p1",
+              "green": {
+                "bS3_r0c3->r0c3_bE0": "G",
+                "bS3_r0c3->r0c3_r0c2": "g",
+                "bS3_r0c3->r0c3_r1c3": "G",
+                "r1c3_r0c3->r0c3_bE0": "g",
+                "r1c3_r0c3->r0c3_bS3": "G",
+                "r1c3_r0c3->r0c3_r0c2": "G"
+              },
+              "duration": 30.0
+            }
+          ],
+          "template": "two_phase"
+        }
+      },
+      {
+        "id": "r1c0",
+        "point": [
+          0.0,
+          300.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          },
+          "phases": [
+            {
+              "id": "p0",
+              "green": {
+                "bW1_r1c0->r1c0_r0c0": "G",
+                "bW1_r1c0->r1c0_r1c1": "G",
+                "bW1_r1c0->r1c0_r2c0": "g",
+                "r1c1_r1c0->r1c0_bW1": "G",
+                "r1c1_r1c0->r1c0_r0c0": "g",
+                "r1c1_r1c0->r1c0_r2c0": "G"
+              },
+              "duration": 30.0
+            },
+            {
+              "id": "p1",
+              "green": {
+                "r0c0_r1c0->r1c0_bW1": "g",
+                "r0c0_r1c0->r1c0_r1c1": "G",
+                "r0c0_r1c0->r1c0_r2c0": "G",
+                "r2c0_r1c0->r1c0_bW1": "G",
+                "r2c0_r1c0->r1c0_r0c0": "G",
+                "r2c0_r1c0->r1c0_r1c1": "g"
+              },
+              "duration": 30.0
+            }
+          ],
+          "template": "two_phase"
+        }
+      },
+      {
+        "id": "r1c1",
+        "point": [
+          300.0,
+          300.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          },
+          "phases": [
+            {
+              "id": "p0",
+              "green": {
+                "r1c0_r1c1->r1c1_r0c1": "G",
+                "r1c0_r1c1->r1c1_r1c2": "G",
+                "r1c0_r1c1->r1c1_r2c1": "g",
+                "r1c2_r1c1->r1c1_r0c1": "g",
+                "r1c2_r1c1->r1c1_r1c0": "G",
+                "r1c2_r1c1->r1c1_r2c1": "G"
+              },
+              "duration": 30.0
+            },
+            {
+              "id": "p1",
+              "green": {
+                "r0c1_r1c1->r1c1_r1c0": "g",
+                "r0c1_r1c1->r1c1_r1c2": "G",
+                "r0c1_r1c1->r1c1_r2c1": "G",
+                "r2c1_r1c1->r1c1_r0c1": "G",
+                "r2c1_r1c1->r1c1_r1c0": "G",
+                "r2c1_r1c1->r1c1_r1c2": "g"
+              },
+              "duration": 30.0
+            }
+          ],
+          "template": "two_phase"
+        }
+      },
+      {
+        "id": "r1c2",
+        "point": [
+          600.0,
+          300.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          },
+          "phases": [
+            {
+              "id": "p0",
+              "green": {
+                "r1c1_r1c2->r1c2_r0c2": "G",
+                "r1c1_r1c2->r1c2_r1c3": "G",
+                "r1c1_r1c2->r1c2_r2c2": "g",
+                "r1c3_r1c2->r1c2_r0c2": "g",
+                "r1c3_r1c2->r1c2_r1c1": "G",
+                "r1c3_r1c2->r1c2_r2c2": "G"
+              },
+              "duration": 30.0
+            },
+            {
+              "id": "p1",
+              "green": {
+                "r0c2_r1c2->r1c2_r1c1": "g",
+                "r0c2_r1c2->r1c2_r1c3": "G",
+                "r0c2_r1c2->r1c2_r2c2": "G",
+                "r2c2_r1c2->r1c2_r0c2": "G",
+                "r2c2_r1c2->r1c2_r1c1": "G",
+                "r2c2_r1c2->r1c2_r1c3": "g"
+              },
+              "duration": 30.0
+            }
+          ],
+          "template": "two_phase"
+        }
+      },
+      {
+        "id": "r1c3",
+        "point": [
+          900.0,
+          300.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          },
+          "phases": [
+            {
+              "id": "p0",
+              "green": {
+                "bE1_r1c3->r1c3_r0c3": "g",
+                "bE1_r1c3->r1c3_r1c2": "G",
+                "bE1_r1c3->r1c3_r2c3": "G",
+                "r1c2_r1c3->r1c3_bE1": "G",
+                "r1c2_r1c3->r1c3_r0c3": "G",
+                "r1c2_r1c3->r1c3_r2c3": "g"
+              },
+              "duration": 30.0
+            },
+            {
+              "id": "p1",
+              "green": {
+                "r0c3_r1c3->r1c3_bE1": "G",
+                "r0c3_r1c3->r1c3_r1c2": "g",
+                "r0c3_r1c3->r1c3_r2c3": "G",
+                "r2c3_r1c3->r1c3_bE1": "g",
+                "r2c3_r1c3->r1c3_r0c3": "G",
+                "r2c3_r1c3->r1c3_r1c2": "G"
+              },
+              "duration": 30.0
+            }
+          ],
+          "template": "two_phase"
+        }
+      },
+      {
+        "id": "r2c0",
+        "point": [
+          0.0,
+          600.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          },
+          "phases": [
+            {
+              "id": "p0",
+              "green": {
+                "bW2_r2c0->r2c0_r1c0": "G",
+                "bW2_r2c0->r2c0_r2c1": "G",
+                "bW2_r2c0->r2c0_r3c0": "g",
+                "r2c1_r2c0->r2c0_bW2": "G",
+                "r2c1_r2c0->r2c0_r1c0": "g",
+                "r2c1_r2c0->r2c0_r3c0": "G"
+              },
+              "duration": 30.0
+            },
+            {
+              "id": "p1",
+              "green": {
+                "r1c0_r2c0->r2c0_bW2": "g",
+                "r1c0_r2c0->r2c0_r2c1": "G",
+                "r1c0_r2c0->r2c0_r3c0": "G",
+                "r3c0_r2c0->r2c0_bW2": "G",
+                "r3c0_r2c0->r2c0_r1c0": "G",
+                "r3c0_r2c0->r2c0_r2c1": "g"
+              },
+              "duration": 30.0
+            }
+          ],
+          "template": "two_phase"
+        }
+      },
+      {
+        "id": "r2c1",
+        "point": [
+          300.0,
+          600.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          },
+          "phases": [
+            {
+              "id": "p0",
+              "green": {
+                "r2c0_r2c1->r2c1_r1c1": "G",
+                "r2c0_r2c1->r2c1_r2c2": "G",
+                "r2c0_r2c1->r2c1_r3c1": "g",
+                "r2c2_r2c1->r2c1_r1c1": "g",
+                "r2c2_r2c1->r2c1_r2c0": "G",
+                "r2c2_r2c1->r2c1_r3c1": "G"
+              },
+              "duration": 30.0
+            },
+            {
+              "id": "p1",
+              "green": {
+                "r1c1_r2c1->r2c1_r2c0": "g",
+                "r1c1_r2c1->r2c1_r2c2": "G",
+                "r1c1_r2c1->r2c1_r3c1": "G",
+                "r3c1_r2c1->r2c1_r1c1": "G",
+                "r3c1_r2c1->r2c1_r2c0": "G",
+                "r3c1_r2c1->r2c1_r2c2": "g"
+              },
+              "duration": 30.0
+            }
+          ],
+          "template": "two_phase"
+        }
+      },
+      {
+        "id": "r2c2",
+        "point": [
+          600.0,
+          600.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          },
+          "phases": [
+            {
+              "id": "p0",
+              "green": {
+                "r2c1_r2c2->r2c2_r1c2": "G",
+                "r2c1_r2c2->r2c2_r2c3": "G",
+                "r2c1_r2c2->r2c2_r3c2": "g",
+                "r2c3_r2c2->r2c2_r1c2": "g",
+                "r2c3_r2c2->r2c2_r2c1": "G",
+                "r2c3_r2c2->r2c2_r3c2": "G"
+              },
+              "duration": 30.0
+            },
+            {
+              "id": "p1",
+              "green": {
+                "r1c2_r2c2->r2c2_r2c1": "g",
+                "r1c2_r2c2->r2c2_r2c3": "G",
+                "r1c2_r2c2->r2c2_r3c2": "G",
+                "r3c2_r2c2->r2c2_r1c2": "G",
+                "r3c2_r2c2->r2c2_r2c1": "G",
+                "r3c2_r2c2->r2c2_r2c3": "g"
+              },
+              "duration": 30.0
+            }
+          ],
+          "template": "two_phase"
+        }
+      },
+      {
+        "id": "r2c3",
+        "point": [
+          900.0,
+          600.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          },
+          "phases": [
+            {
+              "id": "p0",
+              "green": {
+                "bE2_r2c3->r2c3_r1c3": "g",
+                "bE2_r2c3->r2c3_r2c2": "G",
+                "bE2_r2c3->r2c3_r3c3": "G",
+                "r2c2_r2c3->r2c3_bE2": "G",
+                "r2c2_r2c3->r2c3_r1c3": "G",
+                "r2c2_r2c3->r2c3_r3c3": "g"
+              },
+              "duration": 30.0
+            },
+            {
+              "id": "p1",
+              "green": {
+                "r1c3_r2c3->r2c3_bE2": "G",
+                "r1c3_r2c3->r2c3_r2c2": "g",
+                "r1c3_r2c3->r2c3_r3c3": "G",
+                "r3c3_r2c3->r2c3_bE2": "g",
+                "r3c3_r2c3->r2c3_r1c3": "G",
+                "r3c3_r2c3->r2c3_r2c2": "G"
+              },
+              "duration": 30.0
+            }
+          ],
+          "template": "two_phase"
+        }
+      },
+      {
+        "id": "r3c0",
+        "point": [
+          0.0,
+          900.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          },
+          "phases": [
+            {
+              "id": "p0",
+              "green": {
+                "bW3_r3c0->r3c0_bN0": "g",
+                "bW3_r3c0->r3c0_r2c0": "G",
+                "bW3_r3c0->r3c0_r3c1": "G",
+                "r3c1_r3c0->r3c0_bN0": "G",
+                "r3c1_r3c0->r3c0_bW3": "G",
+                "r3c1_r3c0->r3c0_r2c0": "g"
+              },
+              "duration": 30.0
+            },
+            {
+              "id": "p1",
+              "green": {
+                "bN0_r3c0->r3c0_bW3": "G",
+                "bN0_r3c0->r3c0_r2c0": "G",
+                "bN0_r3c0->r3c0_r3c1": "g",
+                "r2c0_r3c0->r3c0_bN0": "G",
+                "r2c0_r3c0->r3c0_bW3": "g",
+                "r2c0_r3c0->r3c0_r3c1": "G"
+              },
+              "duration": 30.0
+            }
+          ],
+          "template": "two_phase"
+        }
+      },
+      {
+        "id": "r3c1",
+        "point": [
+          300.0,
+          900.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          },
+          "phases": [
+            {
+              "id": "p0",
+              "green": {
+                "r3c0_r3c1->r3c1_bN1": "g",
+                "r3c0_r3c1->r3c1_r2c1": "G",
+                "r3c0_r3c1->r3c1_r3c2": "G",
+                "r3c2_r3c1->r3c1_bN1": "G",
+                "r3c2_r3c1->r3c1_r2c1": "g",
+                "r3c2_r3c1->r3c1_r3c0": "G"
+              },
+              "duration": 30.0
+            },
+            {
+              "id": "p1",
+              "green": {
+                "bN1_r3c1->r3c1_r2c1": "G",
+                "bN1_r3c1->r3c1_r3c0": "G",
+                "bN1_r3c1->r3c1_r3c2": "g",
+                "r2c1_r3c1->r3c1_bN1": "G",
+                "r2c1_r3c1->r3c1_r3c0": "g",
+                "r2c1_r3c1->r3c1_r3c2": "G"
+              },
+              "duration": 30.0
+            }
+          ],
+          "template": "two_phase"
+        }
+      },
+      {
+        "id": "r3c2",
+        "point": [
+          600.0,
+          900.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          },
+          "phases": [
+            {
+              "id": "p0",
+              "green": {
+                "r3c1_r3c2->r3c2_bN2": "g",
+                "r3c1_r3c2->r3c2_r2c2": "G",
+                "r3c1_r3c2->r3c2_r3c3": "G",
+                "r3c3_r3c2->r3c2_bN2": "G",
+                "r3c3_r3c2->r3c2_r2c2": "g",
+                "r3c3_r3c2->r3c2_r3c1": "G"
+              },
+              "duration": 30.0
+            },
+            {
+              "id": "p1",
+              "green": {
+                "bN2_r3c2->r3c2_r2c2": "G",
+                "bN2_r3c2->r3c2_r3c1": "G",
+                "bN2_r3c2->r3c2_r3c3": "g",
+                "r2c2_r3c2->r3c2_bN2": "G",
+                "r2c2_r3c2->r3c2_r3c1": "g",
+                "r2c2_r3c2->r3c2_r3c3": "G"
+              },
+              "duration": 30.0
+            }
+          ],
+          "template": "two_phase"
+        }
+      },
+      {
+        "id": "r3c3",
+        "point": [
+          900.0,
+          900.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          },
+          "phases": [
+            {
+              "id": "p0",
+              "green": {
+                "bE3_r3c3->r3c3_bN3": "G",
+                "bE3_r3c3->r3c3_r2c3": "g",
+                "bE3_r3c3->r3c3_r3c2": "G",
+                "r3c2_r3c3->r3c3_bE3": "G",
+                "r3c2_r3c3->r3c3_bN3": "g",
+                "r3c2_r3c3->r3c3_r2c3": "G"
+              },
+              "duration": 30.0
+            },
+            {
+              "id": "p1",
+              "green": {
+                "bN3_r3c3->r3c3_bE3": "g",
+                "bN3_r3c3->r3c3_r2c3": "G",
+                "bN3_r3c3->r3c3_r3c2": "G",
+                "r2c3_r3c3->r3c3_bE3": "G",
+                "r2c3_r3c3->r3c3_bN3": "G",
+                "r2c3_r3c3->r3c3_r3c2": "g"
+              },
+              "duration": 30.0
+            }
+          ],
+          "template": "two_phase"
+        }
+      },
+      {
+        "id": "bW0",
+        "point": [
+          -150.0,
+          0.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bE0",
+        "point": [
+          1050.0,
+          0.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bW1",
+        "point": [
+          -150.0,
+          300.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bE1",
+        "point": [
+          1050.0,
+          300.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bW2",
+        "point": [
+          -150.0,
+          600.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bE2",
+        "point": [
+          1050.0,
+          600.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bW3",
+        "point": [
+          -150.0,
+          900.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bE3",
+        "point": [
+          1050.0,
+          900.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bS0",
+        "point": [
+          0.0,
+          -150.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bN0",
+        "point": [
+          0.0,
+          1050.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bS1",
+        "point": [
+          300.0,
+          -150.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bN1",
+        "point": [
+          300.0,
+          1050.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bS2",
+        "point": [
+          600.0,
+          -150.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bN2",
+        "point": [
+          600.0,
+          1050.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bS3",
+        "point": [
+          900.0,
+          -150.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bN3",
+        "point": [
+          900.0,
+          1050.0
+        ],
+        "kind": "boundary"
+      }
+    ],
+    "roads": [
+      {
+        "id": "bW0_r0c0",
+        "from": "bW0",
+        "to": "r0c0",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r0c0_bW0",
+        "from": "r0c0",
+        "to": "bW0",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r0c0_r0c1",
+        "from": "r0c0",
+        "to": "r0c1",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r0c1_r0c0",
+        "from": "r0c1",
+        "to": "r0c0",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r0c1_r0c2",
+        "from": "r0c1",
+        "to": "r0c2",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r0c2_r0c1",
+        "from": "r0c2",
+        "to": "r0c1",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r0c2_r0c3",
+        "from": "r0c2",
+        "to": "r0c3",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r0c3_r0c2",
+        "from": "r0c3",
+        "to": "r0c2",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r0c3_bE0",
+        "from": "r0c3",
+        "to": "bE0",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "bE0_r0c3",
+        "from": "bE0",
+        "to": "r0c3",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "bW1_r1c0",
+        "from": "bW1",
+        "to": "r1c0",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r1c0_bW1",
+        "from": "r1c0",
+        "to": "bW1",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r1c0_r1c1",
+        "from": "r1c0",
+        "to": "r1c1",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r1c1_r1c0",
+        "from": "r1c1",
+        "to": "r1c0",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r1c1_r1c2",
+        "from": "r1c1",
+        "to": "r1c2",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r1c2_r1c1",
+        "from": "r1c2",
+        "to": "r1c1",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r1c2_r1c3",
+        "from": "r1c2",
+        "to": "r1c3",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r1c3_r1c2",
+        "from": "r1c3",
+        "to": "r1c2",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r1c3_bE1",
+        "from": "r1c3",
+        "to": "bE1",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "bE1_r1c3",
+        "from": "bE1",
+        "to": "r1c3",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "bW2_r2c0",
+        "from": "bW2",
+        "to": "r2c0",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r2c0_bW2",
+        "from": "r2c0",
+        "to": "bW2",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r2c0_r2c1",
+        "from": "r2c0",
+        "to": "r2c1",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r2c1_r2c0",
+        "from": "r2c1",
+        "to": "r2c0",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r2c1_r2c2",
+        "from": "r2c1",
+        "to": "r2c2",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r2c2_r2c1",
+        "from": "r2c2",
+        "to": "r2c1",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r2c2_r2c3",
+        "from": "r2c2",
+        "to": "r2c3",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r2c3_r2c2",
+        "from": "r2c3",
+        "to": "r2c2",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r2c3_bE2",
+        "from": "r2c3",
+        "to": "bE2",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "bE2_r2c3",
+        "from": "bE2",
+        "to": "r2c3",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "bW3_r3c0",
+        "from": "bW3",
+        "to": "r3c0",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r3c0_bW3",
+        "from": "r3c0",
+        "to": "bW3",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r3c0_r3c1",
+        "from": "r3c0",
+        "to": "r3c1",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r3c1_r3c0",
+        "from": "r3c1",
+        "to": "r3c0",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r3c1_r3c2",
+        "from": "r3c1",
+        "to": "r3c2",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r3c2_r3c1",
+        "from": "r3c2",
+        "to": "r3c1",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r3c2_r3c3",
+        "from": "r3c2",
+        "to": "r3c3",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r3c3_r3c2",
+        "from": "r3c3",
+        "to": "r3c2",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r3c3_bE3",
+        "from": "r3c3",
+        "to": "bE3",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "bE3_r3c3",
+        "from": "bE3",
+        "to": "r3c3",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "bS0_r0c0",
+        "from": "bS0",
+        "to": "r0c0",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r0c0_bS0",
+        "from": "r0c0",
+        "to": "bS0",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r0c0_r1c0",
+        "from": "r0c0",
+        "to": "r1c0",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r1c0_r0c0",
+        "from": "r1c0",
+        "to": "r0c0",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r1c0_r2c0",
+        "from": "r1c0",
+        "to": "r2c0",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r2c0_r1c0",
+        "from": "r2c0",
+        "to": "r1c0",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r2c0_r3c0",
+        "from": "r2c0",
+        "to": "r3c0",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r3c0_r2c0",
+        "from": "r3c0",
+        "to": "r2c0",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r3c0_bN0",
+        "from": "r3c0",
+        "to": "bN0",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "bN0_r3c0",
+        "from": "bN0",
+        "to": "r3c0",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "bS1_r0c1",
+        "from": "bS1",
+        "to": "r0c1",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r0c1_bS1",
+        "from": "r0c1",
+        "to": "bS1",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r0c1_r1c1",
+        "from": "r0c1",
+        "to": "r1c1",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r1c1_r0c1",
+        "from": "r1c1",
+        "to": "r0c1",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r1c1_r2c1",
+        "from": "r1c1",
+        "to": "r2c1",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r2c1_r1c1",
+        "from": "r2c1",
+        "to": "r1c1",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r2c1_r3c1",
+        "from": "r2c1",
+        "to": "r3c1",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r3c1_r2c1",
+        "from": "r3c1",
+        "to": "r2c1",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r3c1_bN1",
+        "from": "r3c1",
+        "to": "bN1",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "bN1_r3c1",
+        "from": "bN1",
+        "to": "r3c1",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "bS2_r0c2",
+        "from": "bS2",
+        "to": "r0c2",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r0c2_bS2",
+        "from": "r0c2",
+        "to": "bS2",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r0c2_r1c2",
+        "from": "r0c2",
+        "to": "r1c2",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r1c2_r0c2",
+        "from": "r1c2",
+        "to": "r0c2",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r1c2_r2c2",
+        "from": "r1c2",
+        "to": "r2c2",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r2c2_r1c2",
+        "from": "r2c2",
+        "to": "r1c2",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r2c2_r3c2",
+        "from": "r2c2",
+        "to": "r3c2",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r3c2_r2c2",
+        "from": "r3c2",
+        "to": "r2c2",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r3c2_bN2",
+        "from": "r3c2",
+        "to": "bN2",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "bN2_r3c2",
+        "from": "bN2",
+        "to": "r3c2",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "bS3_r0c3",
+        "from": "bS3",
+        "to": "r0c3",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r0c3_bS3",
+        "from": "r0c3",
+        "to": "bS3",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r0c3_r1c3",
+        "from": "r0c3",
+        "to": "r1c3",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r1c3_r0c3",
+        "from": "r1c3",
+        "to": "r0c3",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r1c3_r2c3",
+        "from": "r1c3",
+        "to": "r2c3",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r2c3_r1c3",
+        "from": "r2c3",
+        "to": "r1c3",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r2c3_r3c3",
+        "from": "r2c3",
+        "to": "r3c3",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r3c3_r2c3",
+        "from": "r3c3",
+        "to": "r2c3",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "r3c3_bN3",
+        "from": "r3c3",
+        "to": "bN3",
+        "lanes": [
+          {},
+          {}
+        ]
+      },
+      {
+        "id": "bN3_r3c3",
+        "from": "bN3",
+        "to": "r3c3",
+        "lanes": [
+          {},
+          {}
+        ]
+      }
+    ]
+  },
+  "demand": {
+    "flows": [
+      {
+        "id": "bW0_r0c0:far",
+        "origin": "bW0_r0c0",
+        "destination": "r3c0_bN0",
+        "rate": 30.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW0_r0c0:straight",
+        "origin": "bW0_r0c0",
+        "destination": "r0c3_bE0",
+        "rate": 240.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW0_r0c0:near",
+        "origin": "bW0_r0c0",
+        "destination": "r0c0_bS0",
+        "rate": 30.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE0_r0c3:far",
+        "origin": "bE0_r0c3",
+        "destination": "r0c3_bS3",
+        "rate": 30.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE0_r0c3:straight",
+        "origin": "bE0_r0c3",
+        "destination": "r0c0_bW0",
+        "rate": 240.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE0_r0c3:near",
+        "origin": "bE0_r0c3",
+        "destination": "r3c3_bN3",
+        "rate": 30.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW1_r1c0:far",
+        "origin": "bW1_r1c0",
+        "destination": "r3c0_bN0",
+        "rate": 30.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW1_r1c0:straight",
+        "origin": "bW1_r1c0",
+        "destination": "r1c3_bE1",
+        "rate": 240.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW1_r1c0:near",
+        "origin": "bW1_r1c0",
+        "destination": "r0c0_bS0",
+        "rate": 30.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE1_r1c3:far",
+        "origin": "bE1_r1c3",
+        "destination": "r0c3_bS3",
+        "rate": 30.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE1_r1c3:straight",
+        "origin": "bE1_r1c3",
+        "destination": "r1c0_bW1",
+        "rate": 240.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE1_r1c3:near",
+        "origin": "bE1_r1c3",
+        "destination": "r3c3_bN3",
+        "rate": 30.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW2_r2c0:far",
+        "origin": "bW2_r2c0",
+        "destination": "r3c0_bN0",
+        "rate": 30.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW2_r2c0:straight",
+        "origin": "bW2_r2c0",
+        "destination": "r2c3_bE2",
+        "rate": 240.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW2_r2c0:near",
+        "origin": "bW2_r2c0",
+        "destination": "r0c0_bS0",
+        "rate": 30.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE2_r2c3:far",
+        "origin": "bE2_r2c3",
+        "destination": "r0c3_bS3",
+        "rate": 30.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE2_r2c3:straight",
+        "origin": "bE2_r2c3",
+        "destination": "r2c0_bW2",
+        "rate": 240.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE2_r2c3:near",
+        "origin": "bE2_r2c3",
+        "destination": "r3c3_bN3",
+        "rate": 30.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW3_r3c0:far",
+        "origin": "bW3_r3c0",
+        "destination": "r3c0_bN0",
+        "rate": 30.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW3_r3c0:straight",
+        "origin": "bW3_r3c0",
+        "destination": "r3c3_bE3",
+        "rate": 240.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW3_r3c0:near",
+        "origin": "bW3_r3c0",
+        "destination": "r0c0_bS0",
+        "rate": 30.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE3_r3c3:far",
+        "origin": "bE3_r3c3",
+        "destination": "r0c3_bS3",
+        "rate": 30.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE3_r3c3:straight",
+        "origin": "bE3_r3c3",
+        "destination": "r3c0_bW3",
+        "rate": 240.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE3_r3c3:near",
+        "origin": "bE3_r3c3",
+        "destination": "r3c3_bN3",
+        "rate": 30.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS0_r0c0:far",
+        "origin": "bS0_r0c0",
+        "destination": "r0c0_bW0",
+        "rate": 30.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS0_r0c0:straight",
+        "origin": "bS0_r0c0",
+        "destination": "r3c0_bN0",
+        "rate": 240.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS0_r0c0:near",
+        "origin": "bS0_r0c0",
+        "destination": "r0c3_bE0",
+        "rate": 30.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN0_r3c0:far",
+        "origin": "bN0_r3c0",
+        "destination": "r3c3_bE3",
+        "rate": 30.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN0_r3c0:straight",
+        "origin": "bN0_r3c0",
+        "destination": "r0c0_bS0",
+        "rate": 240.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN0_r3c0:near",
+        "origin": "bN0_r3c0",
+        "destination": "r3c0_bW3",
+        "rate": 30.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS1_r0c1:far",
+        "origin": "bS1_r0c1",
+        "destination": "r0c0_bW0",
+        "rate": 30.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS1_r0c1:straight",
+        "origin": "bS1_r0c1",
+        "destination": "r3c1_bN1",
+        "rate": 240.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS1_r0c1:near",
+        "origin": "bS1_r0c1",
+        "destination": "r0c3_bE0",
+        "rate": 30.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN1_r3c1:far",
+        "origin": "bN1_r3c1",
+        "destination": "r3c3_bE3",
+        "rate": 30.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN1_r3c1:straight",
+        "origin": "bN1_r3c1",
+        "destination": "r0c1_bS1",
+        "rate": 240.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN1_r3c1:near",
+        "origin": "bN1_r3c1",
+        "destination": "r3c0_bW3",
+        "rate": 30.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS2_r0c2:far",
+        "origin": "bS2_r0c2",
+        "destination": "r0c0_bW0",
+        "rate": 30.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS2_r0c2:straight",
+        "origin": "bS2_r0c2",
+        "destination": "r3c2_bN2",
+        "rate": 240.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS2_r0c2:near",
+        "origin": "bS2_r0c2",
+        "destination": "r0c3_bE0",
+        "rate": 30.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN2_r3c2:far",
+        "origin": "bN2_r3c2",
+        "destination": "r3c3_bE3",
+        "rate": 30.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN2_r3c2:straight",
+        "origin": "bN2_r3c2",
+        "destination": "r0c2_bS2",
+        "rate": 240.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN2_r3c2:near",
+        "origin": "bN2_r3c2",
+        "destination": "r3c0_bW3",
+        "rate": 30.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS3_r0c3:far",
+        "origin": "bS3_r0c3",
+        "destination": "r0c0_bW0",
+        "rate": 30.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS3_r0c3:straight",
+        "origin": "bS3_r0c3",
+        "destination": "r3c3_bN3",
+        "rate": 240.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS3_r0c3:near",
+        "origin": "bS3_r0c3",
+        "destination": "r0c3_bE0",
+        "rate": 30.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN3_r3c3:far",
+        "origin": "bN3_r3c3",
+        "destination": "r3c3_bE3",
+        "rate": 30.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN3_r3c3:straight",
+        "origin": "bN3_r3c3",
+        "destination": "r0c3_bS3",
+        "rate": 240.0,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN3_r3c3:near",
+        "origin": "bN3_r3c3",
+        "destination": "r3c0_bW3",
+        "rate": 30.0,
+        "arrival": "poisson"
+      }
+    ]
+  }
+}

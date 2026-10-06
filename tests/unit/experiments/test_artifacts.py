@@ -87,7 +87,10 @@ def test_files_and_summary_last(
     stamped = run.write_result(result)
     assert written == ["spec.json", "env.json", "summary.json"]  # result.json via save()
     names = sorted(p.name for p in run.directory.iterdir())
-    assert names == ["env.json", "result.json", "scenario.json", "spec.json", "summary.json"]
+    tables = [f"{t}.csv" for t in result.tables]
+    assert names == sorted(
+        ["env.json", "result.json", "scenario.json", "spec.json", "summary.json", *tables]
+    )
     assert run.scenario_path.read_bytes() == source.read_bytes()  # an exact copy
     spec = json.loads(run.spec_path.read_text(encoding="utf-8"))
     assert spec == {"run_id": run.run_id, "seed": 7}

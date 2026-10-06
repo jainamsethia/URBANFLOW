@@ -4,8 +4,9 @@
 #13): ``vehicles.generated``, ``travel_time.mean``, ``throughput_vph`` and so on. A result
 saves to ``<directory>/result.json`` and loads back losslessly (NaN is stored as null).
 ``state_digest`` identifies the final engine state (equal on the same platform exactly when
-two runs ended in the same state). Timeseries and trip tables and ``export`` arrive with
-the metrics subsystem.
+two runs ended in the same state). ``tables`` holds the metrics tables (``timeseries``,
+``intersections``, ``trips``); :meth:`SimulationResult.export` writes them as CSV, JSON or
+Parquet, and :meth:`save` stores them as CSV next to ``result.json``.
 """
 
 from __future__ import annotations
@@ -18,11 +19,14 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from importlib import metadata
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, Literal
+
+import numpy as np
 
 from urbanflow._version import __version__
 from urbanflow.core.config import SimulationConfig
 from urbanflow.core.errors import ConfigError, NotFoundError
+from urbanflow.metrics.export import export_tables, read_table
 from urbanflow.scenario.io import write_json
 
 __all__ = ["RESULT_FILE", "SimulationResult", "provenance"]
@@ -89,6 +93,9 @@ class SimulationResult:
     """sha256 hex of the engine state at the end (``Simulation.state_digest()``; empty in
     results saved before the field existed, and after an interrupted step corrupted the
     state)."""
+    tables: Mapping[str, Mapping[str, np.ndarray]] = field(default_factory=dict, repr=False)
+    """Metrics tables by name: ``timeseries``, ``intersections``, ``trips`` (column ->
+    array)."""
 
     # ------------------------------------------------------------------ serialisation
     def to_dict(self) -> dict[str, Any]:
@@ -140,8 +147,22 @@ class SimulationResult:
     def save(self, directory: str | os.PathLike[str]) -> Path:
         """Write ``<directory>/result.json`` (atomically); returns the directory."""
         target = Path(directory)
+        export_tables(self.tables, target, "csv")
         write_json(target / RESULT_FILE, self.to_dict())
         return target
+
+    def export(
+        self,
+        directory: str | os.PathLike[str],
+        *,
+        format: Literal["csv", "json", "parquet"] = "csv",
+        tables: tuple[str, ...] | None = None,
+    ) -> list[Path]:
+        """Write the metrics tables (all, or ``tables``) as ``<directory>/<name>.<format>``.
+
+        Parquet needs the ``data`` extra (``MissingDependencyError`` otherwise)."""
+        chosen = {k: v for k, v in self.tables.items() if tables is None or k in tables}
+        return export_tables(chosen, directory, format)
 
     @classmethod
     def load(cls, directory: str | os.PathLike[str]) -> SimulationResult:
@@ -157,7 +178,13 @@ class SimulationResult:
             raise ConfigError(f"{path}: invalid JSON: {exc}") from None
         if not isinstance(data, dict):
             raise ConfigError(f"{path}: expected a JSON object")
-        return cls.from_dict(data)
+        result = cls.from_dict(data)
+        found = {
+            name: read_table(Path(directory) / f"{name}.csv")
+            for name in ("timeseries", "intersections", "trips")
+            if (Path(directory) / f"{name}.csv").is_file()
+        }
+        return result if not found else _replace_tables(result, found)
 
     # ------------------------------------------------------------------ display
     @property
@@ -183,6 +210,16 @@ class SimulationResult:
                 "n/a" if math.isnan(s["throughput_vph"]) else f"{s['throughput_vph']:,.0f} veh/h",
             ),
             ("Mean travel time", _seconds(s["travel_time.mean"])),
+            *(
+                (label, fmt(s[key]))
+                for label, key, fmt in (
+                    ("Mean delay", "delay.mean", _seconds),
+                    ("Mean waiting time", "waiting_time_mean", _seconds),
+                    ("Mean stops per vehicle", "stops_mean", lambda v: f"{v:.2f}"),
+                    ("Mean network queue", "queue.mean_total_veh", lambda v: f"{v:.1f} veh"),
+                )
+                if key in s and not math.isnan(s[key])
+            ),
             ("Teleports", _count(s["vehicles.teleported"])),
             ("Wall time", _seconds(self.wall_time, ".2f")),
         ]
@@ -193,3 +230,11 @@ class SimulationResult:
         right = max(len(value) for _, value in rows)
         lines = [self.title, *(f"{name:<{left}}  {value:>{right}}" for name, value in rows)]
         return "\n".join(lines)
+
+
+def _replace_tables(
+    result: SimulationResult, tables: Mapping[str, Mapping[str, np.ndarray]]
+) -> SimulationResult:
+    from dataclasses import replace
+
+    return replace(result, tables=dict(tables))
