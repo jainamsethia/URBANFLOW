@@ -209,8 +209,9 @@ class LaneData(Protocol):
     @property
     def emergency(self) -> tuple[IntArray, IntArray, FloatArray]:
         """Running emergency vehicles: ``(link, connector link, distance)``; the connector
-        is the planned one on a lane (-1 if none) or the current one; the distance is to the
-        stop line on a lane and ``-pos`` on a connector."""
+        is the planned one on a lane (one of the route's next movement while the vehicle
+        still has to change lanes; -1 on its last road) or the current one; the distance is
+        to the stop line on a lane and ``-pos`` on a connector."""
         ...
 
 

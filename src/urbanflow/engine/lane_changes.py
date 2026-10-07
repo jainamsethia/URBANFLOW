@@ -21,6 +21,12 @@ vehicles about to enter ``l'`` and connector rears still overhanging ``l'``):
   changes, ``beta_m = min(10, bias D_m / max(d, 1))`` and ``p = 0`` for mandatory changes
   closer than 50 m.
 
+**Yielding to emergency vehicles**: a vehicle with an emergency vehicle behind it on its
+lane, within ``EMERGENCY_YIELD_DISTANCE`` (front to front), may change up to the stop line
+with bias ``EMERGENCY_YIELD_BIAS`` and politeness 0, still only into a lane that serves its
+route and with every safety check; and no discretionary change ends within that distance
+ahead of an emergency vehicle on the target lane.
+
 Accepted changes run sequentially in (mandatory first, incentive desc, uid) order, each
 re-validated against vehicles already moved into the same lane this step. A change is
 instantaneous for the longitudinal model; ``lat_offset`` decays for rendering only. There
@@ -36,7 +42,7 @@ import numpy as np
 
 from urbanflow.core import constants as C
 from urbanflow.core.events import EventBuffer, EventType
-from urbanflow.core.types import FloatArray, IntArray
+from urbanflow.core.types import BoolArray, FloatArray, IntArray, VehicleClass
 from urbanflow.routing.lanes import plan_connector
 from urbanflow.vehicles.car_following import CarFollowingInputs, desired_speed, stop_budget
 
@@ -104,12 +110,28 @@ def lane_change_step(
     cursor = veh.route_cursor[run].astype(np.intp)
     last = cursor + 1 >= routes.lengths[veh.route_id[run]]
     mandatory = on_lane & (veh.next_conn[run] < 0) & ~last
+    emergency = types.vclass[veh.type_idx[run]] == VehicleClass.emergency.code
+    # emergency vehicles on lanes, by key = link * K + pos
+    ev_keys = np.sort(link[on_lane & emergency] * C.LC_SORT_KEY_SCALE + pos[on_lane & emergency])
+
+    def ev_behind(lanes: IntArray, at: FloatArray) -> BoolArray:
+        """An emergency vehicle is on ``lanes`` within the yield distance behind ``at``."""
+        if not ev_keys.size:
+            return np.zeros(lanes.size, dtype=bool)
+        key = lanes * C.LC_SORT_KEY_SCALE + at
+        i = np.searchsorted(ev_keys, key, side="left") - 1
+        k = ev_keys[np.maximum(i, 0)]
+        near: BoolArray = (i >= 0) & (k // C.LC_SORT_KEY_SCALE == lanes)
+        within: BoolArray = near & (key - k <= C.EMERGENCY_YIELD_DISTANCE)
+        return within
+
+    yielding = on_lane & ~emergency & ev_behind(link, pos)
     cand = (
         on_lane
         & ~veh.committed[run]
         & (veh.lc_cooldown[run] <= 0)
         & (veh.dwell_left[run] <= 0)
-        & (mandatory | (d > C.LC_NO_DISCRETIONARY_ZONE))
+        & (mandatory | yielding | (d > C.LC_NO_DISCRETIONARY_ZONE))
     )
     if not cand.any():
         return none
@@ -148,6 +170,8 @@ def lane_change_step(
     v_c = veh.speed[h_c]
     d_c = d[ci]
     mand_c = mandatory[ci]
+    yield_c = yielding[ci] & ~mand_c
+    ev_c = emergency[ci]
     lane_index = net.link_lane_index[l_c].astype(np.int64)
     valid = veh.valid_mask[h_c].astype(np.int64)
 
@@ -214,6 +238,7 @@ def lane_change_step(
         gap_f = np.where(has_fol, pos_t - len_c - fol_front, np.inf)
         ok &= (gap_l > 0) & (gap_f > 0) & (pos_t - len_c >= reserved[tgt])
         ok &= ~(has_fol & veh.committed[fol_h] & (veh.link[fol_h] == tgt))
+        ok &= mand_c | ev_c | ~ev_behind(tgt, pos_t)  # no cut-in ahead of an emergency vehicle
         # G.2 feasibility (no collision even under emergency braking)
         b_l = types.emergency_decel[veh.type_idx[lead_h]]
         budget_i = np.where(
@@ -244,7 +269,9 @@ def lane_change_step(
             model, types, veh, o_h, gap_o_after, leaders.leader_speed[ci], veh.v0[o_h], dt, rng
         )
         politeness = np.where(
-            mand_c & (d_c < C.LC_POLITENESS_OFF_DISTANCE), 0.0, types.politeness[ti_c]
+            (mand_c & (d_c < C.LC_POLITENESS_OFF_DISTANCE)) | yield_c,
+            0.0,
+            types.politeness[ti_c],
         )
         others = np.where(has_fol, a_f_new - a_f_now, 0.0) + np.where(
             has_old, a_o_new - a_o_now, 0.0
@@ -256,7 +283,8 @@ def lane_change_step(
             * C.LC_MANDATORY_DISTANCE
             / np.maximum(d_c, C.LC_URGENCY_MIN_DISTANCE),
         )
-        margin = gain - types.lc_threshold[ti_c] + np.where(mand_c, beta_m, 0.0)
+        bias = np.where(mand_c, beta_m, np.where(yield_c, C.EMERGENCY_YIELD_BIAS, 0.0))
+        margin = gain - types.lc_threshold[ti_c] + bias
         better = ok & (margin > 0) & (margin > best_gain)
         best_gain = np.where(better, margin, best_gain)
         best_target = np.where(better, tgt, best_target)

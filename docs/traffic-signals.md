@@ -190,7 +190,9 @@ a planned movement, it requests the phase in which the nearest such vehicle's mo
 protected (G), else permitted (g), and holds it; a current phase that already serves the
 vehicle is kept. Otherwise `inner` decides, continuing from the current phase. Min-green,
 yellow and all-red still apply, and emergency vehicles obey the signal like everyone else;
-other vehicles do not pull over. `SignalView.preempting` tells when it is active.
+vehicles ahead of it move over to a free adjacent lane when they can (see the vehicle
+model). An emergency vehicle that still has to change lanes for its next turn is served by
+that turn's phase. `SignalView.preempting` tells when it is active.
 
 ```python
 from urbanflow import Simulation, generate

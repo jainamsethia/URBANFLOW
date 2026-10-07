@@ -103,6 +103,12 @@ change to an adjacent lane, keeping its relative position on the road.
   &gt; Δa<sub>th</sub> − β, with β = min(10, 1.0 · 200 / max(d, 1)) m/s² for mandatory
   changes (urgency grows toward the stop line) and p = 0 for mandatory changes closer
   than 50 m.
+- **Yielding to emergency vehicles**: a vehicle with an emergency vehicle behind it on
+  its lane within 100 m (front to front) moves over: it may change up to the stop line,
+  with β = 10 m/s² and p = 0, still only into a lane that serves its route and with all
+  the safety checks. No discretionary change ends within 100 m ahead of an emergency
+  vehicle on the target lane. In a standing queue there is usually no gap to move into,
+  so the emergency vehicle waits like everyone else (there is no shoulder or rescue lane).
 - Changes execute one by one (mandatory first, then by incentive, then uid); the
   neighbours of an executed change decide again next step. The change is instantaneous
   for the physics; a lateral offset fades out over 2 s for drawing only. There are no

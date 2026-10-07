@@ -163,6 +163,8 @@ LC_MANDATORY_BIAS_MAX: Final = 10.0  # m/s²; cap of β_m
 LC_URGENCY_MIN_DISTANCE: Final = 1.0  # m; floor of d in β_m
 LC_POLITENESS_OFF_DISTANCE: Final = 50.0  # m; p = 0 for mandatory changes closer than this
 LC_COOLDOWN: Final = 3.0  # s; minimum time between discretionary changes
+EMERGENCY_YIELD_DISTANCE: Final = 100.0  # m; an emergency vehicle this close behind -> yield
+EMERGENCY_YIELD_BIAS: Final = 10.0  # m/s²; MOBIL bias of a yielding change (= β_m cap)
 LC_VISUAL_DURATION: Final = 2.0  # s; lat_offset decays at w / duration (render only)
 LC_KEEP_RIGHT_BIAS: Final = 0.0  # m/s²; keep-right bias, off by default
 LC_CHECK_INTERVAL: Final = 1.0  # s; discretionary evaluation subsampling (S.1)

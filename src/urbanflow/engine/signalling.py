@@ -21,6 +21,7 @@ import numpy as np
 from urbanflow.core import constants as C
 from urbanflow.core.types import BoolArray, FloatArray, IntArray, UIntArray, VehicleClass
 from urbanflow.network.compiled import CompiledNetwork
+from urbanflow.routing.base import RouteTable
 from urbanflow.vehicles.table import VehicleTable
 from urbanflow.vehicles.types import VehicleTypes
 
@@ -89,10 +90,12 @@ class LaneStats:
         run: IntArray,
         occupied: BoolArray,
         last_seen: FloatArray,
+        routes: RouteTable | None = None,
     ) -> None:
         self.net = net
         self._veh, self._types, self._run = veh, types, run
         self._occupied, self._last_seen = occupied, last_seen
+        self._routes = routes
 
     @cached_property
     def _link(self) -> IntArray:
@@ -172,5 +175,15 @@ class LaneStats:
         pos = veh.pos[run][emergency]
         on_lane = link < net.n_lanes
         conn = np.where(on_lane, veh.next_conn[run][emergency], link).astype(np.intp)
+        if self._routes is not None:  # in a lane that cannot turn yet: a connector of the
+            # route's next movement, so preemption serves it before its lane change
+            handles = run[emergency]
+            for i in np.flatnonzero(on_lane & (conn < 0)).tolist():
+                h = int(handles[i])
+                route = self._routes.get(int(veh.route_id[h]))
+                k = int(veh.route_cursor[h])
+                if k + 1 < len(route):
+                    pair = (int(route[k]), int(route[k + 1]))
+                    conn[i] = net.road_pair_conns.get(pair, (-1,))[0]
         dist = np.where(on_lane, net.link_length[link] - pos, -pos)
         return link, conn, dist

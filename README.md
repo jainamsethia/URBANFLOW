@@ -134,14 +134,17 @@ through traffic from `W` to `E`:
 | none (all 0) | 152.7 | 2.1 |
 | green wave (`o_i = i * spacing / v`) | 109.7 | 0.84 |
 
-Emergency preemption: bundled `emergency` (the corridor plus 3 emergency vehicles per hour
+Emergency vehicles: bundled `emergency` (the corridor plus 3 emergency vehicles per hour
 along its longest route, 3600 s, seeds 0-2, 9 emergency trips), with and without
-`generate("emergency", preemption=False)`:
+`generate("emergency", preemption=False)`; other vehicles move over for them in both:
 
 | signals | emergency delay (s) | emergency stops | all-vehicle delay (s) |
 |---|---|---|---|
-| fixed-time | 133.1 | 5.9 | 52.3 |
-| fixed-time + preemption | 75.0 | 2.7 | 52.6 |
+| fixed-time | 130.9 | 5.4 | 50.2 |
+| fixed-time + preemption | 56.4 | 1.9 | 53.2 |
+
+Before vehicles moved over (and before preemption served an ambulance still changing lanes
+for its turn) the same runs gave 133.1 s and 75.0 s of emergency delay.
 
 Multi-agent: nine independent tabular Q-learners on `grid_3x3` (PettingZoo env, 40 training
 episodes of 900 s, 3 held-out seeds; `uv run python examples/reinforcement_learning/independent_q_grid.py`):

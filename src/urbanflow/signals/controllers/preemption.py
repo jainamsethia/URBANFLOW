@@ -8,8 +8,8 @@ serves the vehicle is kept. Without such a vehicle it delegates to ``inner``, wh
 continues from the current phase. Min-green, yellow and all-red still apply (the runtime
 owns them); emergency vehicles obey the signal like any other vehicle.
 
-ponytail: no min-green truncation and no pull-over of other vehicles; add a
-``truncate_min_green`` parameter and a lane-change bias when response times matter.
+Other vehicles move over by lane change (``engine.lane_changes``). ponytail: no min-green
+truncation; add a ``truncate_min_green`` parameter when response times matter.
 """
 
 from __future__ import annotations

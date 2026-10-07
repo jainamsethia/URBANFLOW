@@ -346,7 +346,9 @@ class Engine:
         net, sig, dt = self.network, self.signals, self.config.dt
         occupied = detector_occupancy(net, self.vehicles, run)
         self.detector_seen[occupied] = t
-        lanes = LaneStats(net, self.vehicles, self.types, run, occupied, t - self.detector_seen)
+        lanes = LaneStats(
+            net, self.vehicles, self.types, run, occupied, t - self.detector_seen, self.routes
+        )
         for prog in sig.programs:
             j = prog.intersection
             if sig.stage[j] != Stage.green.code:
