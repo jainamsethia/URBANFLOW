@@ -16,12 +16,13 @@ replays and a web workbench.
   debug-mode invariants (no overlaps, zone exclusivity, conservation, ...).
 - **Signals**: programs with automatic yellow and all-red, `fixed_time`, `webster`
   (Webster's cycle and splits from the scenario demand), `actuated` (gap-out / max-out),
-  `max_pressure` (Varaiya) and `external` (API / RL) controllers,
-  manual hold/release, live controller switching.
+  `max_pressure` (Varaiya) and `external` (API / RL) controllers, emergency-vehicle
+  `preemption` around any of them, manual hold/release, live controller switching.
 - **Scenarios**: versioned JSON format with friendly, JSON-path validation errors; derived
   movements, lane mappings and signal programs; generators `single_intersection`, `grid`
-  and `corridor` (an arterial with green-wave signal offsets); bundled: `single_intersection`,
-  `grid_3x3`, `grid_4x4`, `corridor`.
+  `corridor` (an arterial with green-wave signal offsets) and `emergency` (emergency
+  vehicles crossing a base scenario, with preemption); bundled: `single_intersection`,
+  `grid_3x3`, `grid_4x4`, `corridor`, `emergency`.
 - **Metrics**: travel time, delay, waiting, stops, throughput, queues, space-mean speed,
   VKT/VHT; global, per-intersection and per-trip tables; CSV / JSON / Parquet export.
 - **Replay**: compact `.ufr` recordings with seek, step back and rewind.
@@ -35,7 +36,7 @@ replays and a web workbench.
   view and replay viewer.
 - **Snapshots** (save/restore any state) and **state digests** for bit-exact reproducibility.
 
-Not built yet (planned): more generators (downtown, rush hour), emergency preemption, transit, the CityFlow importer, the visual
+Not built yet (planned): more generators (downtown, rush hour), transit, the CityFlow importer, the visual
 scenario editor, the experiment database/dashboards and the benchmark suite.
 
 ## Install
@@ -132,6 +133,15 @@ through traffic from `W` to `E`:
 |---|---|---|
 | none (all 0) | 152.7 | 2.1 |
 | green wave (`o_i = i * spacing / v`) | 109.7 | 0.84 |
+
+Emergency preemption: bundled `emergency` (the corridor plus 3 emergency vehicles per hour
+along its longest route, 3600 s, seeds 0-2, 9 emergency trips), with and without
+`generate("emergency", preemption=False)`:
+
+| signals | emergency delay (s) | emergency stops | all-vehicle delay (s) |
+|---|---|---|---|
+| fixed-time | 133.1 | 5.9 | 52.3 |
+| fixed-time + preemption | 75.0 | 2.7 | 52.6 |
 
 Multi-agent: nine independent tabular Q-learners on `grid_3x3` (PettingZoo env, 40 training
 episodes of 900 s, 3 held-out seeds; `uv run python examples/reinforcement_learning/independent_q_grid.py`):

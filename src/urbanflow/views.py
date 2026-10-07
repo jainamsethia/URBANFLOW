@@ -43,7 +43,7 @@ from urbanflow.core.types import (
 from urbanflow.engine.signalling import stopline_queue
 from urbanflow.network.compiled import CompiledNetwork
 from urbanflow.scenario.schema import DepartLane, DepartSpeed
-from urbanflow.signals import FixedTime, SignalProgram, controller_name
+from urbanflow.signals import FixedTime, Preemption, SignalProgram, controller_name
 from urbanflow.signals.controllers import realised_cycle, stage_steps
 from urbanflow.vehicles.table import COLUMNS
 from urbanflow.visualization.frames import vehicle_xy
@@ -827,6 +827,8 @@ class SignalView:
     """SUMO-style: one character per movement, in canonical order."""
     controller: str
     """Name of the active controller (``external`` during a manual hold)."""
+    preempting: bool = False
+    """A ``preemption`` controller is serving an emergency vehicle."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -850,10 +852,12 @@ def signal_view(engine: Engine, j: int) -> SignalView:
     p = int(sig.phase[j])
     stage = Stage.from_code(int(sig.stage[j]))
     controller = engine.controllers[j]
+    preempting = isinstance(controller, Preemption) and controller.active
+    timing = controller.inner if isinstance(controller, Preemption) else controller
     remaining = cycle = None
-    if isinstance(controller, FixedTime):
+    if isinstance(timing, FixedTime) and not preempting:
         dt = engine.config.dt
-        timed = controller.timing or prog
+        timed = timing.timing or prog
         length = {
             Stage.green: max(float(timed.duration[p]), float(timed.min_green[p])),
             Stage.yellow: prog.yellow,
@@ -880,6 +884,7 @@ def signal_view(engine: Engine, j: int) -> SignalView:
         },
         state_string="".join(_STATE_CHARS[c] for c in codes),
         controller=controller_name(controller),
+        preempting=preempting,
     )
 
 

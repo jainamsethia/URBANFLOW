@@ -308,3 +308,4 @@ CORRIDOR_CYCLE: Final = 90.0  # s signal cycle
 CORRIDOR_MAIN_SHARE: Final = 0.6  # share of effective green for the main street
 CORRIDOR_MAIN_RATE: Final = 900.0  # veh/h entering at each main-street end
 CORRIDOR_SIDE_RATE: Final = 200.0  # veh/h entering from each side-street end
+EMERGENCY_TIMES: Final = (300.0, 1200.0, 2100.0)  # s; emergency generator departures (E.10)

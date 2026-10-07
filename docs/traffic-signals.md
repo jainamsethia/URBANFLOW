@@ -181,6 +181,31 @@ sim = Simulation(scenario, controllers={"*": "webster"})
 assert sim.signals["J"].controller == "webster" and sim.signals["J"].cycle == 31.0
 ```
 
+## Emergency preemption
+
+`preemption` wraps another controller (`inner`, default `fixed_time`; a name or
+`{"type", "params"}`). While an emergency vehicle (vehicle class `emergency`) is on one of
+the intersection's connectors, or within `detection_distance` (150 m) of the stop line with
+a planned movement, it requests the phase in which the nearest such vehicle's movement is
+protected (G), else permitted (g), and holds it; a current phase that already serves the
+vehicle is kept. Otherwise `inner` decides, continuing from the current phase. Min-green,
+yellow and all-red still apply, and emergency vehicles obey the signal like everyone else;
+other vehicles do not pull over. `SignalView.preempting` tells when it is active.
+
+```python
+from urbanflow import Simulation, generate
+
+scenario = generate("emergency", times=[60.0], duration=300)  # corridor + one ambulance
+sim = Simulation(scenario, seed=0)
+assert sim.signals["J0"].controller == "preemption"
+sim.run()
+```
+
+The `emergency` generator adds trips `ems.{k}` of the built-in `emergency` type at `times`
+along the base scenario's longest boundary-to-boundary route and, with `preemption=True`
+(the default), wraps every signal controller. Per-trip results are in
+`result.tables["trips"]` (filter on `type == "emergency"`).
+
 ## External control
 
 `external` switches only when asked: `sim.signals.request_phase(j, phase)` queues a phase

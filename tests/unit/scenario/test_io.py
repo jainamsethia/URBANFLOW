@@ -199,7 +199,9 @@ def test_bundled_scenarios() -> None:
     with pytest.raises(NotFoundError) as info:
         io.bundled("single_intersectoin")
     assert '(did you mean "single_intersection"?)' in str(info.value)
-    assert "available: corridor, grid_3x3, grid_4x4, single_intersection" in str(info.value)
+    assert "available: corridor, emergency, grid_3x3, grid_4x4, single_intersection" in str(
+        info.value
+    )
 
 
 @pytest.mark.parametrize(

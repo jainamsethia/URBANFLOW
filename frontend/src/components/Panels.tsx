@@ -115,6 +115,7 @@ export function Inspector({
         {String(d.stage)}
         {d.remaining != null && ` · ${fmt(d.remaining)} s left`}
         {d.held ? " · HELD" : ""}
+        {d.preempting ? <b className="text-rose-400"> · EMERGENCY PREEMPTION</b> : null}
       </p>
       <div className="mb-2 flex flex-wrap gap-1">
         {phases.map((p) => (

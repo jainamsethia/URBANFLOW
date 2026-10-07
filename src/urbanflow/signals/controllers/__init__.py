@@ -1,7 +1,7 @@
 """Signal controllers: the protocol, context and registry, plus the built-ins (plan H.3, H.4).
 
 Importing this package registers ``fixed_time``, ``external``, ``max_pressure``, ``actuated``
-and ``webster``.
+``webster`` and ``preemption``.
 """
 
 from urbanflow.signals.controllers.actuated import Actuated, ActuatedParams
@@ -31,6 +31,7 @@ from urbanflow.signals.controllers.max_pressure import (
     MaxPressureParams,
     max_pressure_choice,
 )
+from urbanflow.signals.controllers.preemption import Preemption, PreemptionParams
 from urbanflow.signals.controllers.webster import Webster, WebsterParams, webster_timing
 
 __all__ = [
@@ -47,6 +48,8 @@ __all__ = [
     "LaneData",
     "MaxPressure",
     "MaxPressureParams",
+    "Preemption",
+    "PreemptionParams",
     "SignalController",
     "Webster",
     "WebsterParams",

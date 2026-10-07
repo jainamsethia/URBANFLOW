@@ -380,6 +380,7 @@ class Session:
                         "cycle": s.cycle,
                         "held": s.held,
                         "controller": s.controller,
+                        "preempting": s.preempting,
                         "state_string": s.state_string,
                         "movement_states": s.movement_states,
                         "phases": phases,
