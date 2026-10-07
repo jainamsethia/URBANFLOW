@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { api, type CompareResult, type Meta, type ScenarioRef } from "../lib/api";
-import type { Selection, SessionController, Snapshot } from "../lib/session";
+import { remainingRoute, type Selection, type SessionController, type Snapshot } from "../lib/session";
 
 export function fmt(v: unknown, digits = 1): string {
   if (typeof v !== "number" || !Number.isFinite(v)) return "–";
@@ -89,6 +89,8 @@ export function Inspector({
       ["Distance", `${fmt(d.distance, 0)} m`],
       ["Destination", String(d.destination ?? "–")],
     ];
+    const route = remainingRoute(selection);
+    if (route) rows.push(["Route ahead", route.join(" → ")]);
     return (
       <div>
         <h3 className="mb-2 font-mono text-sm text-sky-300">{selection.id}</h3>

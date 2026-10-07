@@ -32,6 +32,13 @@ export interface Selection {
   detail?: Record<string, unknown>;
 }
 
+/** The selected vehicle's roads still ahead (current road first), or null. */
+export function remainingRoute(sel: Selection | null): string[] | null {
+  const d = sel?.kind === "vehicle" && sel.available ? sel.detail : undefined;
+  if (!d || !Array.isArray(d.route)) return null;
+  return (d.route as string[]).slice(Number(d.route_index ?? 0));
+}
+
 export type MetricSeries = Record<string, number[]>;
 
 export interface Snapshot {

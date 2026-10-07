@@ -91,6 +91,7 @@ def test_websocket_protocol(client: TestClient) -> None:
         frame = _until(ws, lambda f: _is_frame(f) and f.step == 30)
         assert frame.n > 0 and frame.signals is not None
         known: set[int] = set()
+        names: dict[int, str] = {}
         # a vehicles_added for every uid in a frame always arrives before that frame
         ws.send_json({"type": "set_speed", "steps_per_second": 200})
         ws.send_json({"type": "play"})
@@ -102,6 +103,7 @@ def test_websocket_protocol(client: TestClient) -> None:
                 m = json.loads(msg["text"])
                 if m["type"] == "vehicles_added":
                     known |= set(m["uids"])
+                    names.update(zip(m["uids"], m["ids"], strict=True))
                 elif m["type"] == "vehicles_removed":
                     known -= set(m["uids"])
             elif msg.get("bytes"):
@@ -112,6 +114,11 @@ def test_websocket_protocol(client: TestClient) -> None:
                         break
         ws.send_json({"type": "pause"})
         _until(ws, lambda m: isinstance(m, dict) and m.get("state") == "paused")
+        vid = next(names[u] for u in f.uid.tolist() if u in names)
+        ws.send_json({"type": "select", "kind": "vehicle", "id": vid})
+        sel = _until(ws, lambda m: isinstance(m, dict) and m["type"] == "selection")
+        d = sel["detail"]  # the workbench highlights route[route_index:]
+        assert 0 <= d["route_index"] < len(d["route"]) and d["route"][-1] == d["destination"]
 
         ws.send_json({"type": "set_controller", "controller": "actuated"})
         status = _until(

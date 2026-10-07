@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 import { MapCanvas, type VehicleColoring } from "./components/MapCanvas";
 import { ComparePanel, Inspector, MetricsPanel, clock, fmt } from "./components/Panels";
 import { api, type Geometry, type Meta, type ScenarioRef, type SessionInfo } from "./lib/api";
-import { SessionController, type Snapshot } from "./lib/session";
+import { SessionController, remainingRoute, type Snapshot } from "./lib/session";
 
 const SPEEDS: (number | null)[] = [1, 5, 10, 25, 50, 100, 250, 1000, null];
 const REPLAY_SPEEDS: number[] = [-250, -50, -10, 1, 5, 10, 25, 50, 100, 250, 1000];
@@ -296,6 +296,7 @@ export default function App() {
               laneMetric={laneInfo}
               selectedVehicle={selected.kind === "vehicle" ? selected.id : null}
               selectedIntersection={selected.kind === "intersection" ? selected.id : null}
+              route={snap?.selection?.id === selected.id ? remainingRoute(snap.selection) : null}
               onSelect={select}
             />
           ) : (

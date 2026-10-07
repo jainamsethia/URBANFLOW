@@ -16,6 +16,8 @@ interface Props {
   laneMetric: LaneMetricInfo | null;
   selectedVehicle: string | null;
   selectedIntersection: string | null;
+  /** Roads still ahead of the selected vehicle (highlighted; the last is its destination). */
+  route: string[] | null;
   onSelect: (kind: "vehicle" | "intersection" | "none", id: string) => void;
 }
 
@@ -56,6 +58,7 @@ export function MapCanvas(props: Props) {
     let raf = 0;
     let prevIndex: Map<number, number> = new Map();
     let prevFrameSeq = -1;
+    const roadIndex = new Map(g.roads.id.map((id, i) => [id, i]));
 
     const fit = () => {
       const w = canvas.clientWidth, h = canvas.clientHeight;
@@ -119,6 +122,8 @@ export function MapCanvas(props: Props) {
       const p = propsRef.current;
       const dpr = window.devicePixelRatio || 1;
       const w = canvas.clientWidth, h = canvas.clientHeight;
+      if (w === 0 || h === 0) return; // collapsed layout: nothing to draw yet
+      if (!(viewRef.current!.scale > 0)) fit(); // first fitted while the canvas had no size
       if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
         canvas.width = w * dpr;
         canvas.height = h * dpr;
@@ -151,6 +156,20 @@ export function MapCanvas(props: Props) {
           ctx.stroke();
         });
         ctx.globalAlpha = 1;
+      }
+
+      // selected vehicle's remaining route
+      if (p.route?.length) {
+        ctx.lineWidth = 2;
+        p.route.forEach((id, k) => {
+          const s = g.roads.surfaces[roadIndex.get(id) ?? -1];
+          if (!s) return;
+          const last = k === p.route!.length - 1;
+          path(ctx, s, T, true);
+          ctx.fillStyle = last ? "rgba(250,204,21,0.55)" : "rgba(250,204,21,0.28)";
+          ctx.fill();
+          if (last) { ctx.strokeStyle = "#facc15"; ctx.stroke(); }
+        });
       }
 
       // signal heads
