@@ -170,8 +170,10 @@ $$
 where l ranges over the lanes of the movements green in phase p. The lost time L is
 `lost_time_per_phase` × P or, by default, yellow + all-red of every phase change with a
 losing movement. Y ≥ 0.95 gives C = C_max; no demand gives C = C_min split equally.
-`cycle_bounds` defaults to (30, 180) s. Trips and flow time windows are not part of the
-design demand, and the plan is not re-timed from measured arrivals.
+`cycle_bounds` defaults to (30, 180) s. The design demand is the run average: a flow
+active for part of the run counts by the share it covers (so a `rush_hour` scenario gets a
+plan for its average, not its peak), trips are left out, and the plan is not re-timed from
+measured arrivals.
 
 ```python
 from urbanflow import Simulation, generate

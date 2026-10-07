@@ -287,6 +287,43 @@ In Python, `urbanflow.generate("single_intersection", kind="uncontrolled")` retu
 is their path and `urbanflow init --template NAME` copies one into a new workspace.
 Custom generators register with `@register_generator("name", params=Params)`.
 
+| generator | builds | bundled as |
+|---|---|---|
+| `single_intersection` | a 3- or 4-arm junction of any control kind | `single_intersection` |
+| `grid` | a rows x cols signalised grid (non-uniform spacing allowed) | `grid_3x3`, `grid_4x4` |
+| `corridor` | an arterial with side streets and green-wave offsets | `corridor` |
+| `emergency` | a base scenario plus emergency trips, signals wrapped in `preemption` | `emergency` |
+| `rush_hour` | a base scenario's demand shaped into a directional peak | `rush_hour` |
+
+`rush_hour` splits every flow of its base (`base="corridor"`, `base_params={}`) into
+constant-rate slices `"{flow}:{k}"` of `slice` seconds (300) over `duration` (7200 s). Slice
+k runs at the base rate times
+
+$$
+m(t_k) = f_{off} + (1 - f_{off}) \max\Big(0, 1 - \frac{|t_k - t_{peak}|}{w}\Big),
+\qquad d_f = 1 + \beta \cos(\theta_f - \varphi)
+$$
+
+with t_k the slice midpoint, `off_peak_factor` f_off = 0.3, `peak_time` 3600 s and
+`peak_width` w = 1800 s. θ_f is the bearing of the flow's origin-to-destination vector and
+`peak_direction_deg` φ = 0 (eastbound; 90 = northbound, null = no direction), so with
+`directional_strength` β = 0.5 flows toward the peak direction get 1.5x and those against it
+0.5x. Flows with `count` stay whole.
+
+```python
+from urbanflow import generate
+
+s = generate(
+    "rush_hour",
+    base="grid",
+    base_params={"rows": 2, "cols": 2},
+    duration=3600,
+    peak_time=1800,
+    peak_direction_deg=90,
+)
+assert s.resolved.demand.flows[0].id.endswith(":0")
+```
+
 ## Versioning
 
 Files carry `"version": "MAJOR.MINOR"`. Minor versions only add optional fields, so older

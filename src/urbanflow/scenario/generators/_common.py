@@ -116,7 +116,7 @@ def longest_boundary_path(spec: ScenarioSpec) -> list[str]:
 def split_flows_by_profile(
     spec: ScenarioSpec, profile: Callable[[FlowSpec, float], float], slice: float
 ) -> ScenarioSpec:
-    """Replace every flow by slices ``"{f}@{k}"`` with windows ``[k slice, (k+1) slice)``.
+    """Replace every flow by slices ``"{f}:{k}"`` with windows ``[k slice, (k+1) slice)``.
 
     Slice ``k`` runs at ``rate_f * profile(f, t)`` with ``t`` the midpoint of the slice's
     window clipped to the flow's own ``[begin, end)`` (end defaults to the simulation
@@ -138,7 +138,7 @@ def split_flows_by_profile(
             rate = base * profile(flow, (lo + hi) / 2)
             if rate > 0:
                 update = {
-                    "id": f"{flow.id}@{k}",
+                    "id": f"{flow.id}:{k}",
                     "rate": rate,
                     "period": None,
                     "begin": lo,

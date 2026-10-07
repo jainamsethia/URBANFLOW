@@ -298,8 +298,9 @@ class Engine:
         return controller, spec
 
     def design_flows(self) -> np.ndarray:
-        """Demand of every movement from the scenario's flows, veh/h (route choices by
-        weight, OD flows along the router's path; trips and flow windows ignored)."""
+        """Demand of every movement from the scenario's flows, veh/h averaged over the run
+        (a flow active for part of it counts by that share; route choices by weight, OD
+        flows along the router's path; trips ignored)."""
         if self._design_flows is None:
             net = self.network
             movement = {
@@ -311,6 +312,10 @@ class Engine:
             q = np.zeros(net.n_movements)
             for f in self.demand.flows:
                 rate = f.rate if f.rate is not None else C.SECONDS_PER_HOUR / (f.period or math.inf)
+                horizon = self.config.duration
+                if horizon is not None:
+                    end = horizon if f.end is None else min(f.end, horizon)
+                    rate *= max(0.0, end - f.begin) / horizon
                 if f.routes:
                     total = sum(r.weight for r in f.routes)
                     paths = [

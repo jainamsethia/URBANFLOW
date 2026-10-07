@@ -20,9 +20,10 @@ replays and a web workbench.
   `preemption` around any of them, manual hold/release, live controller switching.
 - **Scenarios**: versioned JSON format with friendly, JSON-path validation errors; derived
   movements, lane mappings and signal programs; generators `single_intersection`, `grid`
-  `corridor` (an arterial with green-wave signal offsets) and `emergency` (emergency
-  vehicles crossing a base scenario, with preemption); bundled: `single_intersection`,
-  `grid_3x3`, `grid_4x4`, `corridor`, `emergency`.
+  `corridor` (an arterial with green-wave signal offsets), `emergency` (emergency
+  vehicles crossing a base scenario, with preemption) and `rush_hour` (a base scenario's
+  demand shaped into a directional peak); bundled: `single_intersection`, `grid_3x3`,
+  `grid_4x4`, `corridor`, `emergency`, `rush_hour`.
 - **Metrics**: travel time, delay, waiting, stops, throughput, queues, space-mean speed,
   VKT/VHT; global, per-intersection and per-trip tables; CSV / JSON / Parquet export.
 - **Replay**: compact `.ufr` recordings with seek, step back and rewind.
@@ -36,7 +37,7 @@ replays and a web workbench.
   view and replay viewer.
 - **Snapshots** (save/restore any state) and **state digests** for bit-exact reproducibility.
 
-Not built yet (planned): more generators (downtown, rush hour), transit, the CityFlow importer, the visual
+Not built yet (planned): more generators (downtown), transit, the CityFlow importer, the visual
 scenario editor, the experiment database/dashboards and the benchmark suite.
 
 ## Install
@@ -145,6 +146,19 @@ along its longest route, 3600 s, seeds 0-2, 9 emergency trips), with and without
 
 Before vehicles moved over (and before preemption served an ambulance still changing lanes
 for its turn) the same runs gave 133.1 s and 75.0 s of emergency delay.
+
+Time-varying demand: bundled `rush_hour` (the corridor's flows, 2 h, peaking at 1 h,
+eastbound x1.5 / westbound x0.5 at the peak), seeds 0-2, mean travel time (s) by departure
+window:
+
+| controller | off-peak (0-30 min) | peak hour (45-75 min) | late (90-120 min) |
+|---|---|---|---|
+| fixed_time (green wave) | 83.1 | 94.7 | 80.4 |
+| webster | 72.1 | 95.6 | 69.9 |
+| max_pressure | 58.8 | 73.7 | 57.7 |
+
+Webster times its fixed plan for the run-average demand, so it helps off-peak but not at
+the peak; max-pressure adapts.
 
 Multi-agent: nine independent tabular Q-learners on `grid_3x3` (PettingZoo env, 40 training
 episodes of 900 s, 3 held-out seeds; `uv run python examples/reinforcement_learning/independent_q_grid.py`):

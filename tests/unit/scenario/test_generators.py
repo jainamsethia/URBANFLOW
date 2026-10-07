@@ -213,8 +213,8 @@ def test_longest_boundary_path() -> None:
 def test_split_flows_by_profile_integrates() -> None:
     spec = _corridor().resolved
     flat = split_flows_by_profile(spec, lambda _f, _t: 1.0, 300.0)
-    slices = [f for f in flat.demand.flows if f.id.startswith("f@")]
-    assert [f.id for f in slices] == ["f@0", "f@1", "f@2"]
+    slices = [f for f in flat.demand.flows if f.id.startswith("f:")]
+    assert [f.id for f in slices] == ["f:0", "f:1", "f:2"]
     assert [(f.begin, f.end) for f in slices] == [(100, 300), (300, 600), (600, 700)]
     assert sum((f.rate or 0) * (float(f.end or 0) - f.begin) for f in slices) == pytest.approx(
         100 * 600
@@ -225,7 +225,7 @@ def test_split_flows_by_profile_integrates() -> None:
         return max(0.0, 1 - abs(t - 400) / 400)
 
     shaped = split_flows_by_profile(spec, peak, 100.0)
-    parts = [f for f in shaped.demand.flows if f.id.startswith("f@")]
+    parts = [f for f in shaped.demand.flows if f.id.startswith("f:")]
     expected = sum(100 * peak(None, (lo + lo + 100) / 2) * 100 for lo in range(100, 700, 100))
     total = sum((f.rate or 0) * (float(f.end or 0) - f.begin) for f in parts)
     assert total == pytest.approx(expected)
