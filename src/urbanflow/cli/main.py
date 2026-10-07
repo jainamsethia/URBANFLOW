@@ -153,6 +153,7 @@ def _register_commands() -> None:
         compare,
         doctor,
         generate,
+        import_,
         init,
         replay,
         run,
@@ -161,7 +162,7 @@ def _register_commands() -> None:
         validate,
     )
 
-    for module in (init, validate, generate, schema, run, replay, compare, serve, doctor):
+    for module in (init, validate, generate, import_, schema, run, replay, compare, serve, doctor):
         module.register(app)
 
 

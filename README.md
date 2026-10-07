@@ -23,7 +23,8 @@ replays and a web workbench.
   `corridor` (an arterial with green-wave signal offsets), `emergency` (emergency
   vehicles crossing a base scenario, with preemption) and `rush_hour` (a base scenario's
   demand shaped into a directional peak); bundled: `single_intersection`, `grid_3x3`,
-  `grid_4x4`, `corridor`, `emergency`, `rush_hour`.
+  `grid_4x4`, `corridor`, `emergency`, `rush_hour`; a CityFlow importer
+  (`urbanflow import cityflow --config config.json`) with every lossy step reported.
 - **Metrics**: travel time, delay, waiting, stops, throughput, queues, space-mean speed,
   VKT/VHT; global, per-intersection and per-trip tables; CSV / JSON / Parquet export.
 - **Replay**: compact `.ufr` recordings with seek, step back and rewind.
@@ -37,7 +38,7 @@ replays and a web workbench.
   view and replay viewer.
 - **Snapshots** (save/restore any state) and **state digests** for bit-exact reproducibility.
 
-Not built yet (planned): more generators (downtown), transit, the CityFlow importer, the visual
+Not built yet (planned): more generators (downtown), transit, the visual
 scenario editor, the experiment database/dashboards and the benchmark suite.
 
 ## Install

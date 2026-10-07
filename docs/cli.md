@@ -93,6 +93,34 @@ $ urbanflow generate single_intersection -p kind=uncontrolled -o s.json
 Wrote s.json (5 intersections, 8 roads, 12 flows; hash 3c0ffa9b370b)
 ```
 
+### `urbanflow import cityflow`
+
+Convert a CityFlow road network and flow file into an UrbanFlow scenario (see
+[Scenario format: importing CityFlow](scenario-format.md#importing-cityflow)).
+
+| option | meaning |
+|---|---|
+| `--config PATH` | CityFlow `config.json`; locates `dir` + `roadnetFile` / `flowFile` (from the working directory, as CityFlow does, else next to the config) and supplies `interval`, `seed`, `laneChange` and `rlTrafficLight`. |
+| `--roadnet PATH`, `--flow PATH` | The files directly (override the config's). |
+| `-o`, `--output PATH` | Scenario file to write (default `imported.json`). |
+| `--name TEXT`, `--duration S` | Scenario name; simulated duration (default 3600 s). |
+| `--derive-connections` | Use UrbanFlow's lane mapping instead of CityFlow's lane fan-out. |
+| `--keep-all-phases` | Keep short all-right-turn phases instead of treating them as intergreens. |
+| `--force` | Overwrite an existing output file. |
+
+Every lossy conversion step is printed as a warning on stderr; input errors name the input
+path (`roadnet.intersections[3].trafficLight.lightphases[2].availableRoadLinks[0]`, exit 3).
+
+```text
+$ urbanflow import cityflow --config data/config.json -o city.json
+4 conversion warning(s):
+  - config.saveReplay: ignored (UrbanFlow records replays with --record)
+  - config.roadnetLogFile: ignored (UrbanFlow records replays with --record)
+  - roadnet.intersections[0].roadLinks: lane fan-out kept (one lane links to several lanes); --derive-connections uses UrbanFlow's lane mapping
+  - roadnet.intersections[1].roadLinks: lane fan-out kept (one lane links to several lanes); --derive-connections uses UrbanFlow's lane mapping
+Wrote city.json (8 intersections, 14 roads, 3 flows; hash 05f6aa433010)
+```
+
 ### `urbanflow schema [scenario|config]`
 
 Print the JSON Schema of scenario files or of the simulation config, or write it with

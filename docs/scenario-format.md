@@ -324,6 +324,34 @@ s = generate(
 assert s.resolved.demand.flows[0].id.endswith(":0")
 ```
 
+## Importing CityFlow
+
+`urbanflow import cityflow --config config.json -o city.json` (or
+`urbanflow.scenario.importers.cityflow.load(config=..., roadnet=..., flow=...)`, which
+returns the scenario and the warnings) converts CityFlow's `roadnet.json` and `flow.json`.
+The files are only parsed as data. The mapping:
+
+| CityFlow | UrbanFlow |
+|---|---|
+| `virtual` intersection | `boundary`, radius 0 (its road links are dropped) |
+| intersection with a traffic light of 2+ phases / otherwise | `signalized` / `uncontrolled`; `width` is the radius |
+| road `points`, `lanes[{width, maxSpeed}]` | road `points`, `lanes[{width, speed_limit}]` (lane 0 is innermost in both) |
+| `roadLinks[]` (`go_straight`, `turn_left`, `turn_right`) | movements `"{startRoad}->{endRoad}"` with that turn |
+| `laneLinks[]` with `points` | connections with `shape` (CityFlow's lane fan-out is kept unless `--derive-connections`) |
+| `lightphases[]` `{time, availableRoadLinks}` | phases with `duration = time`; phases of at most 5 s that release only right turns are CityFlow's intergreens: dropped, with yellow = their shortest time and no all-red (`--keep-all-phases` keeps them) |
+| CityFlow's straight > left > right link priority | a left turn is permissive (g) when its phase also releases a straight from another road, a right turn when it also releases a straight or left; else G |
+| `rlTrafficLight: true` | every signal uses the `external` controller |
+| flow `vehicle{...}` | vehicle types `cf_type_{k}` (one per distinct parameter set): `maxPosAcc` -> accel, `usualNegAcc` -> decel, `maxNegAcc` -> emergency_decel, `minGap`, `headwayTime` -> headway, `maxSpeed`, `length`, `width`; no speed spread |
+| flow `route` | `route` when consecutive roads connect, else origin / via / destination anchors |
+| `interval`, `startTime`, `endTime` (inclusive, -1 = forever) | `period`, uniform arrivals, `begin`, `end = endTime + dt/2` (or none); ids `flow_{i}` |
+| config `interval`, `seed`, `laneChange` | `dt`, `seed`, `lane_changing` |
+
+Not carried over, each reported as a warning: `saveReplay` and the log files, road links of
+virtual intersections, ids with characters UrbanFlow does not allow (renamed), out-of-range
+lane widths or vehicle parameters (clamped). Dynamics differ by design: UrbanFlow uses IDM
+with a safe-speed cap, conflict-zone gap acceptance and yellow/all-red intergreens, so an
+imported network has CityFlow's topology and demand, not its trajectories.
+
 ## Versioning
 
 Files carry `"version": "MAJOR.MINOR"`. Minor versions only add optional fields, so older
