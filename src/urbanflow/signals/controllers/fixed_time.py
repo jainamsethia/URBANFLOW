@@ -110,10 +110,16 @@ class FixedTime(ControllerBase):
 
     def __init__(self) -> None:
         self._green: FloatArray = np.zeros(0)
+        self.timing: SignalProgram | None = None
+        """The program with the durations actually used (set by :meth:`reset`)."""
+
+    def timed_program(self, setup: ControllerSetup) -> SignalProgram:
+        """The program whose ``duration`` this controller cycles through."""
+        return setup.program
 
     def reset(self, setup: ControllerSetup) -> None:
         """At a simulation reset, place the runtime at the offset's cycle position."""
-        prog = setup.program
+        prog = self.timing = self.timed_program(setup)
         self._green = np.maximum(prog.duration, prog.min_green)
         if setup.initial:
             offset = cast(FixedTimeParams, setup.params).offset

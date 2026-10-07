@@ -96,7 +96,7 @@ def test_e903_model_params() -> None:
             {"type": "fixed_tme"},
             ("E901", "type", 'unknown signal controller "fixed_tme" (did you mean "fixed_time"?)'),
         ),
-        ({"type": "webster"}, ("E901", "type", 'unknown signal controller "webster"')),
+        ({"type": "green_oracle"}, ("E901", "type", 'unknown signal controller "green_oracle"')),
         (
             {"type": "fixed_time", "params": {"ofset": 3}},
             ("E902", "params.ofset", 'unknown field "ofset" (did you mean "offset"?)'),
@@ -247,7 +247,7 @@ def test_cli_validate_runs_the_deep_checks(
     ("ref", "expected"),
     [
         ("fixd_time", ("E901", "", 'unknown signal controller "fixd_time" (did you mean')),
-        ({"type": "webster"}, ("E901", ".type", 'unknown signal controller "webster"')),
+        ({"type": "green_oracle"}, ("E901", ".type", 'unknown signal controller "green_oracle"')),
         (
             {"type": "fixed_time", "params": {"ofset": 3}},
             ("E902", ".params.ofset", 'unknown field "ofset" (did you mean "offset"?)'),
@@ -273,7 +273,7 @@ def test_an_override_replaces_the_scenario_controller_check(key: str, path: str)
     """Review repro: the scenario's own controller is never built when overridden, so an
     unregistered one must not fail the run; the override itself is still checked."""
     data = urbanflow.generate("single_intersection").to_dict()
-    data["network"]["intersections"][0]["signal"]["controller"] = {"type": "webster"}
+    data["network"]["intersections"][0]["signal"]["controller"] = {"type": "green_oracle"}
     scenario = Scenario.from_dict(data)
     assert [c for c, _ in _codes(check(scenario))] == ["E901"]
     report, _ = deep_check(scenario, controllers={key: "fixed_time"})

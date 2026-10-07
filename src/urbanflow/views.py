@@ -853,13 +853,14 @@ def signal_view(engine: Engine, j: int) -> SignalView:
     remaining = cycle = None
     if isinstance(controller, FixedTime):
         dt = engine.config.dt
+        timed = controller.timing or prog
         length = {
-            Stage.green: max(float(prog.duration[p]), float(prog.min_green[p])),
+            Stage.green: max(float(timed.duration[p]), float(timed.min_green[p])),
             Stage.yellow: prog.yellow,
             Stage.all_red: prog.all_red,
         }[stage]
         remaining = max(0.0, stage_steps(length, dt) * dt - float(sig.stage_elapsed[j]))
-        cycle = realised_cycle(prog, dt)
+        cycle = realised_cycle(timed, dt)
     codes = sig.movement_state[prog.movements].tolist()
     return SignalView(
         phase_index=p,

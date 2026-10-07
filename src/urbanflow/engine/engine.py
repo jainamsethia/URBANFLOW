@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
+from itertools import pairwise
 
 import networkx as nx
 import numpy as np
@@ -174,6 +175,7 @@ class Engine:
         self.vehicles = VehicleTable()
         self.routes = RouteTable()
         self.router.reset(self.network, self.graph, self.config)
+        self._design_flows: np.ndarray | None = None
         self.queues.clear()
         self.spawners: list[Spawner] = build_spawners(
             self.demand, self.network, self.routes, self.router, self.types, rng, self.config.dt
@@ -279,6 +281,8 @@ class Engine:
             dt=self.config.dt,
             initial=initial,
             _place=lambda *a, **k: self.signals.place(j, *a, **k),
+            movement_flows=self.design_flows()[prog.movements],
+            movement_lanes=self._movement_lanes(prog.movements),
         )
         try:
             controller.reset(setup)
@@ -292,6 +296,47 @@ class Engine:
             "params": params.model_dump(mode="json"),
         }
         return controller, spec
+
+    def design_flows(self) -> np.ndarray:
+        """Demand of every movement from the scenario's flows, veh/h (route choices by
+        weight, OD flows along the router's path; trips and flow windows ignored)."""
+        if self._design_flows is None:
+            net = self.network
+            movement = {
+                pair: m
+                for m, pair in enumerate(
+                    zip(net.mov_from_road.tolist(), net.mov_to_road.tolist(), strict=True)
+                )
+            }
+            q = np.zeros(net.n_movements)
+            for f in self.demand.flows:
+                rate = f.rate if f.rate is not None else C.SECONDS_PER_HOUR / (f.period or math.inf)
+                if f.routes:
+                    total = sum(r.weight for r in f.routes)
+                    paths = [
+                        ([net.road_index[x] for x in r.roads], r.weight / total) for r in f.routes
+                    ]
+                elif f.route:
+                    paths = [([net.road_index[x] for x in f.route], 1.0)]
+                else:  # origin/destination (validated)
+                    via = tuple(net.road_index[x] for x in f.via)
+                    o, d = net.road_index[str(f.origin)], net.road_index[str(f.destination)]
+                    paths = [(list(self.router.route(o, d, via)), 1.0)]
+                for roads, share in paths:
+                    for pair in pairwise(roads):
+                        q[movement[pair]] += rate * share
+            self._design_flows = q
+        return self._design_flows
+
+    def _movement_lanes(self, movements: np.ndarray) -> tuple[tuple[int, ...], ...]:
+        net = self.network
+        ptr, conns = net.mov_conn_ptr, net.mov_conn
+        return tuple(
+            tuple(
+                sorted(set(net.conn_from_lane[conns[ptr[m] : ptr[m + 1]] - net.n_lanes].tolist()))
+            )
+            for m in movements.tolist()
+        )
 
     def _controller_rng(self, j: int) -> np.random.Generator:
         return self.rng.stream(f"controller:{self.network.int_ids[j]}")

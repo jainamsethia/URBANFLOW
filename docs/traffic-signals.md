@@ -152,6 +152,35 @@ sim.run(until=11)
 assert sim.signals["J"].phase_id == "p0" and sim.signals["J"].stage_elapsed == 1.0
 ```
 
+## Webster
+
+`webster` is fixed-time control (with the same `offset`) whose cycle and greens are
+computed once, at reset, from the scenario's demand (Webster 1958). Each flow's rate is
+routed onto movements (fixed routes, route choices by weight, OD flows along the router's
+path), and each movement's flow is split evenly over its source lanes; a shared lane
+carries the sum of its shares q_l. With saturation flow s per lane (`saturation_flow`,
+1800 veh/h):
+
+$$
+y_p = \max_{l \in p} \frac{q_l}{s}, \qquad Y = \sum_p y_p, \qquad
+C = \operatorname{clip}\Big(\frac{1.5 L + 5}{1 - Y}, C_{min}, C_{max}\Big), \qquad
+g_p = \max\Big(g_{min,p},\ (C - L)\,\frac{y_p}{Y}\Big)
+$$
+
+where l ranges over the lanes of the movements green in phase p. The lost time L is
+`lost_time_per_phase` × P or, by default, yellow + all-red of every phase change with a
+losing movement. Y ≥ 0.95 gives C = C_max; no demand gives C = C_min split equally.
+`cycle_bounds` defaults to (30, 180) s. Trips and flow time windows are not part of the
+design demand, and the plan is not re-timed from measured arrivals.
+
+```python
+from urbanflow import Simulation, generate
+
+scenario = generate("single_intersection", approach_rates={"N": 700, "S": 700, "E": 200, "W": 200})
+sim = Simulation(scenario, controllers={"*": "webster"})
+assert sim.signals["J"].controller == "webster" and sim.signals["J"].cycle == 31.0
+```
+
 ## External control
 
 `external` switches only when asked: `sim.signals.request_phase(j, phase)` queues a phase

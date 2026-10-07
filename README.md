@@ -14,8 +14,9 @@ replays and a web workbench.
   (gap acceptance with time windows, "don't block the box" exit space, conflict-zone
   locks), priority / uncontrolled / signalised junctions, a deadlock watchdog, and
   debug-mode invariants (no overlaps, zone exclusivity, conservation, ...).
-- **Signals**: programs with automatic yellow and all-red, `fixed_time`, `actuated`
-  (gap-out / max-out), `max_pressure` (Varaiya) and `external` (API / RL) controllers,
+- **Signals**: programs with automatic yellow and all-red, `fixed_time`, `webster`
+  (Webster's cycle and splits from the scenario demand), `actuated` (gap-out / max-out),
+  `max_pressure` (Varaiya) and `external` (API / RL) controllers,
   manual hold/release, live controller switching.
 - **Scenarios**: versioned JSON format with friendly, JSON-path validation errors; derived
   movements, lane mappings and signal programs; generators `single_intersection`, `grid`
@@ -34,7 +35,7 @@ replays and a web workbench.
   view and replay viewer.
 - **Snapshots** (save/restore any state) and **state digests** for bit-exact reproducibility.
 
-Not built yet (planned): more generators (downtown, rush hour), Webster and emergency preemption, transit, the CityFlow importer, the visual
+Not built yet (planned): more generators (downtown, rush hour), emergency preemption, transit, the CityFlow importer, the visual
 scenario editor, the experiment database/dashboards and the benchmark suite.
 
 ## Install
@@ -102,14 +103,14 @@ obs, reward, terminated, truncated, info = env.step(info["action_mask"].argmax()
 All measured with lane changing on (the default).
 
 Controller comparison, `grid_3x3`, 1800 s, 3 seeds, paired against `fixed_time`
-(`uv run urbanflow compare grid_3x3 -c fixed_time -c actuated -c max_pressure --seeds 3 --duration 1800`):
+(`uv run urbanflow compare grid_3x3 -c fixed_time -c webster -c actuated -c max_pressure --seeds 3 --duration 1800`):
 
-| metric | fixed_time | actuated | max_pressure |
-|---|---|---|---|
-| mean travel time (s) | 99.4 | 86.5 (-12.9 %) | 81.0 (-18.5 %) |
-| mean delay (s) | 38.4 | 25.5 (-33.6 %) | 20.0 (-48.1 %) |
-| mean waiting time (s) | 21.3 | 8.4 (-60.6 %) | 6.9 (-67.5 %) |
-| stops per vehicle | 1.4 | 1.0 (-24.9 %) | 0.8 (-39.7 %) |
+| metric | fixed_time | webster | actuated | max_pressure |
+|---|---|---|---|---|
+| mean travel time (s) | 99.4 | 85.4 (-14.1 %) | 86.5 (-12.9 %) | 81.0 (-18.5 %) |
+| mean delay (s) | 38.4 | 24.4 (-36.5 %) | 25.5 (-33.6 %) | 20.0 (-48.1 %) |
+| mean waiting time (s) | 21.3 | 7.1 (-66.8 %) | 8.4 (-60.6 %) | 6.9 (-67.5 %) |
+| stops per vehicle | 1.4 | 1.2 (-13.1 %) | 1.0 (-24.9 %) | 0.8 (-39.7 %) |
 
 Tabular Q-learning, single intersection with 3:1 asymmetric demand, 60 training episodes,
 5 held-out evaluation seeds (`uv run python examples/reinforcement_learning/q_learning_single.py`):

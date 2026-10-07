@@ -116,6 +116,11 @@ class ControllerSetup:
     :meth:`set_initial` may move it); False when installed mid-run (``set_controller``,
     manual holds): the controller then continues from the current state."""
     _place: Callable[..., None] = field(repr=False)
+    movement_flows: FloatArray = field(default_factory=lambda: np.zeros(0), repr=False)
+    """Design demand of each program movement from the scenario's flows, veh/h (empty when
+    unknown); routes are weighted by choice weight, OD flows routed by the router."""
+    movement_lanes: tuple[tuple[int, ...], ...] = field(default=(), repr=False)
+    """Source lane link ids of each program movement."""
 
     def set_initial(
         self,
