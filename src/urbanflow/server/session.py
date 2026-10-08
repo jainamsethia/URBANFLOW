@@ -348,7 +348,7 @@ class Session:
             detail = {
                 k: getattr(v, k)
                 for k in (
-                    "type", "status", "road", "lane", "speed", "desired_speed",
+                    "type", "vclass", "status", "road", "lane", "speed", "desired_speed",
                     "acceleration", "waiting_time", "stops", "distance", "travel_time",
                     "destination", "route", "route_index",
                 )
@@ -363,7 +363,12 @@ class Session:
         if kind == "intersection" and ident in sim.signals.ids:
             s = sim.signals[ident]
             phases = [
-                {"index": p.index, "id": p.id, "duration": p.duration}
+                {
+                    "index": p.index,
+                    "id": p.id,
+                    "duration": p.duration,
+                    "green": [m for m, state in p.green.items() if state in "Gg"],
+                }
                 for p in sim.signals.phases(ident)
             ]
             return {

@@ -50,7 +50,7 @@ export interface Snapshot {
   error: string | null;
 }
 
-const SERIES = ["time", "active", "speed_mean", "queue_mean", "throughput_vph", "halting", "space_mean_speed"];
+const SERIES = ["time", "active", "speed_mean", "queue_mean", "throughput_vph", "halting", "space_mean_speed", "arrived"];
 const MAX_POINTS = 720;
 
 export class SessionController {

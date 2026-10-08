@@ -3,9 +3,8 @@
 
 import { useEffect, useRef } from "react";
 import type { Geometry, LaneMetricInfo, Point } from "../lib/api";
-import { SIGNAL_COLOR, VCLASS_COLOR, speedColor, viridis } from "../lib/colors";
+import { MAP, SIGNAL_COLOR, VCLASS_COLOR, speedColor, viridis } from "../lib/colors";
 import type { SessionController } from "../lib/session";
-import { FLAG_HALTING } from "../lib/ufb";
 
 export type VehicleColoring = "type" | "speed";
 
@@ -58,6 +57,8 @@ export function MapCanvas(props: Props) {
     let raf = 0;
     let prevIndex: Map<number, number> = new Map();
     let prevFrameSeq = -1;
+    // where each vehicle was last drawn (interpolated), so clicks pick what is on screen
+    let drawnUid = new Uint32Array(0), drawnX = new Float64Array(0), drawnY = new Float64Array(0);
     const roadIndex = new Map(g.roads.id.map((id, i) => [id, i]));
 
     const fit = () => {
@@ -91,12 +92,12 @@ export function MapCanvas(props: Props) {
       off.height = h * dpr;
       const c = off.getContext("2d")!;
       c.setTransform(dpr, 0, 0, dpr, 0, 0);
-      c.fillStyle = "#0b1220";
+      c.fillStyle = MAP.grass;
       c.fillRect(0, 0, w, h);
       const T = toScreen(v, w, h);
-      c.fillStyle = "#334155";
+      c.fillStyle = MAP.road;
       for (const s of g.roads.surfaces) { path(c, s, T, true); c.fill(); }
-      c.fillStyle = "#3b4a5e";
+      c.fillStyle = MAP.junction;
       g.intersections.polygons.forEach((poly, i) => {
         if (g.intersections.kind[i] === "boundary" || poly.length < 3) return;
         path(c, poly, T, true);
@@ -104,14 +105,14 @@ export function MapCanvas(props: Props) {
       });
       c.lineWidth = Math.max(0.5, 0.15 * v.scale);
       g.lane_markings.path.forEach((p, i) => {
-        c.strokeStyle = g.lane_markings.dashed[i] ? "rgba(226,232,240,0.55)" : "rgba(226,232,240,0.85)";
+        c.strokeStyle = g.lane_markings.dashed[i] ? "rgba(255,255,255,0.7)" : MAP.marking;
         c.setLineDash(g.lane_markings.dashed[i] ? [3 * v.scale, 6 * v.scale] : []);
         path(c, p, T, false);
         c.stroke();
       });
       c.setLineDash([]);
-      c.strokeStyle = "rgba(248,250,252,0.9)";
-      c.lineWidth = Math.max(1, 0.4 * v.scale);
+      c.strokeStyle = MAP.stopLine;
+      c.lineWidth = Math.max(1.5, 0.5 * v.scale);
       for (const p of g.stop_lines.path) { path(c, p, T, false); c.stroke(); }
       staticRef.current = { canvas: off, key };
       return off;
@@ -166,15 +167,15 @@ export function MapCanvas(props: Props) {
           if (!s) return;
           const last = k === p.route!.length - 1;
           path(ctx, s, T, true);
-          ctx.fillStyle = last ? "rgba(250,204,21,0.55)" : "rgba(250,204,21,0.28)";
+          ctx.fillStyle = MAP.route;
           ctx.fill();
-          if (last) { ctx.strokeStyle = "#facc15"; ctx.stroke(); }
+          if (last) { ctx.strokeStyle = MAP.routeEnd; ctx.lineWidth = 3; ctx.stroke(); }
         });
       }
 
       // signal heads
       if (f.signals) {
-        const r = Math.max(2, 1.1 * v.scale);
+        const r = Math.max(3.5, 1.5 * v.scale);
         for (let i = 0; i < signalMov.length; i++) {
           const state = f.signals[signalMov[i]!]!;
           const color = SIGNAL_COLOR[state];
@@ -184,6 +185,9 @@ export function MapCanvas(props: Props) {
           ctx.arc(sx, sy, r, 0, 2 * Math.PI);
           ctx.fillStyle = color;
           ctx.fill();
+          ctx.lineWidth = 1;
+          ctx.strokeStyle = MAP.outline;
+          ctx.stroke();
         }
       }
 
@@ -204,6 +208,11 @@ export function MapCanvas(props: Props) {
 
       // vehicles
       const vehicles = p.controller.vehicles;
+      if (drawnUid.length !== f.n) {
+        drawnUid = new Uint32Array(f.n);
+        drawnX = new Float64Array(f.n);
+        drawnY = new Float64Array(f.n);
+      }
       for (let i = 0; i < f.n; i++) {
         const uid = f.uid[i]!;
         const meta = vehicles.get(uid);
@@ -223,24 +232,37 @@ export function MapCanvas(props: Props) {
         }
         const vt = meta ? vtypes[meta.type] : undefined;
         const len = vt?.length ?? 5, wid = vt?.width ?? 1.8;
+        drawnUid[i] = uid;
+        drawnX[i] = x;
+        drawnY[i] = y;
         const [sx, sy] = T(x, y);
         ctx.save();
         ctx.translate(sx, sy);
         ctx.rotate(-hd);
-        const halted = (f.flags[i]! & FLAG_HALTING) !== 0;
+        const vclass = vt?.vclass ?? "car";
+        const blink = vclass === "emergency" && Math.floor(now / 350) % 2 === 0;
         ctx.fillStyle =
           p.coloring === "speed"
             ? speedColor(f.speed[i]! / maxSpeed)
-            : vt?.color ?? VCLASS_COLOR[vt?.vclass ?? "car"] ?? "#60a5fa";
-        ctx.globalAlpha = halted && p.coloring === "type" ? 0.75 : 1;
-        const pxLen = Math.max(2, len * v.scale), pxWid = Math.max(1.5, wid * v.scale);
-        ctx.fillRect(-pxLen, -pxWid / 2, pxLen, pxWid);
-        ctx.globalAlpha = 1;
-        if (meta && meta.id === p.selectedVehicle) {
-          ctx.strokeStyle = "#f8fafc";
+            : blink ? "#2563eb" : VCLASS_COLOR[vclass] ?? vt?.color ?? VCLASS_COLOR.car!;
+        const pxLen = Math.max(9, len * v.scale), pxWid = Math.max(5, wid * v.scale);
+        const selectedCar = meta !== undefined && meta.id === p.selectedVehicle;
+        if (selectedCar) {
+          ctx.beginPath();
+          ctx.arc(-pxLen / 2, 0, pxLen * 0.9 + 6, 0, 2 * Math.PI);
+          ctx.fillStyle = "rgba(250,204,21,0.45)";
+          ctx.fill();
           ctx.lineWidth = 2;
-          ctx.strokeRect(-pxLen - 2, -pxWid / 2 - 2, pxLen + 4, pxWid + 4);
+          ctx.strokeStyle = MAP.select;
+          ctx.stroke();
+          ctx.fillStyle = p.coloring === "speed" ? speedColor(f.speed[i]! / maxSpeed) : VCLASS_COLOR[vclass] ?? VCLASS_COLOR.car!;
         }
+        ctx.beginPath();
+        ctx.roundRect(-pxLen, -pxWid / 2, pxLen, pxWid, Math.min(pxWid / 2, 3));
+        ctx.fill();
+        ctx.lineWidth = 0.75;
+        ctx.strokeStyle = MAP.outline;
+        ctx.stroke();
         ctx.restore();
       }
 
@@ -251,9 +273,9 @@ export function MapCanvas(props: Props) {
           const [sx, sy] = T(g.intersections.point[k]![0], g.intersections.point[k]![1]);
           ctx.beginPath();
           ctx.arc(sx, sy, Math.max(10, (g.intersections.radius[k]! + 4) * v.scale), 0, 2 * Math.PI);
-          ctx.strokeStyle = "#f8fafc";
-          ctx.lineWidth = 2;
-          ctx.setLineDash([6, 4]);
+          ctx.strokeStyle = "#1f2937";
+          ctx.lineWidth = 3;
+          ctx.setLineDash([8, 5]);
           ctx.stroke();
           ctx.setLineDash([]);
         }
@@ -284,25 +306,22 @@ export function MapCanvas(props: Props) {
       const wx = (e.clientX - rect.left - rect.width / 2) / v.scale + v.cx;
       const wy = (rect.height / 2 - (e.clientY - rect.top)) / v.scale + v.cy;
       const p = propsRef.current;
-      const f = p.controller.curr?.frame;
-      if (f) {
-        let best = -1, bestD = Math.max(4, 10 / v.scale);
-        for (let i = 0; i < f.n; i++) {
-          const d = Math.hypot(f.xy[2 * i]! - wx, f.xy[2 * i + 1]! - wy);
-          if (d < bestD) { bestD = d; best = i; }
-        }
-        if (best >= 0) {
-          const meta = p.controller.vehicles.get(f.uid[best]!);
-          if (meta) { p.onSelect("vehicle", meta.id); return; }
-        }
-      }
+      // a click inside a junction's box (or on its lights when zoomed out) picks the
+      // traffic light; anywhere else the nearest drawn vehicle
       let k = -1, kd = Infinity;
       g.intersections.point.forEach((pt, i) => {
         if (g.intersections.kind[i] === "boundary") return;
         const d = Math.hypot(pt[0] - wx, pt[1] - wy);
-        if (d < g.intersections.radius[i]! + 6 && d < kd) { kd = d; k = i; }
+        if (d < Math.max(g.intersections.radius[i]!, 10 / v.scale) && d < kd) { kd = d; k = i; }
       });
-      if (k >= 0) p.onSelect("intersection", g.intersections.id[k]!);
+      if (k >= 0) { p.onSelect("intersection", g.intersections.id[k]!); return; }
+      let best = -1, bestD = Math.max(4, 18 / v.scale);
+      for (let i = 0; i < drawnUid.length; i++) {
+        const d = Math.hypot(drawnX[i]! - wx, drawnY[i]! - wy);
+        if (d < bestD) { bestD = d; best = i; }
+      }
+      const meta = best >= 0 ? p.controller.vehicles.get(drawnUid[best]!) : undefined;
+      if (meta) p.onSelect("vehicle", meta.id);
       else p.onSelect("none", "");
     };
     const onWheel = (e: WheelEvent) => {
@@ -341,10 +360,10 @@ export function MapCanvas(props: Props) {
       />
       <button
         onClick={() => fitRef.current()}
-        className="absolute right-3 top-3 rounded bg-slate-800/80 px-2 py-1 text-xs text-slate-200 hover:bg-slate-700"
-        title="Fit network (double-click map)"
+        className="absolute right-3 top-3 rounded-full bg-white/95 px-3 py-1.5 text-sm font-medium text-slate-800 shadow hover:bg-white"
+        title="Show the whole town (or double-click the map)"
       >
-        Fit
+        🔍 Show the whole town
       </button>
     </div>
   );

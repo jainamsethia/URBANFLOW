@@ -1,7 +1,9 @@
-// Side-panel widgets: KPI tiles, sparklines, the inspector and the comparison view.
+// Side-panel widgets in plain language: traffic mood, stat tiles, the car and traffic-light
+// cards, the controller race, and the technical views kept for grown-ups.
 
 import { useState } from "react";
-import { api, type CompareResult, type Meta, type ScenarioRef } from "../lib/api";
+import { api, type CompareResult, type Geometry, type Meta, type ScenarioRef } from "../lib/api";
+import { brain, brainChoices, clock, kmh, mood, movementSides, seconds, town, TOWN_ORDER, townSide, VEHICLE } from "../lib/friendly";
 import { remainingRoute, type Selection, type SessionController, type Snapshot } from "../lib/session";
 
 export function fmt(v: unknown, digits = 1): string {
@@ -9,150 +11,416 @@ export function fmt(v: unknown, digits = 1): string {
   return v.toLocaleString(undefined, { maximumFractionDigits: digits, minimumFractionDigits: 0 });
 }
 
-export function clock(t: number): string {
-  const s = Math.floor(t);
-  const hh = String(Math.floor(s / 3600)).padStart(2, "0");
-  const mm = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
-  const ss = String(s % 60).padStart(2, "0");
-  return `${hh}:${mm}:${ss}`;
-}
+const card = "rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200";
 
-export function Sparkline({ values, color = "#38bdf8" }: { values: number[]; color?: string }) {
-  const pts = values.filter((v) => Number.isFinite(v));
-  if (pts.length < 2) return <div className="h-10 text-xs text-slate-500">collecting…</div>;
-  const lo = Math.min(...pts), hi = Math.max(...pts);
-  const span = hi - lo || 1;
-  const w = 220, h = 40;
-  const step = w / (values.length - 1);
-  const d = values
-    .map((v, i) => (Number.isFinite(v) ? `${i * step},${h - ((v - lo) / span) * (h - 4) - 2}` : null))
-    .filter(Boolean)
-    .join(" L");
+// ---------------------------------------------------------------------------- traffic tab
+export function MoodCard({ snap }: { snap: Snapshot }) {
+  const m = mood(snap.metrics.active, snap.metrics.halting);
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="h-10 w-full" preserveAspectRatio="none" aria-hidden>
-      <path d={`M${d}`} fill="none" stroke={color} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
-    </svg>
-  );
-}
-
-const KPIS: { key: string; label: string; unit: string; color: string; digits?: number }[] = [
-  { key: "active", label: "Vehicles on network", unit: "", color: "#60a5fa", digits: 0 },
-  { key: "speed_mean", label: "Mean speed", unit: "m/s", color: "#34d399" },
-  { key: "queue_mean", label: "Network queue", unit: "veh", color: "#f87171" },
-  { key: "throughput_vph", label: "Throughput", unit: "veh/h", color: "#fbbf24", digits: 0 },
-];
-
-export function MetricsPanel({ snap }: { snap: Snapshot }) {
-  return (
-    <div className="space-y-3">
-      {KPIS.map((k) => (
-        <div key={k.key} className="rounded-lg bg-slate-900/70 p-2">
-          <div className="flex items-baseline justify-between">
-            <span className="text-xs text-slate-400">{k.label}</span>
-            <span className="font-mono text-sm text-slate-100">
-              {fmt(snap.metrics[k.key], k.digits ?? 1)} <span className="text-slate-500">{k.unit}</span>
-            </span>
-          </div>
-          <Sparkline values={snap.series[k.key] ?? []} color={k.color} />
-        </div>
-      ))}
-      <p className="text-[11px] leading-snug text-slate-500">
-        10-second samples computed by the engine's metrics manager (queue = time-mean of the
-        network's stop-line queues; throughput = arrivals per hour).
-      </p>
+    <div className={`${card} flex items-center gap-3`} style={{ borderLeft: `6px solid ${m.color}` }}>
+      <span className="text-5xl" aria-hidden>{m.face}</span>
+      <div>
+        <div className="text-xs font-medium uppercase tracking-wide text-slate-500">How is traffic?</div>
+        <div className="text-xl font-semibold text-slate-900">{m.text}</div>
+      </div>
     </div>
   );
 }
 
-export function Inspector({
+function Sparkline({ values, times, format }: { values: number[]; times: number[]; format: (v: number) => string }) {
+  const [hover, setHover] = useState<number | null>(null);
+  const idx = values.map((v, i) => (Number.isFinite(v) ? i : -1)).filter((i) => i >= 0);
+  if (idx.length < 2) return <div className="h-10 text-xs text-slate-400">Watching…</div>;
+  const pts = idx.map((i) => values[i]!);
+  const lo = Math.min(...pts), hi = Math.max(...pts);
+  const span = hi - lo || 1;
+  const w = 240, h = 40;
+  const x = (i: number) => (i / (values.length - 1)) * w;
+  const y = (v: number) => h - 3 - ((v - lo) / span) * (h - 6);
+  const d = idx.map((i, k) => `${k ? "L" : "M"}${x(i)},${y(values[i]!)}`).join(" ");
+  const last = idx[idx.length - 1]!;
+  const shown = hover ?? last;
+  return (
+    <div className="relative">
+      <svg
+        viewBox={`0 0 ${w} ${h}`}
+        className="h-10 w-full touch-none"
+        preserveAspectRatio="none"
+        role="img"
+        aria-label="Trend over the last minutes"
+        onPointerMove={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          const i = Math.round(((e.clientX - r.left) / r.width) * (values.length - 1));
+          setHover(Math.min(values.length - 1, Math.max(0, i)));
+        }}
+        onPointerLeave={() => setHover(null)}
+      >
+        <path d={d} fill="none" stroke="#94a3b8" strokeWidth={2} vectorEffect="non-scaling-stroke" />
+        {Number.isFinite(values[shown]!) && (
+          <circle cx={x(shown)} cy={y(values[shown]!)} r={4} fill="#2a78d6" stroke="#fff" strokeWidth={2} vectorEffect="non-scaling-stroke" />
+        )}
+      </svg>
+      {hover != null && Number.isFinite(values[hover]!) && (
+        <div className="pointer-events-none absolute -top-7 right-0 rounded-md bg-slate-900 px-2 py-0.5 text-xs text-white">
+          at {clock(times[hover] ?? 0)}: {format(values[hover]!)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const TILES: { key: string; icon: string; label: string; show: (v: number) => string }[] = [
+  { key: "active", icon: "🚗", label: "Cars driving now", show: (v) => fmt(v, 0) },
+  { key: "halting", icon: "🛑", label: "Cars standing still", show: (v) => fmt(v, 0) },
+  { key: "speed_mean", icon: "💨", label: "Average speed", show: (v) => kmh(v) },
+  { key: "arrived", icon: "🏁", label: "Cars that got there", show: (v) => fmt(v, 0) },
+];
+
+export function StatTiles({ snap }: { snap: Snapshot }) {
+  const times = snap.series.time ?? [];
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      {TILES.map((t) => {
+        const v = snap.metrics[t.key];
+        return (
+          <div key={t.key} className={card}>
+            <div className="flex items-center gap-1.5 text-sm text-slate-600">
+              <span aria-hidden>{t.icon}</span>
+              {t.label}
+            </div>
+            <div className="mt-1 text-3xl font-semibold text-slate-900">{typeof v === "number" ? t.show(v) : "–"}</div>
+            <Sparkline values={snap.series[t.key] ?? []} times={times} format={t.show} />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------- selection
+export function SelectionCard({
   selection,
+  geometry,
   controller,
 }: {
   selection: Selection | null;
+  geometry: Geometry;
   controller: SessionController;
 }) {
   if (!selection) {
-    return <p className="text-sm text-slate-400">Click a vehicle or an intersection on the map.</p>;
-  }
-  if (!selection.available) {
-    return <p className="text-sm text-slate-400">{selection.id} has left the network.</p>;
-  }
-  const d = selection.detail ?? {};
-  if (selection.kind === "vehicle") {
-    const rows: [string, string][] = [
-      ["Type", String(d.type)],
-      ["Road / lane", `${d.road ?? "–"} / ${d.lane ?? "–"}`],
-      ["Speed", `${fmt(d.speed)} m/s (desired ${fmt(d.desired_speed)})`],
-      ["Acceleration", `${fmt(d.acceleration, 2)} m/s²`],
-      ["Waiting time", `${fmt(d.waiting_time)} s`],
-      ["Stops", fmt(d.stops, 0)],
-      ["Distance", `${fmt(d.distance, 0)} m`],
-      ["Destination", String(d.destination ?? "–")],
-    ];
-    const route = remainingRoute(selection);
-    if (route) rows.push(["Route ahead", route.join(" → ")]);
     return (
-      <div>
-        <h3 className="mb-2 font-mono text-sm text-sky-300">{selection.id}</h3>
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
-          {rows.map(([k, v]) => (
-            <div key={k} className="contents">
-              <dt className="text-slate-400">{k}</dt>
-              <dd className="text-slate-100">{v}</dd>
-            </div>
-          ))}
-        </dl>
+      <div className={`${card} text-slate-600`}>
+        <div className="mb-1 text-lg font-semibold text-slate-900">👆 Try clicking!</div>
+        Click a <b>car</b> on the map to follow it, or a <b>traffic light</b> to see who may go.
       </div>
     );
   }
-  const phases = (d.phases as { index: number; id: string; duration: number }[]) ?? [];
-  const states = (d.movement_states as Record<string, string>) ?? {};
-  return (
-    <div>
-      <h3 className="mb-1 font-mono text-sm text-sky-300">Intersection {selection.id}</h3>
-      <p className="mb-2 text-xs text-slate-400">
-        {String(d.controller)} · phase <b className="text-slate-100">{String(d.phase_id)}</b> ·{" "}
-        {String(d.stage)}
-        {d.remaining != null && ` · ${fmt(d.remaining)} s left`}
-        {d.held ? " · HELD" : ""}
-        {d.preempting ? <b className="text-rose-400"> · EMERGENCY PREEMPTION</b> : null}
-      </p>
-      <div className="mb-2 flex flex-wrap gap-1">
-        {phases.map((p) => (
-          <button
-            key={p.index}
-            onClick={() => controller.send({ type: "hold_phase", intersection: selection.id, phase: p.index })}
-            className={`rounded px-2 py-1 text-xs ${
-              p.index === d.phase_index ? "bg-emerald-700 text-white" : "bg-slate-800 hover:bg-slate-700"
-            }`}
-            title="Hold this phase (manual override)"
-          >
-            Hold {p.id}
-          </button>
-        ))}
-        {Boolean(d.held) && (
-          <button
-            onClick={() => controller.send({ type: "release_phase", intersection: selection.id })}
-            className="rounded bg-amber-700 px-2 py-1 text-xs hover:bg-amber-600"
-          >
-            Release
-          </button>
-        )}
+  if (!selection.available) {
+    return (
+      <div className={`${card} text-slate-700`}>
+        <div className="text-lg font-semibold text-slate-900">🏁 It made it!</div>
+        This one has left the town. Click another car to follow.
       </div>
-      <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 font-mono text-[11px]">
-        {Object.entries(states).map(([m, s]) => (
-          <div key={m} className="flex justify-between">
-            <span className="text-slate-400">{m}</span>
-            <span
-              className={
-                s === "G" ? "text-emerald-400" : s === "g" ? "text-emerald-200" : s === "y" ? "text-yellow-300" : "text-red-400"
-              }
-            >
-              {s}
-            </span>
+    );
+  }
+  return selection.kind === "vehicle" ? (
+    <CarCard selection={selection} geometry={geometry} />
+  ) : (
+    <LightCard selection={selection} geometry={geometry} controller={controller} />
+  );
+}
+
+function CarCard({ selection, geometry }: { selection: Selection; geometry: Geometry }) {
+  const d = selection.detail ?? {};
+  const kind = VEHICLE[String(d.vclass)] ?? VEHICLE.car!;
+  const rows: [string, string, string][] = [
+    ["🎯", "Going to", townSide(geometry, d.destination)],
+    ["💨", "Speed", kmh(d.speed)],
+    ["⏳", "Waited at red lights", seconds(d.waiting_time)],
+    ["🛑", "Stopped", `${fmt(d.stops, 0)} time${d.stops === 1 ? "" : "s"}`],
+    ["📏", "Has driven", `${fmt(Number(d.distance) / 1000, 2)} km`],
+  ];
+  const route = remainingRoute(selection);
+  return (
+    <div className={card}>
+      <div className="mb-2 flex items-center gap-2">
+        <span className="text-4xl" aria-hidden>{kind.icon}</span>
+        <div>
+          <div className="text-lg font-semibold text-slate-900">This {kind.name.toLowerCase()}</div>
+          <div className="text-xs text-slate-500">{selection.id}</div>
+        </div>
+      </div>
+      {d.vclass === "emergency" && (
+        <p className="mb-2 rounded-lg bg-rose-50 p-2 text-sm text-rose-800">
+          🚨 Traffic lights turn green for it, and cars move over to let it pass.
+        </p>
+      )}
+      <dl className="space-y-1.5">
+        {rows.map(([icon, k, v]) => (
+          <div key={k} className="flex items-baseline justify-between gap-2 text-sm">
+            <dt className="text-slate-600">
+              <span aria-hidden>{icon}</span> {k}
+            </dt>
+            <dd className="text-right font-semibold text-slate-900">{v}</dd>
           </div>
         ))}
+      </dl>
+      {route && route.length > 0 && (
+        <p className="mt-3 rounded-lg bg-amber-50 p-2 text-sm text-amber-900">
+          🟨 The yellow roads on the map show where it will drive next.
+        </p>
+      )}
+    </div>
+  );
+}
+
+const STATE_WORDS: Record<string, [string, string]> = {
+  G: ["🟢", "Go"],
+  g: ["🟢", "Go, but give way"],
+  y: ["🟡", "Slow down"],
+  r: ["🔴", "Stop"],
+};
+
+function LightCard({
+  selection,
+  geometry,
+  controller,
+}: {
+  selection: Selection;
+  geometry: Geometry;
+  controller: SessionController;
+}) {
+  const d = selection.detail ?? {};
+  const sides = movementSides(geometry, selection.id);
+  const states = (d.movement_states as Record<string, string>) ?? {};
+  // one row per side: the most permissive state of its movements
+  const order = ["G", "g", "y", "r"];
+  const bySide = new Map<string, { arrow: string; state: string }>();
+  for (const [m, s] of Object.entries(states)) {
+    const side = sides.get(m);
+    if (!side) continue;
+    const cur = bySide.get(side.name);
+    if (!cur || order.indexOf(s) < order.indexOf(cur.state)) bySide.set(side.name, { arrow: side.arrow, state: s });
+  }
+  const phases = (d.phases as { index: number; id: string; green?: string[] }[]) ?? [];
+  const phaseSides = (p: { green?: string[] }) => {
+    const names = [...new Set((p.green ?? []).map((m) => sides.get(m)?.name).filter(Boolean))] as string[];
+    return names.length ? names.join(" & ") : "this phase";
+  };
+  const b = brain(String(d.controller));
+  return (
+    <div className={card}>
+      <div className="mb-1 text-lg font-semibold text-slate-900">🚦 Traffic light {selection.id}</div>
+      <div className="mb-3 text-sm text-slate-600">
+        {d.held ? (
+          <b className="text-emerald-700">✋ You're in control!</b>
+        ) : (
+          <>
+            Its brain: {b.icon} <b>{b.title}</b>
+            {d.remaining != null && <> · changes in {seconds(d.remaining)}</>}
+          </>
+        )}
       </div>
+      {Boolean(d.preempting) && (
+        <p className="mb-2 rounded-lg bg-rose-50 p-2 text-sm font-medium text-rose-800">🚑 Keeping it green for an ambulance!</p>
+      )}
+      <ul className="space-y-1.5">
+        {[...bySide.entries()].map(([name, { arrow, state }]) => {
+          const [dot, word] = STATE_WORDS[state] ?? ["⚪", state];
+          return (
+            <li key={name} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-1.5 text-sm">
+              <span className="text-slate-700">
+                <span aria-hidden>{arrow}</span> Cars from the {name}
+              </span>
+              <span className="font-semibold text-slate-900">
+                <span aria-hidden>{dot}</span> {word}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+      {phases.length > 1 && (
+        <div className="mt-3">
+          <div className="mb-1 text-sm font-medium text-slate-700">✋ You can be the traffic light! Make it green for:</div>
+          <div className="flex flex-wrap gap-2">
+            {phases.map((p) => (
+              <button
+                key={p.index}
+                onClick={() => controller.send({ type: "hold_phase", intersection: selection.id, phase: p.index })}
+                className={`rounded-full px-3 py-1.5 text-sm font-medium ring-1 ${
+                  p.index === d.phase_index && d.held
+                    ? "bg-emerald-600 text-white ring-emerald-600"
+                    : "bg-white text-slate-800 ring-slate-300 hover:bg-emerald-50"
+                }`}
+              >
+                {phaseSides(p)}
+              </button>
+            ))}
+            {Boolean(d.held) && (
+              <button
+                onClick={() => controller.send({ type: "release_phase", intersection: selection.id })}
+                className="rounded-full bg-amber-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-600"
+              >
+                Let it decide by itself again
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------- race tab
+const RACE_DURATIONS = [
+  { label: "10 minutes", s: 600 },
+  { label: "30 minutes", s: 1800 },
+];
+
+export function RacePanel({ meta, scenarios }: { meta: Meta; scenarios: ScenarioRef[] }) {
+  const rank = (n: string) => (TOWN_ORDER.indexOf(n) + TOWN_ORDER.length + 1) % (TOWN_ORDER.length + 1);
+  const bundled = scenarios.filter((s) => s.source === "bundled").map((s) => s.name).sort((a, b) => rank(a) - rank(b));
+  const [scenario, setScenario] = useState(bundled.includes("grid_3x3") ? "grid_3x3" : bundled[0] ?? "");
+  const choices = brainChoices(meta.controllers);
+  const [chosen, setChosen] = useState<string[]>(["fixed_time", "actuated", "max_pressure"].filter((c) => choices.includes(c)));
+  const [duration, setDuration] = useState(600);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<CompareResult | null>(null);
+  const [science, setScience] = useState(false);
+  const seeds = 2;
+
+  const run = async () => {
+    setBusy(true);
+    setError(null);
+    setResult(null);
+    try {
+      setResult(await api.compare({ scenario, controllers: chosen, seeds, duration }));
+    } catch (e) {
+      setError(String((e as Error).message));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className={card}>
+        <div className="text-lg font-semibold text-slate-900">🏁 Race the traffic lights</div>
+        <p className="mt-1 text-sm text-slate-600">
+          The same cars drive through the same town with different traffic-light brains. Which one gets everybody home fastest?
+        </p>
+      </div>
+      <div className={card}>
+        <div className="mb-2 text-sm font-medium text-slate-700">1. Pick a town</div>
+        <div className="flex flex-wrap gap-2">
+          {bundled.map((name) => {
+            const t = town(name);
+            return (
+              <button
+                key={name}
+                onClick={() => setScenario(name)}
+                className={`rounded-full px-3 py-1.5 text-sm ring-1 ${scenario === name ? "bg-sky-600 text-white ring-sky-600" : "bg-white text-slate-800 ring-slate-300 hover:bg-sky-50"}`}
+              >
+                {t.icon} {t.title}
+              </button>
+            );
+          })}
+        </div>
+        <div className="mb-2 mt-4 text-sm font-medium text-slate-700">2. Pick the racers (at least two)</div>
+        <div className="flex flex-wrap gap-2">
+          {choices.map((c) => {
+            const b = brain(c);
+            const on = chosen.includes(c);
+            return (
+              <button
+                key={c}
+                onClick={() => setChosen(on ? chosen.filter((x) => x !== c) : [...chosen, c])}
+                aria-pressed={on}
+                className={`rounded-full px-3 py-1.5 text-sm ring-1 ${on ? "bg-violet-600 text-white ring-violet-600" : "bg-white text-slate-800 ring-slate-300 hover:bg-violet-50"}`}
+              >
+                {on ? "✓ " : ""}
+                {b.icon} {b.title}
+              </button>
+            );
+          })}
+        </div>
+        <div className="mb-2 mt-4 text-sm font-medium text-slate-700">3. How long?</div>
+        <div className="flex gap-2">
+          {RACE_DURATIONS.map((d) => (
+            <button
+              key={d.s}
+              onClick={() => setDuration(d.s)}
+              className={`rounded-full px-3 py-1.5 text-sm ring-1 ${duration === d.s ? "bg-slate-800 text-white ring-slate-800" : "bg-white text-slate-800 ring-slate-300"}`}
+            >
+              {d.label}
+            </button>
+          ))}
+        </div>
+        <button
+          disabled={busy || chosen.length < 2}
+          onClick={run}
+          className="mt-4 w-full rounded-full bg-emerald-600 py-3 text-lg font-semibold text-white shadow hover:bg-emerald-500 disabled:opacity-50"
+        >
+          {busy ? "🏎️ Racing… this takes a little while" : chosen.length < 2 ? "Pick at least two racers" : "🏁 Start the race!"}
+        </button>
+        {error && <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-red-50 p-2 text-xs text-red-800">{error}</pre>}
+      </div>
+      {result && <RaceResult result={result} />}
+      {result && (
+        <button onClick={() => setScience(!science)} className="text-sm text-slate-600 underline">
+          {science ? "Hide" : "Show"} the science 🔬
+        </button>
+      )}
+      {result && science && <CompareTable result={result} />}
+    </div>
+  );
+}
+
+const MEDALS = ["🥇", "🥈", "🥉"];
+
+function RaceResult({ result }: { result: CompareResult }) {
+  const row = result.metrics.find((m) => m.metric === "travel_time.mean");
+  if (!row) return null;
+  const ranked = result.controllers
+    .map((c) => ({ c, v: row.by_controller[c]?.mean ?? NaN }))
+    .filter((x) => Number.isFinite(x.v))
+    .sort((a, b) => a.v - b.v);
+  const max = Math.max(...ranked.map((x) => x.v), 1);
+  const winner = ranked[0];
+  const slowest = ranked[ranked.length - 1];
+  const faster = winner && slowest ? Math.round((1 - winner.v / slowest.v) * 100) : 0;
+  return (
+    <div className={card}>
+      <div className="text-lg font-semibold text-slate-900">
+        {winner ? `${MEDALS[0]} ${brain(winner.c).icon} ${brain(winner.c).title} wins!` : "Results"}
+      </div>
+      {winner && slowest && winner !== slowest && (
+        <p className="mt-1 text-sm text-slate-600">
+          Trips were {faster}% shorter than with {brain(slowest.c).icon} {brain(slowest.c).title}.
+        </p>
+      )}
+      <div className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-500">Average time for one trip</div>
+      <ul className="mt-2 space-y-2">
+        {ranked.map((x, i) => {
+          const b = brain(x.c);
+          const st = row.by_controller[x.c]!;
+          return (
+            <li key={x.c} title={`${b.title}: ${fmt(x.v)} s on average (95% range ${fmt(st.ci95[0])}–${fmt(st.ci95[1])} s)`}>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-800">
+                  {MEDALS[i] ?? "  "} {b.icon} {b.title}
+                </span>
+                <span className="font-semibold text-slate-900">{seconds(x.v)}</span>
+              </div>
+              <div className="mt-1 h-3 rounded-full bg-slate-100">
+                <div className="h-3 rounded-full bg-[#2a78d6]" style={{ width: `${(100 * x.v) / max}%` }} />
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="mt-3 text-xs text-slate-500">Shorter bar = cars got home faster.</p>
     </div>
   );
 }
@@ -167,115 +435,78 @@ const LABELS: Record<string, string> = {
   "vehicles.arrived": "Vehicles arrived",
 };
 
-export function ComparePanel({ meta, scenarios }: { meta: Meta; scenarios: ScenarioRef[] }) {
-  const [scenario, setScenario] = useState(scenarios.find((s) => s.name === "grid_3x3")?.name ?? scenarios[0]?.name ?? "");
-  const [chosen, setChosen] = useState<string[]>(["fixed_time", "actuated", "max_pressure"].filter((c) => meta.controllers.includes(c)));
-  const [seeds, setSeeds] = useState(3);
-  const [duration, setDuration] = useState(1800);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<CompareResult | null>(null);
-
-  const run = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      setResult(await api.compare({ scenario, controllers: chosen, seeds, duration }));
-    } catch (e) {
-      setError(String((e as Error).message));
-    } finally {
-      setBusy(false);
-    }
-  };
-
+function CompareTable({ result }: { result: CompareResult }) {
   return (
-    <div className="space-y-3 text-sm">
-      <label className="block">
-        <span className="text-xs text-slate-400">Scenario</span>
-        <select className="mt-1 w-full rounded bg-slate-800 p-1" value={scenario} onChange={(e) => setScenario(e.target.value)}>
-          {scenarios.filter((s) => s.source === "bundled").map((s) => (
-            <option key={s.name}>{s.name}</option>
+    <div className={`${card} space-y-3`}>
+      <p className="text-xs text-slate-500">
+        {result.scenario}, {result.seeds.length} seeds × {result.duration ?? "default"} s. Mean; Δ is paired against{" "}
+        <b>{result.baseline}</b> (★ = 95% CI excludes 0). Same seeds ⇒ identical demand.
+      </p>
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="text-left text-slate-500">
+            <th className="py-1 font-medium">Metric</th>
+            {result.controllers.map((c) => (
+              <th key={c} className="py-1 text-right font-medium">{c}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {result.metrics.map((row) => (
+            <tr key={row.metric} className="border-t border-slate-100">
+              <td className="py-1 text-slate-600">{LABELS[row.metric] ?? row.metric}</td>
+              {result.controllers.map((c) => {
+                const delta = row.vs_baseline[c];
+                return (
+                  <td key={c} className="py-1 text-right text-slate-900">
+                    {fmt(row.by_controller[c]?.mean)}
+                    {delta?.delta_pct != null && (
+                      <span className="block text-[10px] text-slate-500">
+                        {delta.delta_pct > 0 ? "+" : ""}
+                        {fmt(delta.delta_pct)}%{delta.significant ? "★" : ""}
+                      </span>
+                    )}
+                  </td>
+                );
+              })}
+            </tr>
           ))}
-        </select>
-      </label>
-      <fieldset>
-        <legend className="text-xs text-slate-400">Controllers (first = baseline)</legend>
-        <div className="mt-1 flex flex-wrap gap-2">
-          {meta.controllers.map((c) => (
-            <label key={c} className="flex items-center gap-1 text-xs">
-              <input
-                type="checkbox"
-                checked={chosen.includes(c)}
-                onChange={(e) => setChosen(e.target.checked ? [...chosen, c] : chosen.filter((x) => x !== c))}
-              />
-              {c}
-            </label>
-          ))}
-        </div>
-      </fieldset>
-      <div className="flex gap-2">
-        <label className="flex-1">
-          <span className="text-xs text-slate-400">Seeds</span>
-          <input type="number" min={1} max={10} value={seeds} onChange={(e) => setSeeds(+e.target.value)} className="mt-1 w-full rounded bg-slate-800 p-1" />
-        </label>
-        <label className="flex-1">
-          <span className="text-xs text-slate-400">Duration (s)</span>
-          <input type="number" min={60} step={60} value={duration} onChange={(e) => setDuration(+e.target.value)} className="mt-1 w-full rounded bg-slate-800 p-1" />
-        </label>
-      </div>
-      <button
-        disabled={busy || chosen.length < 2}
-        onClick={run}
-        className="w-full rounded bg-sky-600 py-1.5 font-medium hover:bg-sky-500 disabled:opacity-50"
-      >
-        {busy ? `Running ${chosen.length * seeds} simulations…` : "Run comparison"}
-      </button>
-      {error && <pre className="whitespace-pre-wrap rounded bg-red-950 p-2 text-xs text-red-200">{error}</pre>}
-      {result && <CompareTable result={result} />}
+        </tbody>
+      </table>
     </div>
   );
 }
 
-function CompareTable({ result }: { result: CompareResult }) {
-  const others = result.controllers.filter((c) => c !== result.baseline);
+// ---------------------------------------------------------------------------- grown-ups
+export function TechnicalDetails({ snap, selection }: { snap: Snapshot; selection: Selection | null }) {
+  const m = snap.metrics;
+  const rows: [string, string][] = [
+    ["Vehicles on network", fmt(m.active, 0)],
+    ["Mean speed", `${fmt(m.speed_mean)} m/s`],
+    ["Network queue (time-mean)", `${fmt(m.queue_mean)} veh`],
+    ["Throughput", `${fmt(m.throughput_vph, 0)} veh/h`],
+    ["Generated / arrived", `${fmt(m.generated, 0)} / ${fmt(m.arrived, 0)}`],
+    ["Waiting to enter", fmt(m.backlog, 0)],
+  ];
   return (
-    <div className="space-y-3">
-      <p className="text-xs text-slate-400">
-        {result.scenario}, {result.seeds.length} seeds × {result.duration ?? "default"} s. Mean [95% CI]; Δ is
-        paired against <b>{result.baseline}</b> (★ = CI excludes 0). Same seeds ⇒ identical demand.
-      </p>
-      {result.metrics.map((row) => {
-        const means = result.controllers.map((c) => row.by_controller[c]?.mean ?? NaN);
-        const max = Math.max(...means.filter(Number.isFinite), 1e-9);
-        return (
-          <div key={row.metric} className="rounded-lg bg-slate-900/70 p-2">
-            <div className="mb-1 text-xs font-medium text-slate-300">{LABELS[row.metric] ?? row.metric}</div>
-            {result.controllers.map((c) => {
-              const st = row.by_controller[c]!;
-              const delta = row.vs_baseline[c];
-              const good =
-                delta && delta.significant && delta.delta != null && row.direction
-                  ? (row.direction === "min") === delta.delta < 0
-                  : null;
-              return (
-                <div key={c} className="mb-0.5 flex items-center gap-2 text-xs">
-                  <span className="w-24 truncate text-slate-400">{c}</span>
-                  <div className="h-3 flex-1 rounded bg-slate-800">
-                    <div className="h-3 rounded bg-sky-500" style={{ width: `${(100 * (st.mean ?? 0)) / max}%` }} />
-                  </div>
-                  <span className="w-16 text-right font-mono">{fmt(st.mean)}</span>
-                  <span
-                    className={`w-20 text-right font-mono ${good == null ? "text-slate-500" : good ? "text-emerald-400" : "text-red-400"}`}
-                  >
-                    {delta?.delta_pct != null ? `${delta.delta_pct > 0 ? "+" : ""}${fmt(delta.delta_pct)}%${delta.significant ? "★" : ""}` : c === result.baseline ? "baseline" : "–"}
-                  </span>
-                </div>
-              );
-            })}
+    <div className={`${card} space-y-3 text-xs`}>
+      <div className="text-sm font-semibold text-slate-900">Metrics (10-second samples)</div>
+      <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1">
+        {rows.map(([k, v]) => (
+          <div key={k} className="contents">
+            <dt className="text-slate-500">{k}</dt>
+            <dd className="text-right font-mono text-slate-900">{v}</dd>
           </div>
-        );
-      })}
-      {others.length === 0 && <p className="text-xs text-slate-500">Pick at least two controllers.</p>}
+        ))}
+      </dl>
+      {selection?.available && (
+        <>
+          <div className="text-sm font-semibold text-slate-900">Selected {selection.kind}: {selection.id}</div>
+          <pre className="max-h-64 overflow-auto rounded-lg bg-slate-50 p-2 text-[11px] text-slate-700">
+            {JSON.stringify(selection.detail, null, 1)}
+          </pre>
+        </>
+      )}
     </div>
   );
 }
