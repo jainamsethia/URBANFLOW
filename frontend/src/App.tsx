@@ -268,6 +268,7 @@ export default function App() {
   const signalised = Object.keys(status?.controllers ?? {});
   const liveController = signalised.length ? status!.controllers[signalised[0]!]! : "";
   const goHome = () => {
+    ctl?.dispose(); // close the live connection before the server ends the session
     if (session) api.deleteSession(session.id).catch(() => {});
     setSession(null);
     setCtl(null);
