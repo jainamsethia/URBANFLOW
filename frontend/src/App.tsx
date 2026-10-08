@@ -192,7 +192,7 @@ export default function App() {
   if (!meta) return <div className="p-6 text-slate-400">Connecting…</div>;
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex min-h-screen flex-col md:h-screen">
       <header className="flex flex-wrap items-center gap-4 border-b border-slate-800 bg-slate-900 px-4 py-2">
         <div className="flex items-baseline gap-2">
           <span className="text-lg font-semibold tracking-tight text-sky-400">UrbanFlow</span>
@@ -286,8 +286,8 @@ export default function App() {
         </div>
       )}
 
-      <main className="flex min-h-0 flex-1">
-        <section className="relative min-w-0 flex-1">
+      <main className="flex min-h-0 flex-1 flex-col md:flex-row">
+        <section className="relative h-[60vh] min-h-80 min-w-0 md:h-auto md:flex-1">
           {session && geometry && ctl ? (
             <MapCanvas
               geometry={geometry}
@@ -316,7 +316,7 @@ export default function App() {
           )}
         </section>
 
-        <aside className="flex w-80 flex-col border-l border-slate-800 bg-slate-950">
+        <aside className="flex w-full flex-col border-t border-slate-800 bg-slate-950 md:w-80 md:border-l md:border-t-0">
           <div className="flex border-b border-slate-800 text-sm">
             {(["live", "compare"] as const).map((t) => (
               <button key={t} onClick={() => setTab(t)} className={`flex-1 py-2 ${tab === t ? "border-b-2 border-sky-500 text-sky-300" : "text-slate-400"}`}>
