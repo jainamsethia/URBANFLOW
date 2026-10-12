@@ -151,6 +151,26 @@ class Scenario:
         """Write the scenario atomically; ``resolved=True`` writes the fully explicit spec."""
         return write_json(path, self.to_dict(resolved=resolved), indent=indent)
 
+    def scale_demand(self, factor: float) -> Scenario:
+        """A copy with every flow's rate multiplied by ``factor`` (> 0); trips and transit
+        lines are unchanged. The copy is validated like any scenario (e.g. binomial flows
+        must stay below one vehicle per step)."""
+        if not factor > 0:
+            raise ValueError("factor must be positive")
+        flows = tuple(
+            f.model_copy(
+                update={"rate": f.rate * factor}
+                if f.rate is not None
+                else {"period": float(f.period or 0) / factor}
+            )
+            for f in self.spec.demand.flows
+        )
+        demand = self.spec.demand.model_copy(update={"flows": flows})
+        data = self.spec.model_copy(update={"demand": demand}).model_dump(
+            mode="json", by_alias=True, exclude_unset=True
+        )
+        return Scenario.from_dict(data, source=f"{self.name} x{factor:g} demand")
+
     def edit(self) -> ScenarioBuilder:
         """A :class:`ScenarioBuilder` initialised from this scenario."""
         from urbanflow.scenario.builder import ScenarioBuilder

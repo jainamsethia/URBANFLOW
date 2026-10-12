@@ -16,9 +16,11 @@ import asyncio
 import contextlib
 import json
 import math
+import re
 import secrets
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Final, Literal
 
 import numpy as np
@@ -98,6 +100,12 @@ class Subscribe(_Msg):
     lane_metric: int = Field(default=0, ge=0, le=max(LaneMetric))
 
 
+class Record(_Msg):
+    type: Literal["record"]
+    on: bool
+    """Start (True) or finish (False) a ``.ufr`` recording in the workspace."""
+
+
 class Select(_Msg):
     type: Literal["select"]
     kind: Literal["vehicle", "intersection", "none"]
@@ -106,7 +114,7 @@ class Select(_Msg):
 
 ClientMessage = (
     Play | Pause | Step | Seek | SetSpeed | Reset | SetController | HoldPhase | ReleasePhase
-    | Subscribe | Select
+    | Subscribe | Select | Record
 )  # fmt: skip
 _ADAPTER: Final[TypeAdapter[ClientMessage]] = TypeAdapter(ClientMessage)
 
@@ -141,8 +149,13 @@ class Session:
     kind: str = "live"
     controllers: dict[str, str]
 
-    def __init__(self, sim: Simulation, label: str, scenario: str) -> None:
+    def __init__(
+        self, sim: Simulation, label: str, scenario: str, recordings: Path | None = None
+    ) -> None:
         self.sim = sim
+        self.recordings = recordings
+        """Directory for recordings (None: recording is not offered)."""
+        self.last_recording: str | None = None
         self._init_common(label, scenario)
         self.controllers = {j: str(sim.signals[j].controller) for j in sim.signals.ids}
 
@@ -336,6 +349,8 @@ class Session:
             "lane_metric": int(self.lane_metric),
             "controllers": dict(self.controllers),
             "error": self.error,
+            "recording": sim.recording is not None,
+            "last_recording": self.last_recording,
         }
 
     def _selection(self) -> dict[str, Any] | None:
@@ -464,6 +479,20 @@ class Session:
                     sim.signals.release(j)
             case Subscribe(lane_metric=code):
                 self.lane_metric = LaneMetric(code)
+            case Record(on=True):
+                if sim.recording is None:
+                    if self.recordings is None:
+                        raise CommandError("recording is not available in this session")
+                    self.recordings.mkdir(parents=True, exist_ok=True)
+                    slug = re.sub(r"[^A-Za-z0-9._-]", "_", self.scenario)[:40] or "run"
+                    path = self.recordings / f"{slug}-{time.strftime('%Y%m%d-%H%M%S')}.ufr"
+                    async with self._lock:
+                        sim.start_recording(path)
+            case Record(on=False):
+                if sim.recording is not None:
+                    async with self._lock:
+                        saved = await asyncio.to_thread(sim.stop_recording)
+                    self.last_recording = saved.stem
             case Select(kind=kind, id=ident):
                 self.selection = (kind, ident)
                 self._next_metrics = 0.0
@@ -629,7 +658,7 @@ class ReplaySession(Session):
                 self.selection = (kind, ident)
                 self._next_metrics = 0.0
             case _:
-                raise CommandError("signal control is not available while replaying a recording")
+                raise CommandError("this is not available while replaying a recording")
 
 
 def _first(exc: ValidationError) -> str:

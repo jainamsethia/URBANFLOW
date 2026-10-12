@@ -110,16 +110,16 @@ export function SelectionCard({
   if (!selection) {
     return (
       <div className={`${card} text-slate-600`}>
-        <div className="mb-1 text-lg font-semibold text-slate-900">👆 Try clicking!</div>
-        Click a <b>car</b> on the map to follow it, or a <b>traffic light</b> to see who may go.
+        <div className="mb-1 text-lg font-semibold text-slate-900">👆 Tip</div>
+        Click a <b>car</b> on the map to follow it, or a <b>junction</b> to see its traffic light.
       </div>
     );
   }
   if (!selection.available) {
     return (
       <div className={`${card} text-slate-700`}>
-        <div className="text-lg font-semibold text-slate-900">🏁 It made it!</div>
-        This one has left the town. Click another car to follow.
+        <div className="text-lg font-semibold text-slate-900">🏁 Trip finished</div>
+        This vehicle has left the map. Click another one to follow it.
       </div>
     );
   }
@@ -241,7 +241,7 @@ function LightCard({
       </ul>
       {phases.length > 1 && (
         <div className="mt-3">
-          <div className="mb-1 text-sm font-medium text-slate-700">✋ You can be the traffic light! Make it green for:</div>
+          <div className="mb-1 text-sm font-medium text-slate-700">✋ Manual control: give green to</div>
           <div className="flex flex-wrap gap-2">
             {phases.map((p) => (
               <button
@@ -261,7 +261,7 @@ function LightCard({
                 onClick={() => controller.send({ type: "release_phase", intersection: selection.id })}
                 className="rounded-full bg-amber-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-600"
               >
-                Let it decide by itself again
+                Back to automatic
               </button>
             )}
           </div>
@@ -306,13 +306,14 @@ export function RacePanel({ meta, scenarios }: { meta: Meta; scenarios: Scenario
   return (
     <div className="space-y-4">
       <div className={card}>
-        <div className="text-lg font-semibold text-slate-900">🏁 Race the traffic lights</div>
+        <div className="text-lg font-semibold text-slate-900">🏁 Compare traffic-light strategies</div>
         <p className="mt-1 text-sm text-slate-600">
-          The same cars drive through the same town with different traffic-light brains. Which one gets everybody home fastest?
+          The same cars drive through the same map with each strategy (twice, with different random traffic). The one with
+          the shortest average trip wins.
         </p>
       </div>
       <div className={card}>
-        <div className="mb-2 text-sm font-medium text-slate-700">1. Pick a town</div>
+        <div className="mb-2 text-sm font-medium text-slate-700">1. Map</div>
         <div className="flex flex-wrap gap-2">
           {bundled.map((name) => {
             const t = town(name);
@@ -327,7 +328,7 @@ export function RacePanel({ meta, scenarios }: { meta: Meta; scenarios: Scenario
             );
           })}
         </div>
-        <div className="mb-2 mt-4 text-sm font-medium text-slate-700">2. Pick the racers (at least two)</div>
+        <div className="mb-2 mt-4 text-sm font-medium text-slate-700">2. Strategies to compare (at least two)</div>
         <div className="flex flex-wrap gap-2">
           {choices.map((c) => {
             const b = brain(c);
@@ -345,7 +346,7 @@ export function RacePanel({ meta, scenarios }: { meta: Meta; scenarios: Scenario
             );
           })}
         </div>
-        <div className="mb-2 mt-4 text-sm font-medium text-slate-700">3. How long?</div>
+        <div className="mb-2 mt-4 text-sm font-medium text-slate-700">3. Simulated time</div>
         <div className="flex gap-2">
           {RACE_DURATIONS.map((d) => (
             <button
@@ -362,15 +363,18 @@ export function RacePanel({ meta, scenarios }: { meta: Meta; scenarios: Scenario
           onClick={run}
           className="mt-4 w-full rounded-full bg-emerald-600 py-3 text-lg font-semibold text-white shadow hover:bg-emerald-500 disabled:opacity-50"
         >
-          {busy ? "🏎️ Racing… this takes a little while" : chosen.length < 2 ? "Pick at least two racers" : "🏁 Start the race!"}
+          {busy ? `Running ${chosen.length * seeds} simulations…` : chosen.length < 2 ? "Choose at least two strategies" : "▶ Run comparison"}
         </button>
         {error && <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-red-50 p-2 text-xs text-red-800">{error}</pre>}
       </div>
       {result && <RaceResult result={result} />}
       {result && (
-        <button onClick={() => setScience(!science)} className="text-sm text-slate-600 underline">
-          {science ? "Hide" : "Show"} the science 🔬
-        </button>
+        <div className="flex gap-4 text-sm">
+          <button onClick={() => setScience(!science)} className="text-slate-600 underline">
+            {science ? "Hide" : "Show"} detailed statistics
+          </button>
+          <button onClick={() => downloadCsv(result)} className="text-sky-700 underline">⬇ Download results (CSV)</button>
+        </div>
       )}
       {result && science && <CompareTable result={result} />}
     </div>
@@ -378,6 +382,24 @@ export function RacePanel({ meta, scenarios }: { meta: Meta; scenarios: Scenario
 }
 
 const MEDALS = ["🥇", "🥈", "🥉"];
+
+/** The comparison as a CSV (one row per metric and strategy), saved by the browser. */
+function downloadCsv(result: CompareResult) {
+  const rows = [["metric", "strategy", "mean", "ci95_low", "ci95_high", "change_vs_" + result.baseline + "_pct", "significant"]];
+  for (const m of result.metrics) {
+    for (const c of result.controllers) {
+      const st = m.by_controller[c];
+      const d = m.vs_baseline[c];
+      rows.push([m.metric, c, String(st?.mean ?? ""), String(st?.ci95[0] ?? ""), String(st?.ci95[1] ?? ""), String(d?.delta_pct ?? ""), String(d?.significant ?? "")]);
+    }
+  }
+  const blob = new Blob([rows.map((r) => r.join(",")).join("\n")], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `comparison-${result.scenario}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
 
 function RaceResult({ result }: { result: CompareResult }) {
   const row = result.metrics.find((m) => m.metric === "travel_time.mean");

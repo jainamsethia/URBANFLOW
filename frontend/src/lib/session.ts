@@ -23,6 +23,8 @@ export interface Status {
   lane_metric: number;
   controllers: Record<string, string>;
   error: string;
+  recording?: boolean;
+  last_recording?: string | null;
 }
 
 export interface Selection {

@@ -8,18 +8,19 @@ are ``{"format": "urbanflow.metrics.table", "version": "1.0", "columns": [...], 
 from __future__ import annotations
 
 import csv
+import io
 import json
 import math
 import os
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Final, Literal
+from typing import Any, Final, Literal
 
 import numpy as np
 
 from urbanflow.core.errors import ConfigError, require
 
-__all__ = ["TABLES", "export_tables", "read_table", "write_table"]
+__all__ = ["TABLES", "export_tables", "read_table", "table_csv", "write_table"]
 
 TABLES: Final = ("timeseries", "intersections", "trips")
 Format = Literal["csv", "json", "parquet"]
@@ -36,6 +37,21 @@ def _json_value(value: object) -> object:
     return None if isinstance(value, float) and math.isnan(value) else value
 
 
+def table_csv(table: Mapping[str, np.ndarray]) -> str:
+    """A table as CSV text (header row, NaN as an empty cell)."""
+    out = io.StringIO()
+    _write_csv(table, out)
+    return out.getvalue()
+
+
+def _write_csv(table: Mapping[str, np.ndarray], fh: Any) -> None:
+    columns = list(table)
+    writer = csv.writer(fh, lineterminator="\n")
+    writer.writerow(columns)
+    for row in zip(*(table[c].tolist() for c in columns), strict=True):
+        writer.writerow([_cell(v) for v in row])
+
+
 def write_table(table: Mapping[str, np.ndarray], path: str | os.PathLike[str]) -> Path:
     """Write one table; the format comes from the suffix (.csv, .json, .parquet)."""
     target = Path(path)
@@ -44,10 +60,7 @@ def write_table(table: Mapping[str, np.ndarray], path: str | os.PathLike[str]) -
     columns = list(table)
     if fmt == "csv":
         with target.open("w", newline="", encoding="utf-8") as fh:
-            writer = csv.writer(fh)
-            writer.writerow(columns)
-            for row in zip(*(table[c].tolist() for c in columns), strict=True):
-                writer.writerow([_cell(v) for v in row])
+            _write_csv(table, fh)
     elif fmt == "json":
         doc = {
             "format": _TABLE_FORMAT,

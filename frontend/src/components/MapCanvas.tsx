@@ -339,6 +339,12 @@ export function MapCanvas(props: Props) {
     window.addEventListener("mouseup", onUp);
     canvas.addEventListener("wheel", onWheel, { passive: false });
     canvas.addEventListener("dblclick", fit);
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && /^(INPUT|SELECT|TEXTAREA)$/.test(target.tagName)) return;
+      if (e.key === "f" || e.key === "F") fit();
+    };
+    window.addEventListener("keydown", onKey);
     return () => {
       cancelAnimationFrame(raf);
       canvas.removeEventListener("mousedown", onDown);
@@ -346,6 +352,7 @@ export function MapCanvas(props: Props) {
       window.removeEventListener("mouseup", onUp);
       canvas.removeEventListener("wheel", onWheel);
       canvas.removeEventListener("dblclick", fit);
+      window.removeEventListener("keydown", onKey);
       staticRef.current = null;
     };
   }, [props.geometry, props.controller]);
@@ -361,9 +368,9 @@ export function MapCanvas(props: Props) {
       <button
         onClick={() => fitRef.current()}
         className="absolute right-3 top-3 rounded-full bg-white/95 px-3 py-1.5 text-sm font-medium text-slate-800 shadow hover:bg-white"
-        title="Show the whole town (or double-click the map)"
+        title="Show the whole map (F, or double-click the map)"
       >
-        🔍 Show the whole town
+        🔍 Show the whole map
       </button>
     </div>
   );

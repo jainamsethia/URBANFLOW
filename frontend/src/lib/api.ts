@@ -87,7 +87,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
     try {
       const body = await res.json();
       detail = body.detail ?? JSON.stringify(body);
-      if (Array.isArray(body.issues) && body.issues.length) {
+      if (Array.isArray(body.issues) && body.issues.length && !String(detail).includes(body.issues[0].message)) {
         detail += "\n" + body.issues.map((i: { path: string; message: string }) => `${i.path}: ${i.message}`).join("\n");
       }
     } catch {
@@ -111,6 +111,30 @@ export const api = {
     call<{ summary: Record<string, number | null>; history: Record<string, (number | null)[]> }>(`/sessions/${id}/summary`),
   compare: (body: Record<string, unknown>) =>
     call<CompareResult>("/compare", { method: "POST", body: JSON.stringify(body) }),
+  importScenario: (body: Record<string, unknown>) =>
+    call<ImportResult>("/scenarios/import", { method: "POST", body: JSON.stringify(body) }),
+  deleteScenario: (name: string) => call<void>(`/scenarios/${encodeURIComponent(name)}`, { method: "DELETE" }),
+};
+
+export interface ImportIssue {
+  path: string;
+  message: string;
+  code: string;
+  severity: string;
+}
+
+export interface ImportResult {
+  name: string;
+  summary: Record<string, number>;
+  warnings: ImportIssue[];
+}
+
+/** Download links (served as attachments). */
+export const downloads = {
+  table: (sessionId: string, table: "trips" | "timeseries" | "intersections") => `${API}/sessions/${sessionId}/export/${table}.csv`,
+  sessionScenario: (sessionId: string) => `${API}/sessions/${sessionId}/scenario`,
+  scenario: (source: string, name: string) => `${API}/scenarios/${source}/${encodeURIComponent(name)}`,
+  replay: (name: string) => `${API}/replays/${encodeURIComponent(name)}/file`,
 };
 
 export function wsUrl(sessionId: string): string {

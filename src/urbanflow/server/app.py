@@ -3,8 +3,13 @@
 ``create_app(settings)`` builds a FastAPI app with routes under ``/api/v1``:
 
 * ``GET /health``, ``GET /meta`` (version, controllers, generators, lane metrics)
-* ``GET /scenarios`` (bundled and workspace scenarios)
-* ``POST/GET /sessions``, ``GET/DELETE /sessions/{id}``, ``GET /sessions/{id}/geometry``
+* ``GET /scenarios`` (bundled and workspace scenarios), ``GET /scenarios/{source}/{name}``
+  (download), ``POST /scenarios/import`` (UrbanFlow or CityFlow data, saved to the
+  workspace), ``DELETE /scenarios/{name}`` (workspace only)
+* ``GET /replays``, ``GET /replays/{name}/file`` (download)
+* ``POST/GET /sessions``, ``GET/DELETE /sessions/{id}``, ``GET /sessions/{id}/geometry``,
+  ``GET /sessions/{id}/export/{table}.csv`` (trips, timeseries, intersections),
+  ``GET /sessions/{id}/scenario``
 * ``POST /compare`` (controllers x seeds batch on one scenario; paired summary)
 * ``WS /ws/sessions/{id}`` (JSON control/status messages + binary UFB1 frames)
 
@@ -61,6 +66,10 @@ class SessionCreate(BaseModel):
     replay: str | None = Field(default=None, max_length=64)
     """A workspace replay by name (see ``GET /replays``)."""
     controller: str | None = Field(default=None, max_length=64)
+    demand_scale: float = Field(default=1.0, gt=0, le=5)
+    """Multiply every flow's rate (1 = the scenario's own traffic)."""
+    record: bool = False
+    """Record a replay from the start (finished when recording stops or the session ends)."""
     seed: int | None = Field(default=None, ge=0, le=2**63 - 1)
     duration: float | None = Field(default=None, gt=0, le=7 * 86400)
     label: str = Field(default="", max_length=100)
@@ -73,6 +82,34 @@ class SessionCreate(BaseModel):
         for name in (self.scenario, self.replay):
             if name is not None and not _NAME.match(name):
                 raise ValueError("invalid name")
+        return self
+
+
+class ScenarioImport(BaseModel):
+    """``POST /scenarios/import``: a scenario document or CityFlow files, saved by name."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=64)
+    format: Literal["urbanflow", "cityflow"] = "urbanflow"
+    scenario: dict[str, Any] | None = None
+    """An UrbanFlow scenario document (format "urbanflow")."""
+    roadnet: dict[str, Any] | None = None
+    flow: list[Any] | None = None
+    config: dict[str, Any] | None = None
+    """CityFlow's roadnet.json, flow.json and (optional) config.json (format "cityflow")."""
+    overwrite: bool = False
+
+    @model_validator(mode="after")
+    def _inputs(self) -> ScenarioImport:
+        if not _NAME.match(self.name):
+            raise ValueError(
+                "name: use letters, digits, '.', '_' or '-', starting with a letter or digit"
+            )
+        if self.format == "urbanflow" and self.scenario is None:
+            raise ValueError('format "urbanflow" needs "scenario"')
+        if self.format == "cityflow" and (self.roadnet is None or self.flow is None):
+            raise ValueError('format "cityflow" needs "roadnet" and "flow"')
         return self
 
 
@@ -141,6 +178,12 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
     @app.middleware("http")
     async def _auth(request: Request, call_next: Any) -> Response:
         path = request.url.path
+        size = request.headers.get("content-length", "")
+        if size.isdigit() and int(size) > settings.max_body_mb * 1024 * 1024:
+            return JSONResponse(
+                {"detail": f"request too large (limit {settings.max_body_mb:g} MB)"},
+                status_code=413,
+            )
         if token and path.startswith(API) and path != f"{API}/health":
             got = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
             if not hmac.compare_digest(got, token):
@@ -197,6 +240,59 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
             ]
         return out
 
+    def _workspace_scenario(name: str) -> Path:
+        if not _NAME.match(name):
+            raise NotFoundError(f"no workspace scenario {name!r}")
+        path = (settings.scenarios_dir / f"{name}.json").resolve()
+        if not path.is_relative_to(settings.scenarios_dir.resolve()):
+            raise NotFoundError(f"no workspace scenario {name!r}")
+        return path
+
+    @app.get(f"{API}/scenarios/{{source}}/{{name}}")
+    def scenario_file(source: Literal["bundled", "workspace"], name: str) -> Response:
+        from urbanflow.scenario.io import bundled
+
+        path = bundled(name) if source == "bundled" else _workspace_scenario(name)
+        if not path.is_file():
+            raise NotFoundError(f"no {source} scenario {name!r}")
+        return FileResponse(path, media_type="application/json", filename=f"{name}.json")
+
+    def _import(req: ScenarioImport) -> dict[str, Any]:
+        from urbanflow import Scenario
+
+        target = _workspace_scenario(req.name)
+        if target.exists() and not req.overwrite:
+            raise HTTPException(409, f"a scenario named {req.name!r} already exists")
+        if req.format == "cityflow":
+            from urbanflow.scenario.importers.cityflow import CityFlowOptions, convert
+
+            result = convert(
+                req.roadnet or {}, req.flow or [], req.config, CityFlowOptions(name=req.name)
+            )
+            scenario, warnings = result.scenario, result.warnings
+        else:
+            scenario = Scenario.from_dict(req.scenario or {}, source=req.name)
+            warnings = scenario.issues
+        settings.scenarios_dir.mkdir(parents=True, exist_ok=True)
+        scenario.save(target)
+        return {
+            "name": req.name,
+            "summary": scenario.summary(),
+            "warnings": [w.to_dict() for w in warnings],
+        }
+
+    @app.post(f"{API}/scenarios/import", status_code=201)
+    async def import_scenario(req: ScenarioImport) -> dict[str, Any]:
+        return await asyncio.to_thread(_import, req)
+
+    @app.delete(f"{API}/scenarios/{{name}}", status_code=204)
+    def delete_scenario(name: str) -> Response:
+        path = _workspace_scenario(name)
+        if not path.is_file():
+            raise NotFoundError(f"no workspace scenario {name!r}")
+        path.unlink()
+        return Response(status_code=204)
+
     # ------------------------------------------------------------------ sessions
     def _build(req: SessionCreate) -> tuple[Any, str]:
         from urbanflow import Scenario, bundled, generate
@@ -206,8 +302,8 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
         name = req.scenario or ""
         if req.source == "bundled":
             return Scenario.load(bundled(name)), name
-        path = (settings.scenarios_dir / f"{name}.json").resolve()
-        if not path.is_relative_to(settings.scenarios_dir.resolve()) or not path.is_file():
+        path = _workspace_scenario(name)
+        if not path.is_file():
             raise NotFoundError(f"no workspace scenario {name!r}")
         return Scenario.load(path), name
 
@@ -229,6 +325,13 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
             for name, path in _replays().items()
         ]
 
+    @app.get(f"{API}/replays/{{name}}/file")
+    def replay_file(name: str) -> Response:
+        path = _replays().get(name)
+        if path is None:
+            raise NotFoundError(f"no workspace replay {name!r}")
+        return FileResponse(path, media_type="application/zip", filename=f"{name}.ufr")
+
     def _create(req: SessionCreate) -> Session:
         from urbanflow import Simulation
 
@@ -242,6 +345,8 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
             reader = ReplayReader(path)
             return ReplaySession(reader, req.label or f"replay: {req.replay}", req.replay)
         scenario, name = _build(req)
+        if req.demand_scale != 1.0:
+            scenario = scenario.scale_demand(req.demand_scale)
         overrides: dict[str, Any] = {}
         if req.seed is not None:
             overrides["seed"] = req.seed
@@ -249,7 +354,14 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
             overrides["duration"] = req.duration
         controllers = {"*": req.controller} if req.controller else None
         sim = Simulation(scenario, controllers=controllers, **overrides)
-        return Session(sim, req.label or name, name)
+        session = Session(sim, req.label or name, name, recordings=settings.replays_dir)
+        if req.record:
+            settings.replays_dir.mkdir(parents=True, exist_ok=True)
+            slug = re.sub(r"[^A-Za-z0-9._-]", "_", name)[:40] or "run"
+            sim.start_recording(
+                settings.replays_dir / f"{slug}-{time.strftime('%Y%m%d-%H%M%S')}.ufr"
+            )
+        return session
 
     @app.post(f"{API}/sessions", status_code=201)
     async def create_session(req: SessionCreate) -> SessionInfo:
@@ -295,6 +407,39 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
             result = s.reader.summary() or {}
             return {"summary": result.get("summary", {}), "history": {}}
         return {"summary": _finite(s.sim.metrics.summary()), "history": _history(s)}
+
+    @app.get(f"{API}/sessions/{{sid}}/export/{{table}}.csv")
+    async def export_table(
+        sid: str, table: Literal["trips", "timeseries", "intersections"]
+    ) -> Response:
+        from urbanflow.metrics.export import table_csv
+        from urbanflow.server.session import ReplaySession
+
+        s = _session(sid)
+        if isinstance(s, ReplaySession):
+            raise HTTPException(409, "results tables come from live sessions")
+        async with s._lock:
+            text = await asyncio.to_thread(lambda: table_csv(getattr(s.sim.metrics, table)()))
+        return Response(
+            text,
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{s.scenario}-{table}.csv"'},
+        )
+
+    @app.get(f"{API}/sessions/{{sid}}/scenario")
+    def session_scenario(sid: str) -> Response:
+        from urbanflow.server.session import ReplaySession
+
+        s = _session(sid)
+        if isinstance(s, ReplaySession):
+            body = s.reader.scenario_json()
+        else:
+            body = s.sim.scenario.to_json()
+        return Response(
+            body,
+            media_type="application/json",
+            headers={"Content-Disposition": f'attachment; filename="{s.scenario}.json"'},
+        )
 
     @app.post(f"{API}/compare")
     async def compare(req: CompareRequest) -> dict[str, Any]:
