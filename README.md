@@ -28,6 +28,8 @@ replays and a web workbench.
   the workbench) builds roads, lanes, one-ways, speed limits, signalised and priority
   junctions and traffic from an openstreetmap.org export; a CityFlow importer
   (`urbanflow import cityflow --config config.json`). Every lossy step is reported.
+- **Routing**: shortest paths, or `router="dynamic"`: travel times learnt from the traffic
+  and en-route rerouting around congested roads (10 % hysteresis, deterministic).
 - **Metrics**: travel time, delay, waiting, stops, throughput, queues, space-mean speed,
   VKT/VHT; global, per-intersection and per-trip tables; CSV / JSON / Parquet export.
 - **Replay**: compact `.ufr` recordings with seek, step back and rewind.

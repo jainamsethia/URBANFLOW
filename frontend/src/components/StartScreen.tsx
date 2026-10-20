@@ -56,6 +56,7 @@ export function StartScreen({
   const [controller, setController] = useState("");
   const [traffic, setTraffic] = useState(1);
   const [record, setRecord] = useState(false);
+  const [guidance, setGuidance] = useState(false);
   const [seed, setSeed] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -70,7 +71,7 @@ export function StartScreen({
         ? { generator: "grid", params: { ...grid, lanes: 2 }, label: `grid_${grid.rows}x${grid.cols}` }
         : { scenario: name, source };
     try {
-      onCreated(await api.createSession({ ...what, seed, demand_scale: traffic, record, ...(controller ? { controller } : {}) }));
+      onCreated(await api.createSession({ ...what, seed, demand_scale: traffic, record, router: guidance ? "dynamic" : "shortest", ...(controller ? { controller } : {}) }));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -191,6 +192,10 @@ export function StartScreen({
           ))}
         </div>
         <label className="mt-3 flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" checked={guidance} onChange={(e) => setGuidance(e.target.checked)} className="h-4 w-4" />
+          🧭 Drivers avoid jams (like a navigation app: routes change when a road gets slow)
+        </label>
+        <label className="mt-2 flex items-center gap-2 text-sm text-slate-700">
           <input type="checkbox" checked={record} onChange={(e) => setRecord(e.target.checked)} className="h-4 w-4" />
           ⏺ Record this run so I can watch it again or download it later
         </label>

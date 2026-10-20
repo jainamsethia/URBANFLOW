@@ -146,3 +146,10 @@ def test_import_osm(client: TestClient) -> None:
     assert r.json()["summary"]["signals"] == 1
     bad = {"name": "x", "format": "osm", "osm": "<!DOCTYPE x><osm/>"}
     assert client.post(f"{API}/scenarios/import", json=bad).status_code == 422
+
+
+def test_session_router(client: TestClient) -> None:
+    r = client.post(f"{API}/sessions", json={"scenario": "grid_3x3", "router": "dynamic"})
+    assert r.status_code == 201
+    bad = client.post(f"{API}/sessions", json={"scenario": "grid_3x3", "router": "teleport"})
+    assert bad.status_code == 422

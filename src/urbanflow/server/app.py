@@ -70,6 +70,8 @@ class SessionCreate(BaseModel):
     """Multiply every flow's rate (1 = the scenario's own traffic)."""
     record: bool = False
     """Record a replay from the start (finished when recording stops or the session ends)."""
+    router: Literal["shortest", "dynamic"] | None = None
+    """``dynamic``: drivers learn travel times and reroute around jams."""
     seed: int | None = Field(default=None, ge=0, le=2**63 - 1)
     duration: float | None = Field(default=None, gt=0, le=7 * 86400)
     label: str = Field(default="", max_length=100)
@@ -365,7 +367,7 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
         if req.duration is not None:
             overrides["duration"] = req.duration
         controllers = {"*": req.controller} if req.controller else None
-        sim = Simulation(scenario, controllers=controllers, **overrides)
+        sim = Simulation(scenario, controllers=controllers, router=req.router, **overrides)
         session = Session(sim, req.label or name, name, recordings=settings.replays_dir)
         if req.record:
             settings.replays_dir.mkdir(parents=True, exist_ok=True)

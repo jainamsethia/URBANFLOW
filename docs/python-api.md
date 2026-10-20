@@ -72,7 +72,8 @@ print(sim.metrics.summary()["travel_time.mean"])
   controller (for example a controller class); factories are called again at every
   `reset()`. Names and parameters are deep-checked (E901, E902), unknown ids raise
   `NotFoundError`.
-- `router`: a registered router name or a router instance.
+- `router`: a registered router name (`"shortest"`, or `"dynamic"` for travel-time
+  rerouting, see [Routing](simulation-model.md#routing)) or a router instance.
 - `Simulation.from_scenario(source, **kwargs)` is the same constructor.
 
 | member | meaning |

@@ -7,10 +7,12 @@ from urbanflow.routing.base import (
     register_router,
     router_registry,
 )
+from urbanflow.routing.dynamic import DynamicRouter
 from urbanflow.routing.lanes import plan_connector, valid_mask
 from urbanflow.routing.shortest import ShortestPathRouter
 
 __all__ = [
+    "DynamicRouter",
     "RouteTable",
     "Router",
     "RoutingContext",

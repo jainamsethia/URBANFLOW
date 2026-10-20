@@ -17,7 +17,7 @@ from urbanflow.core.config import SimulationConfig
 from urbanflow.core.errors import NotFoundError
 from urbanflow.core.events import EventBuffer
 from urbanflow.core.registry import Registry
-from urbanflow.core.types import IntArray
+from urbanflow.core.types import FloatArray, IntArray, UIntArray
 from urbanflow.network.compiled import CompiledNetwork
 
 __all__ = ["RouteTable", "Router", "RoutingContext", "register_router", "router_registry"]
@@ -92,6 +92,14 @@ class RoutingContext:
     """``VehicleTable.route_cursor`` (indexed by handle)."""
     events: EventBuffer
     """Events of the current step so far (e.g. ``vehicle_exited_link`` travel times)."""
+    link: IntArray | None = None
+    """``VehicleTable.link`` (indexed by handle), for routers that watch traffic."""
+    speed: FloatArray | None = None
+    """``VehicleTable.speed`` (indexed by handle)."""
+    running: IntArray | None = None
+    """Handles of the running vehicles."""
+    uid: UIntArray | None = None
+    """``VehicleTable.uid`` (indexed by handle)."""
 
 
 class Router(Protocol):

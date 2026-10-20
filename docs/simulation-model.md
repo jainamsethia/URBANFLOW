@@ -268,6 +268,32 @@ is parked and resumes from the current phase on release) and `set_controller`. I
 they are `sim.signals.request_phase(...)` and so on; see
 [Traffic signals](traffic-signals.md).
 
+## Routing
+
+A flow with a fixed `route` drives it as given. A flow with an `origin` and `destination`
+gets its path from the router (`SimulationConfig.router`, or the *Drivers avoid jams* box
+in the workbench):
+
+- **`shortest`** (default): the shortest path by free-flow time (or length, with
+  `routing_weight="length"`), computed once per origin/destination pair. Vehicles never
+  change it.
+- **`dynamic`**: the router learns each road's travel time from the vehicles that drove
+  it (from entering the road to entering the next one, so the usual wait at its stop line
+  is included), as an exponential average per road. Every `reroute_period` seconds (60 s)
+  it refreshes the path weights with these estimates, never below free flow and raised to
+  the age of the longest-waiting vehicle still on a road, so a road that stops moving shows
+  up before anyone leaves it. New vehicles get the currently fastest path; a vehicle whose
+  path came from the router is offered a new one each time it enters a road and takes it
+  only if it is more than 10 % faster than the rest of its route. Paths with `via`
+  waypoints and fixed routes are never changed.
+
+On a uniform signalised grid the two routers give the same result (every alternative
+waits at the same kind of lights); `dynamic` helps when one route is a real bottleneck: on
+a test fork where the shorter route is a single lane carrying 1 500 veh/h, it sent about
+half the traffic over the longer route, nobody was left waiting to enter (45 with
+`shortest`) and more trips finished (315 vs 291 in 15 min). Rerouting is deterministic:
+estimates only change at refresh times, and they are part of snapshots and digests.
+
 ## Running a simulation
 
 `urbanflow.Simulation` wraps the engine (see [Python API](python-api.md)). Its constructor

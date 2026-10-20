@@ -225,7 +225,10 @@ def advance_links(
             intersections=_intersection(net, veh.link[entered].astype(np.intp)),
         )
         if into_lane.size:
-            ctx = RoutingContext(step, time, routes, veh.route_id, veh.route_cursor, events)
+            ctx = RoutingContext(
+                step, time, routes, veh.route_id, veh.route_cursor, events,
+                link=veh.link, speed=veh.speed, running=veh.running(), uid=veh.uid,
+            )  # fmt: skip
             _reroute(net, veh, routes, router, into_lane, ctx)
             route_len = routes.lengths  # reroutes may have interned new routes
         again = hop_lane | hop_conn
