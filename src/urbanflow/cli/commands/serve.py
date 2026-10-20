@@ -25,6 +25,7 @@ def serve(
     replay: Annotated[str | None, typer.Option(hidden=True)] = None,
 ) -> None:
     """Start the web workbench (API + UI)."""
+    import secrets
     import socket
     import webbrowser
 
@@ -39,29 +40,29 @@ def serve(
         raise ConfigError("give --token or --token-file, not both")
     if token_file is not None:
         token = token_file.read_text(encoding="utf-8").strip()
+    base = state(ctx).settings()
+    if not token and base.api_token is not None:  # URBANFLOW_API_TOKEN or urbanflow.toml
+        token = base.api_token.get_secret_value()
     if not _is_loopback(host) and not token:
-        raise ConfigError(
-            f"refusing to listen on {host} without an API token; use --token/--token-file "
-            "or bind to 127.0.0.1"
-        )
+        token = secrets.token_urlsafe(16)  # never open to the network without a token
     with socket.socket() as probe:
         if probe.connect_ex((host if host != "0.0.0.0" else "127.0.0.1", port)) == 0:  # noqa: S104
             raise ConfigError(f"port {port} is already in use; choose another with --port")
-    base = state(ctx).settings()
     overrides: dict[str, object] = {"host": host, "port": port}
-    if token:
-        overrides["api_token"] = token
-    if dev:
-        overrides["cors_origins"] = [*base.cors_origins, "http://localhost:5173"]
-    settings = base.model_copy(update=overrides)
     if token:
         from pydantic import SecretStr
 
-        settings = settings.model_copy(update={"api_token": SecretStr(token)})
+        overrides["api_token"] = SecretStr(token)
+    if dev:
+        overrides["cors_origins"] = [*base.cors_origins, "http://localhost:5173"]
+    settings = base.model_copy(update=overrides)
     url = f"http://{'127.0.0.1' if host in ('0.0.0.0', '::') else host}:{port}/"  # noqa: S104
     if replay:
         url += f"?replay={replay}"
-    console.print(f"UrbanFlow workbench on {url}  (Ctrl+C to stop)", markup=False)
+    if token:
+        url += f"#token={token}"  # a fragment never reaches the server or its logs
+    console.print("UrbanFlow workbench is running (Ctrl+C to stop). Open:", markup=False)
+    console.print(f"  {url}", markup=False, soft_wrap=True)  # never wrap the link
     if open_browser:
         webbrowser.open(url)
     uvicorn.run(

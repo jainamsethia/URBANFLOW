@@ -121,6 +121,10 @@ class ScenarioImport(BaseModel):
         return self
 
 
+TOKEN_COOKIE = "urbanflow_token"  # noqa: S105 (a cookie name, not a secret)
+"""Same-site cookie the workbench keeps the API token in (so downloads authenticate too)."""
+
+
 def _is_loopback(host: str) -> bool:
     if host in ("localhost", ""):
         return True
@@ -194,6 +198,7 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
             )
         if token and path.startswith(API) and path != f"{API}/health":
             got = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
+            got = got or request.cookies.get(TOKEN_COOKIE, "")
             if not hmac.compare_digest(got, token):
                 return JSONResponse({"detail": "unauthorized"}, status_code=401)
         response: Response = await call_next(request)
@@ -469,11 +474,9 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
             await ws.close(code=1008)
             return
         protocols = [p.strip() for p in ws.headers.get("sec-websocket-protocol", "").split(",")]
-        if token and not any(
-            hmac.compare_digest(p.removeprefix("bearer."), token)
-            for p in protocols
-            if p.startswith("bearer.")
-        ):
+        offered = [p.removeprefix("bearer.") for p in protocols if p.startswith("bearer.")]
+        offered.append(ws.cookies.get(TOKEN_COOKIE, ""))
+        if token and not any(hmac.compare_digest(p, token) for p in offered):
             await ws.accept()
             await ws.close(code=4401)
             return

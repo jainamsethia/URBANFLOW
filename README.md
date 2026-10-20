@@ -48,6 +48,20 @@ replays and a web workbench.
 Not built yet (planned): more generators (downtown), transit, the visual
 scenario editor, the experiment database/dashboards and the benchmark suite.
 
+## Quick start with Docker (no Python or Node needed)
+
+```bash
+git clone https://github.com/jainamsethia/URBANFLOW.git urbanflow
+cd urbanflow
+docker compose up --build
+```
+
+Open the `http://127.0.0.1:8000/#token=...` link printed in the log. Your imported maps,
+recordings and results are kept in a Docker volume. The workbench only accepts this
+computer by default; to share it on your network, change the port line in
+`docker-compose.yml` to `"8000:8000"` and send people the link (the token in it is
+required). Set `URBANFLOW_API_TOKEN` there to keep the same link across restarts.
+
 ## Install
 
 UrbanFlow uses [uv](https://docs.astral.sh/uv/) and Python 3.12-3.14 (Linux, macOS,
@@ -78,10 +92,13 @@ uv run urbanflow compare grid_3x3 -c fixed_time -c actuated -c max_pressure --se
 uv run urbanflow serve --open                                      # web workbench
 ```
 
-In the workbench: start a session, press Play, click an intersection to see its phase and
-hold a phase, switch the signal controller live, change the view to a lane heat map, run a
-comparison in the *Compare controllers* tab, or open a recorded replay and scrub the
-timeline.
+In the workbench: choose a map (or import one from OpenStreetMap), the traffic-light
+strategy and the amount of traffic, press Play; click a car to follow it or a junction to
+switch its light by hand, race the strategies in the *Compare* tab, record the run and
+download the results as CSV.
+
+`urbanflow serve --host 0.0.0.0` shares the workbench on your network: it prints a link
+with an access token (`#token=...`) and refuses everyone without it.
 
 ## Python
 

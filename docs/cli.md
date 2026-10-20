@@ -228,9 +228,12 @@ uv run urbanflow compare grid_3x3 -c fixed_time -c actuated -c max_pressure --se
 ### `urbanflow serve`
 
 Start the web workbench and its API on `--host` (default `127.0.0.1`) and `--port`
-(default 8000); `--open` opens a browser. Binding to a non-loopback address requires
-`--token`/`--token-file` (clients then send `Authorization: Bearer <token>`). `--dev`
-also accepts the Vite dev server on `localhost:5173`. See [Web workbench](workbench.md).
+(default 8000); `--open` opens a browser. On any other address than loopback the API
+needs a token: `--token`/`--token-file`, `URBANFLOW_API_TOKEN`, or a random one generated
+at start-up. The printed link carries it as `#token=...` (a URL fragment, so it never
+reaches the server's logs); the workbench keeps it in a same-site cookie, and scripts
+send `Authorization: Bearer <token>`. `--dev` also accepts the Vite dev server on
+`localhost:5173`. See [Web workbench](workbench.md).
 
 ### `urbanflow doctor`
 

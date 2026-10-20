@@ -55,3 +55,19 @@ jobs:
           python-version: "3.13"
       - run: uv sync --locked --group docs
       - run: uv run mkdocs build --strict
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: docker build -t urbanflow .
+      - name: Smoke test (UI, health, token)
+        run: |
+          docker run -d --name uf -p 127.0.0.1:8000:8000 urbanflow
+          for i in $(seq 1 60); do curl -fs http://127.0.0.1:8000/api/v1/health && break; sleep 1; done
+          docker logs uf
+          curl -fs http://127.0.0.1:8000/ | grep -q "UrbanFlow"
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/api/v1/meta)" = 401
+          token=$(docker logs uf 2>&1 | grep -o '#token=[A-Za-z0-9_-]*' | cut -d= -f2)
+          curl -fs -b "urbanflow_token=$token" http://127.0.0.1:8000/api/v1/scenarios | grep -q grid_3x3

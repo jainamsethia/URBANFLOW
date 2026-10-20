@@ -192,3 +192,13 @@ def test_token_required(workspace: Path) -> None:
         assert c.get(f"{API}/meta").status_code == 401
         ok = c.get(f"{API}/meta", headers={"Authorization": "Bearer s3cret"})
         assert ok.status_code == 200
+        c.cookies.set("urbanflow_token", "wrong")
+        assert c.get(f"{API}/meta").status_code == 401
+        for cookie, code in (("wrong", 4401), ("s3cret", 4404)):  # 4404: past the auth check
+            c.cookies.set("urbanflow_token", cookie)
+            with (
+                pytest.raises(WebSocketDisconnect) as closed,
+                c.websocket_connect(f"{API}/ws/sessions/none") as ws,
+            ):
+                ws.receive_json()
+            assert closed.value.code == code

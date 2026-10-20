@@ -6,6 +6,18 @@
 - [uv](https://docs.astral.sh/uv/) for environment management.
 - Node.js 24, only if you want to build the web workbench from source.
 
+## The quickest way: Docker
+
+To use the web workbench without installing Python or Node, install Docker and run, in a
+checkout of the repository:
+
+```bash
+docker compose up --build
+```
+
+then open the `http://127.0.0.1:8000/#token=...` link it prints. The rest of this page
+sets up the Python package for scripting, the command line and development.
+
 ## Install uv
 
 === "Windows"

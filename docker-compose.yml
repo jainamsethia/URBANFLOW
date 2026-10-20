@@ -1,0 +1,17 @@
+# docker compose up --build    then open the http://127.0.0.1:8000/#token=... link it prints
+services:
+  urbanflow:
+    build: .
+    image: urbanflow
+    ports:
+      # Only this computer can connect. To share on your network use "8000:8000"
+      # (the access token still protects it).
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - urbanflow-data:/data   # imported maps, recordings and results survive restarts
+    # environment:
+    #   URBANFLOW_API_TOKEN: choose-a-long-secret   # keep the same link across restarts
+    restart: unless-stopped
+
+volumes:
+  urbanflow-data:

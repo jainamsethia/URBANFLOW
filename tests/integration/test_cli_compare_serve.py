@@ -37,8 +37,22 @@ def test_compare_rejects_duplicates(workspace: Path) -> None:
     assert _exit(["compare", "single_intersection", "-c", "a", "-c", "a"]) == 4
 
 
-def test_serve_refuses_public_host_without_token(
-    workspace: Path, capsys: pytest.CaptureFixture[str]
+def test_serve_makes_a_token_for_a_public_host(
+    workspace: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    assert _exit(["serve", "--host", "0.0.0.0"]) == 4
-    assert "without an API token" in capsys.readouterr().err
+    import socket
+
+    import uvicorn
+    from fastapi.testclient import TestClient
+
+    apps: list[object] = []
+    monkeypatch.setattr(uvicorn, "run", lambda app, **_: apps.append(app))
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    assert _exit(["serve", "--host", "0.0.0.0", "--port", str(port)]) == 0
+    token = capsys.readouterr().out.split("#token=")[1].split()[0]
+    with TestClient(apps[0]) as c:  # type: ignore[arg-type]
+        assert c.get("/api/v1/meta").status_code == 401
+        c.cookies.set("urbanflow_token", token)
+        assert c.get("/api/v1/meta").status_code == 200

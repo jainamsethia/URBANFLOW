@@ -77,11 +77,31 @@ export interface CompareResult {
 
 const API = "/api/v1";
 
+// A protected server prints a link ending in #token=...; keep the token in a same-site
+// cookie (sent with every request, download and the live connection) and tidy the URL.
+function keepToken(token: string) {
+  document.cookie = `urbanflow_token=${encodeURIComponent(token)}; path=/; SameSite=Strict`;
+}
+const fromLink = new URLSearchParams(location.hash.slice(1)).get("token");
+if (fromLink) {
+  keepToken(fromLink);
+  history.replaceState(null, "", location.pathname + location.search);
+}
+let asking = false;
+
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API}${path}`, {
     ...init,
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
   });
+  if (res.status === 401 && !asking) {
+    asking = true;
+    const token = prompt("This UrbanFlow workbench is protected.\nPaste the access token (the part after #token= in the link it printed):");
+    if (token?.trim()) {
+      keepToken(token.trim());
+      location.reload();
+    }
+  }
   if (!res.ok) {
     let detail = `${res.status} ${res.statusText}`;
     try {

@@ -5,6 +5,9 @@ npm --prefix frontend install && npm --prefix frontend run build   # once, from 
 uv run urbanflow serve --open
 ```
 
+or, with nothing but Docker installed, `docker compose up --build` and open the link it
+prints.
+
 The workbench is a plain-language front end to everything below; the **❓ Help** button
 explains each part in the app.
 
@@ -17,7 +20,10 @@ explains each part in the app.
    Sensor (`actuated`), Smart (`max_pressure`), Planner (`webster`) or Ambulance helper
    (`preemption`).
 3. **How much traffic?** Light (x0.5), Normal, Heavy (x1.5) or Very heavy (x2) scales every
-   flow of the map; *Record this run* saves a replay from the start.
+   flow of the map; *Drivers avoid jams* turns on the `dynamic` router (drivers learn
+   travel times and take a faster route when a road gets slow, see
+   [Routing](simulation-model.md#routing)); *Record this run* saves a replay from the
+   start.
 
 **Import your own map** accepts:
 
@@ -61,5 +67,6 @@ saved recordings (watch or download).
 | This map (JSON) | the scenario, re-importable here or usable with the Python API |
 | Last recording (`.ufr`) | the replay; open it with `urbanflow replay FILE --view` |
 
-The server binds to 127.0.0.1 by default; see `urbanflow serve` in [Command line](cli.md)
-for tokens and other hosts. API reference: `http://127.0.0.1:8000/api/v1/docs`.
+The server binds to 127.0.0.1 by default. `urbanflow serve --host 0.0.0.0` shares it on
+your network behind an access token: open the printed `#token=...` link, or paste the
+token when the workbench asks for it. See `urbanflow serve` in [Command line](cli.md). API reference: `http://127.0.0.1:8000/api/v1/docs`.
