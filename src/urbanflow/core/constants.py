@@ -163,6 +163,12 @@ LC_MANDATORY_BIAS_MAX: Final = 10.0  # m/s²; cap of β_m
 LC_URGENCY_MIN_DISTANCE: Final = 1.0  # m; floor of d in β_m
 LC_POLITENESS_OFF_DISTANCE: Final = 50.0  # m; p = 0 for mandatory changes closer than this
 LC_COOLDOWN: Final = 3.0  # s; minimum time between discretionary changes
+IMPATIENCE_TIME: Final = 60.0  # s waiting at an unsignalised line until gaps are taken
+# with no safety margin and full acceleration assumed (zone locks still keep conflict
+# zones exclusive); prevents minor-road starvation at busy priority junctions
+ZIPPER_LANE_END_DISTANCE: Final = 25.0  # m; lane-end swap deadlocks are resolved this close
+ZIPPER_MAX_SPEED: Final = 1.0  # m/s; both vehicles of a zipper swap are (nearly) stopped
+ZIPPER_GAP: Final = 0.5  # m; room left behind a swapped vehicle
 EMERGENCY_YIELD_DISTANCE: Final = 100.0  # m; an emergency vehicle this close behind -> yield
 EMERGENCY_YIELD_BIAS: Final = 10.0  # m/s²; MOBIL bias of a yielding change (= β_m cap)
 LC_VISUAL_DURATION: Final = 2.0  # s; lat_offset decays at w / duration (render only)

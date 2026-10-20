@@ -54,7 +54,7 @@ if TYPE_CHECKING:
     from urbanflow.vehicles.table import VehicleTable
     from urbanflow.vehicles.types import VehicleTypes
 
-__all__ = ["LaneChanges", "lane_change_step"]
+__all__ = ["LaneChanges", "lane_change_step", "zipper_swaps"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -347,6 +347,124 @@ def lane_change_step(
         links=veh.link[hs],
         aux=froms,
     )
+    return LaneChanges(hs, froms)
+
+
+def _nearest_valid(valid: int, here: int, n: int) -> int:
+    bits = [b for b in range(n) if (valid >> b) & 1]
+    return min(bits, key=lambda b: (abs(b - here), b)) if bits else here
+
+
+def zipper_swaps(
+    net: CompiledNetwork,
+    veh: VehicleTable,
+    types: VehicleTypes,
+    routes: RouteTable,
+    run: IntArray,
+    events: EventBuffer,
+    *,
+    step: int,
+    time: float,
+) -> LaneChanges:
+    """Resolve lane-end swap deadlocks: two (nearly) stopped vehicles side by side near the
+    end of adjacent lanes, each needing the other's lane for its next road, trade places.
+
+    Each takes the other's position, so the leaders are unchanged; the swap is skipped
+    unless the vehicle behind each new spot has room for the (possibly longer) newcomer.
+    Without it, mandatory changes there wait for a gap that never comes (the watchdog then
+    teleports them).
+    """
+    none = LaneChanges(np.zeros(0, dtype=np.intp), np.zeros(0, dtype=np.intp))
+    n_lanes = net.n_lanes
+    link = veh.link[run].astype(np.intp)
+    on_lane = link < n_lanes
+    cursor = veh.route_cursor[run].astype(np.intp)
+    last = cursor + 1 >= routes.lengths[veh.route_id[run]]
+    lane_len = net.link_length[:n_lanes]
+    d = np.where(on_lane, lane_len[np.minimum(link, n_lanes - 1)] - veh.pos[run], np.inf)
+    stuck = (
+        on_lane
+        & (veh.next_conn[run] < 0)
+        & ~last
+        & ~veh.committed[run]
+        & (veh.speed[run] < C.ZIPPER_MAX_SPEED)
+        & (d <= C.ZIPPER_LANE_END_DISTANCE)
+        & (veh.dwell_left[run] <= 0)
+    )
+    cand = run[stuck]
+    if cand.size < 2:
+        return none
+    by_lane: dict[int, list[int]] = {}
+    for h in cand.tolist():
+        by_lane.setdefault(int(veh.link[h]), []).append(h)
+    swapped: set[int] = set()
+    done_h: list[int] = []
+    done_from: list[int] = []
+    for h in sorted(cand.tolist(), key=lambda x: int(veh.uid[x])):
+        if h in swapped:
+            continue
+        lane = int(veh.link[h])
+        n_road = int(net.road_n_lanes[net.link_road[lane]])
+        here = int(net.link_lane_index[lane])
+        want = _nearest_valid(int(veh.valid_mask[h]), here, n_road)
+        if want == here:
+            continue
+        target = int(net.lane_right[lane] if want > here else net.lane_left[lane])
+        if target < 0:
+            continue
+        partner = None
+        for j in by_lane.get(target, []):
+            if j in swapped:
+                continue
+            there = int(net.link_lane_index[target])
+            j_want = _nearest_valid(int(veh.valid_mask[j]), there, n_road)
+            side_by_side = abs(float(veh.pos[j]) - float(veh.pos[h])) < max(
+                float(veh.length[h]), float(veh.length[j])
+            )
+            if side_by_side and (j_want - there) * (here - there) > 0:
+                partner = j
+                break
+        if partner is None:
+            continue
+        j = partner
+        # room behind each new spot for the newcomer's body
+        ok = True
+        for mover, other, new_lane in ((h, j, target), (j, h, lane)):
+            new_rear = float(veh.pos[other]) - float(veh.length[mover])
+            behind = run[(veh.link[run] == new_lane) & (veh.pos[run] < veh.pos[other])]
+            behind = behind[behind != other]
+            if behind.size and float(veh.pos[behind].max()) > new_rear - C.ZIPPER_GAP:
+                ok = False
+        if not ok:
+            continue
+        pos_h, pos_j = float(veh.pos[h]), float(veh.pos[j])
+        for mover, new_lane, new_pos in ((h, target, pos_j), (j, lane, pos_h)):
+            old = int(veh.link[mover])
+            veh.link[mover] = new_lane
+            veh.pos[mover] = new_pos
+            width = float(net.link_width[new_lane])
+            toward_median = net.link_lane_index[new_lane] < net.link_lane_index[old]
+            veh.lat_offset[mover] = -width if toward_median else width
+            veh.lc_cooldown[mover] = C.LC_COOLDOWN
+            veh.lane_changes[mover] += 1
+            route = routes.get(int(veh.route_id[mover]))
+            veh.next_conn[mover] = plan_connector(
+                net, new_lane, route, int(veh.route_cursor[mover])
+            )
+            veh.v0[mover] = desired_speed(net, veh, types, np.array([mover]), np.array([new_lane]))[
+                0
+            ]
+            done_h.append(mover)
+            done_from.append(old)
+        swapped.update((h, j))
+    if not done_h:
+        return none
+    hs = np.asarray(done_h, dtype=np.intp)
+    froms = np.asarray(done_from, dtype=np.intp)
+    events.append_many(
+        EventType.vehicle_changed_lane, step, time, handles=hs, uids=veh.uid[hs],
+        links=veh.link[hs], aux=froms,
+    )  # fmt: skip
     return LaneChanges(hs, froms)
 
 

@@ -149,7 +149,7 @@ export function StartScreen({
           <button onClick={() => setImporting(true)} className="rounded-2xl border-2 border-dashed border-slate-300 bg-white/60 p-4 text-left hover:border-sky-400">
             <div className="text-3xl" aria-hidden>⬆️</div>
             <div className="mt-2 font-semibold text-slate-900">Import your own map</div>
-            <div className="text-sm text-slate-600">An UrbanFlow scenario file or CityFlow files.</div>
+            <div className="text-sm text-slate-600">A real area from OpenStreetMap, an UrbanFlow scenario, or CityFlow files.</div>
           </button>
         </div>
       </section>
@@ -231,7 +231,7 @@ async function readJson(file: File): Promise<unknown> {
 const safeName = (s: string) => s.replace(/\.[^.]+$/, "").replace(/[^A-Za-z0-9._-]+/g, "_").replace(/^[^A-Za-z0-9]+/, "").slice(0, 60) || "my_map";
 
 function ImportPanel({ onClose, onImported }: { onClose: () => void; onImported: (name: string) => Promise<void> }) {
-  const [kind, setKind] = useState<"urbanflow" | "cityflow">("urbanflow");
+  const [kind, setKind] = useState<"osm" | "urbanflow" | "cityflow">("osm");
   const [name, setName] = useState("");
   const [files, setFiles] = useState<Record<string, File | null>>({});
   const [busy, setBusy] = useState(false);
@@ -240,7 +240,7 @@ function ImportPanel({ onClose, onImported }: { onClose: () => void; onImported:
 
   const setFile = (key: string, f: File | null) => {
     setFiles({ ...files, [key]: f });
-    if (f && !name && (key === "scenario" || key === "roadnet")) setName(safeName(f.name));
+    if (f && !name && (key === "scenario" || key === "roadnet" || key === "osm")) setName(safeName(f.name));
   };
 
   const run = async (overwrite = false) => {
@@ -248,7 +248,10 @@ function ImportPanel({ onClose, onImported }: { onClose: () => void; onImported:
     setError(null);
     try {
       let body: Record<string, unknown>;
-      if (kind === "urbanflow") {
+      if (kind === "osm") {
+        if (!files.osm) throw new Error("Choose the .osm file you exported from OpenStreetMap.");
+        body = { name, format: "osm", osm: await files.osm.text(), overwrite };
+      } else if (kind === "urbanflow") {
         if (!files.scenario) throw new Error("Choose a scenario file first.");
         body = { name, format: "urbanflow", scenario: await readJson(files.scenario), overwrite };
       } else {
@@ -274,10 +277,10 @@ function ImportPanel({ onClose, onImported }: { onClose: () => void; onImported:
     }
   };
 
-  const fileInput = (key: string, label: string, required: boolean) => (
+  const fileInput = (key: string, label: string, required: boolean, accept = ".json,application/json") => (
     <label className="block text-sm">
       <span className="font-medium text-slate-700">{label}{required ? "" : " (optional)"}</span>
-      <input type="file" accept=".json,application/json" className="mt-1 block w-full text-sm" onChange={(e) => setFile(key, e.target.files?.[0] ?? null)} />
+      <input type="file" accept={accept} className="mt-1 block w-full text-sm" onChange={(e) => setFile(key, e.target.files?.[0] ?? null)} />
     </label>
   );
 
@@ -288,10 +291,20 @@ function ImportPanel({ onClose, onImported }: { onClose: () => void; onImported:
         <button onClick={onClose} className="text-slate-500 hover:text-slate-800" aria-label="Close">✕</button>
       </div>
       <div className="flex flex-wrap gap-2">
+        <button className={pill(kind === "osm")} onClick={() => setKind("osm")}>🌍 OpenStreetMap</button>
         <button className={pill(kind === "urbanflow")} onClick={() => setKind("urbanflow")}>UrbanFlow scenario</button>
         <button className={pill(kind === "cityflow")} onClick={() => setKind("cityflow")}>CityFlow files</button>
       </div>
-      {kind === "urbanflow" ? (
+      {kind === "osm" ? (
+        <>
+          <ol className="list-decimal space-y-1 pl-5 text-sm text-slate-600">
+            <li>Open <a className="text-sky-700 underline" href="https://www.openstreetmap.org" target="_blank" rel="noreferrer">openstreetmap.org</a> and zoom to the area you want (a few streets up to a neighbourhood works best).</li>
+            <li>Click <b>Export</b> (top bar), then the blue <b>Export</b> button. Your browser saves a file called <code>map.osm</code>.</li>
+            <li>Choose that file below. UrbanFlow turns the streets into roads and lanes, finds the traffic lights and adds traffic.</li>
+          </ol>
+          {fileInput("osm", "OpenStreetMap file (.osm)", true, ".osm,.xml,application/xml,text/xml")}
+        </>
+      ) : kind === "urbanflow" ? (
         <>
           <p className="text-sm text-slate-600">A <code>.json</code> scenario made with UrbanFlow (for example with <code>urbanflow generate</code> or downloaded from this app).</p>
           {fileInput("scenario", "Scenario file", true)}

@@ -134,3 +134,15 @@ def test_record_command(client: TestClient) -> None:
                     saved = m["last_recording"]
                     break
     assert saved and saved in {r["name"] for r in client.get(f"{API}/replays").json()}
+
+
+def test_import_osm(client: TestClient) -> None:
+    from osm_fixture import town
+
+    r = client.post(
+        f"{API}/scenarios/import", json={"name": "pune", "format": "osm", "osm": town()}
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["summary"]["signals"] == 1
+    bad = {"name": "x", "format": "osm", "osm": "<!DOCTYPE x><osm/>"}
+    assert client.post(f"{API}/scenarios/import", json=bad).status_code == 422

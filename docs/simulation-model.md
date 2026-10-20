@@ -79,6 +79,12 @@ zone from rest with IDM's comfortable acceleration a = 1.5 m/s². The Highway Ca
 Manual's critical headway for permitted left turns is 4.1-5.5 s, for drivers who
 accelerate harder.
 
+**Impatience** (unsignalised stop lines only): the longer a vehicle has waited at the line,
+the smaller the gap it accepts. Over 60 s of waiting the margin τ fades to 0 and its own
+pessimistic clearing estimate rises from 0.75·a to the full acceleration a. This keeps a
+minor road from starving next to a busy major road; the zone locks still keep conflict
+zones exclusive, so it never causes a collision.
+
 A vehicle whose lane has no connector toward its next road waits at the lane end until it
 can change lanes.
 

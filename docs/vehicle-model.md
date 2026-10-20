@@ -109,6 +109,11 @@ change to an adjacent lane, keeping its relative position on the road.
   the safety checks. No discretionary change ends within 100 m ahead of an emergency
   vehicle on the target lane. In a standing queue there is usually no gap to move into,
   so the emergency vehicle waits like everyone else (there is no shoulder or rescue lane).
+- **Zipper swaps**: two (nearly) stopped vehicles side by side within 25 m of the end of
+  adjacent lanes, each needing the other's lane for its next road, trade places (each
+  takes the other's position, so nobody's leader changes), provided the vehicle behind
+  each new spot has room for the newcomer. Without it they would wait for a gap that never
+  comes.
 - Changes execute one by one (mandatory first, then by incentive, then uid); the
   neighbours of an executed change decide again next step. The change is instantaneous
   for the physics; a lateral offset fades out over 2 s for drawing only. There are no

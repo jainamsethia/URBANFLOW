@@ -52,7 +52,11 @@ from urbanflow.engine.intersections import (
     signal_lookahead,
 )
 from urbanflow.engine.invariants import Holds, check_always, check_debug
-from urbanflow.engine.lane_changes import decay_lane_change_state, lane_change_step
+from urbanflow.engine.lane_changes import (
+    decay_lane_change_state,
+    lane_change_step,
+    zipper_swaps,
+)
 from urbanflow.engine.leaders import SiblingGroups, compute_leaders, remaining_roads
 from urbanflow.engine.longitudinal import expire_overrides, longitudinal_step
 from urbanflow.engine.signalling import LaneStats, detector_occupancy
@@ -457,7 +461,8 @@ class Engine:
                 time=t,
                 rng=self._model_rng,
             )
-            if changes.handles.size:
+            swaps = zipper_swaps(net, veh, types, self.routes, run, events, step=tag, time=t)
+            if changes.handles.size or swaps.handles.size:
                 leaders = compute_leaders(net, veh, run, types, remaining, self.sibling_groups)
 
         # 6 intersections

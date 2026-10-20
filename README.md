@@ -23,8 +23,11 @@ replays and a web workbench.
   `corridor` (an arterial with green-wave signal offsets), `emergency` (emergency
   vehicles crossing a base scenario, with preemption) and `rush_hour` (a base scenario's
   demand shaped into a directional peak); bundled: `single_intersection`, `grid_3x3`,
-  `grid_4x4`, `corridor`, `emergency`, `rush_hour`; a CityFlow importer
-  (`urbanflow import cityflow --config config.json`) with every lossy step reported.
+  `grid_4x4`, `corridor`, `emergency`, `rush_hour`.
+- **Real maps**: an OpenStreetMap importer (`urbanflow import osm --osm map.osm`, or upload in
+  the workbench) builds roads, lanes, one-ways, speed limits, signalised and priority
+  junctions and traffic from an openstreetmap.org export; a CityFlow importer
+  (`urbanflow import cityflow --config config.json`). Every lossy step is reported.
 - **Metrics**: travel time, delay, waiting, stops, throughput, queues, space-mean speed,
   VKT/VHT; global, per-intersection and per-trip tables; CSV / JSON / Parquet export.
 - **Replay**: compact `.ufr` recordings with seek, step back and rewind.
@@ -33,9 +36,11 @@ replays and a web workbench.
 - **RL**: `TrafficSignalEnv` (Gymnasium) and `TrafficSignalParallelEnv` (PettingZoo), with
   action masks, several rewards, and random / fixed-cycle / max-pressure / tabular-Q
   baselines.
-- **Web workbench**: live map with moving vehicles and signal heads, lane heat maps, KPI
-  charts, vehicle/intersection inspector, phase hold, controller switching, comparison
-  view and replay viewer.
+- **Web workbench** in plain language: pick a map (or import your own), the traffic-light
+  strategy and the amount of traffic; a live map with cars, buses and flashing ambulances,
+  clickable cars (route ahead) and traffic lights (manual control), a traffic "mood", live
+  numbers, strategy comparison with medals, recording, CSV/JSON downloads, a help panel
+  and keyboard shortcuts.
 - **Snapshots** (save/restore any state) and **state digests** for bit-exact reproducibility.
 
 Not built yet (planned): more generators (downtown), transit, the visual

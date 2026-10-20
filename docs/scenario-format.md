@@ -324,6 +324,34 @@ s = generate(
 assert s.resolved.demand.flows[0].id.endswith(":0")
 ```
 
+## Importing OpenStreetMap
+
+`urbanflow import osm --osm map.osm -o city.json` (or *Import your own map* in the workbench,
+or `urbanflow.scenario.importers.osm.load(path)`) turns an OpenStreetMap extract into a
+scenario. Get one from [openstreetmap.org](https://www.openstreetmap.org): zoom to the
+area, click *Export*, then *Export* again; a few streets up to a neighbourhood works best.
+The file is only parsed as data, and files with a DTD or entity declarations are refused.
+
+| OpenStreetMap | UrbanFlow |
+|---|---|
+| ways with `highway=` motorway, trunk, primary, secondary, tertiary, unclassified, residential, living_street, road (and `*_link`); `service` only with `include_service` | roads; `access=no/private` and `area=yes` ways are left out |
+| way ends and nodes shared by ways | junctions; a node that only joins two ways with the same direction, lanes and speed is just a bend |
+| junction nodes closer than 25 m (`cluster_radius`) | one junction (dual carriageways and complex crossings collapse); a road too short to hold a lane between its two junction boxes merges its ends too |
+| `lanes`, `lanes:forward`, `lanes:backward` | lanes per direction (defaults by class: 2 on motorways and trunks, else 1; at most 4) |
+| `oneway=yes/-1`, motorways, roundabouts | one-way roads |
+| `maxspeed` (km/h, `mph`, `walk`, `none`, zone codes such as `DE:urban`) | speed limit (defaults by class, e.g. 50 km/h on secondary, 30 km/h on residential) |
+| a `highway=traffic_signals` node within 40 m (`signal_radius`) of a junction with 3+ neighbours | a signalised junction (phases derived) |
+| junctions with one neighbour | boundaries, where traffic enters and leaves |
+| other junctions with 3+ neighbours | priority junctions (major roads derived from lanes and speed) |
+
+**Traffic**: every road entering from a boundary gets a Poisson flow of
+(per-lane rate of its class) x lanes x `demand` (per lane: 600 veh/h on motorways, 300 on
+primary, 220 secondary, 150 tertiary, 40 residential), split over up to four boundary
+exits it can actually reach, chosen at random (seeded) and weighted by the exits' size,
+so most traffic stays on the main roads. Roads that still cannot be simulated are left
+out and counted in a warning. The result is a starting point: real counts, signal timings
+and turning shares are not in OpenStreetMap, so edit the flows or signals for a study.
+
 ## Importing CityFlow
 
 `urbanflow import cityflow --config config.json -o city.json` (or

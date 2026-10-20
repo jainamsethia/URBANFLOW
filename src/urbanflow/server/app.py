@@ -91,13 +91,17 @@ class ScenarioImport(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=64)
-    format: Literal["urbanflow", "cityflow"] = "urbanflow"
+    format: Literal["urbanflow", "cityflow", "osm"] = "urbanflow"
     scenario: dict[str, Any] | None = None
     """An UrbanFlow scenario document (format "urbanflow")."""
     roadnet: dict[str, Any] | None = None
     flow: list[Any] | None = None
     config: dict[str, Any] | None = None
     """CityFlow's roadnet.json, flow.json and (optional) config.json (format "cityflow")."""
+    osm: str | None = None
+    """The text of an OpenStreetMap ``.osm`` extract (format "osm")."""
+    demand: float = Field(default=1.0, gt=0, le=5)
+    """OSM: multiplier of the generated traffic."""
     overwrite: bool = False
 
     @model_validator(mode="after")
@@ -110,6 +114,8 @@ class ScenarioImport(BaseModel):
             raise ValueError('format "urbanflow" needs "scenario"')
         if self.format == "cityflow" and (self.roadnet is None or self.flow is None):
             raise ValueError('format "cityflow" needs "roadnet" and "flow"')
+        if self.format == "osm" and not self.osm:
+            raise ValueError('format "osm" needs "osm" (the file text)')
         return self
 
 
@@ -263,7 +269,13 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
         target = _workspace_scenario(req.name)
         if target.exists() and not req.overwrite:
             raise HTTPException(409, f"a scenario named {req.name!r} already exists")
-        if req.format == "cityflow":
+        if req.format == "osm":
+            from urbanflow.scenario.importers.osm import OsmOptions
+            from urbanflow.scenario.importers.osm import convert as convert_osm
+
+            result = convert_osm(req.osm or "", OsmOptions(name=req.name, demand=req.demand))
+            scenario, warnings = result.scenario, result.warnings
+        elif req.format == "cityflow":
             from urbanflow.scenario.importers.cityflow import CityFlowOptions, convert
 
             result = convert(

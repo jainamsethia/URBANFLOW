@@ -93,6 +93,20 @@ $ urbanflow generate single_intersection -p kind=uncontrolled -o s.json
 Wrote s.json (5 intersections, 8 roads, 12 flows; hash 3c0ffa9b370b)
 ```
 
+### `urbanflow import osm`
+
+Convert an OpenStreetMap extract (`map.osm`) into a scenario with roads, lanes, junctions,
+traffic lights and generated traffic (see
+[Scenario format: importing OpenStreetMap](scenario-format.md#importing-openstreetmap)).
+
+| option | meaning |
+|---|---|
+| `--osm PATH` | The `.osm` file. |
+| `-o`, `--output PATH` | Scenario file to write (default `imported.json`). |
+| `--name TEXT`, `--duration S` | Scenario name; simulated duration (default 3600 s). |
+| `--demand X` | Traffic multiplier (default 1). |
+| `--force` | Overwrite an existing output file. |
+
 ### `urbanflow import cityflow`
 
 Convert a CityFlow road network and flow file into an UrbanFlow scenario (see

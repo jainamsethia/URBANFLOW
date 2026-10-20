@@ -373,12 +373,14 @@ def admit(
     slink_l: list[int] = link[perm].tolist()
     to_lane_l, from_lane_l = net.conn_to_lane.tolist(), net.conn_from_lane.tolist()
     free_l: list[float] = leaders.lane_free.tolist()
-    tau = C.GAP_ACCEPT_MARGIN
+    wait_l: list[float] = veh.link_waiting_time[run].tolist()
 
-    def window(j: int, x_in: float, x_out: float, inside: bool) -> tuple[float, float]:
+    def window(
+        j: int, x_in: float, x_out: float, inside: bool, tau: float, late: float
+    ) -> tuple[float, float]:
         v, a, vc = v_l[j], a_l[j], vc_l[j]
         start = -math.inf if inside else eta(x_in, v, a, max(v, vc)) - tau
-        return start, eta(x_out, v, a * C.ETA_END_ACCEL_FACTOR, vc) + tau
+        return start, eta(x_out, v, a * late, vc) + tau
 
     def on_link(lk: int) -> list[int]:
         """Positions of the vehicles on link ``lk``, upstream first."""
@@ -386,12 +388,24 @@ def admit(
 
     def conflicts_ok(i: int) -> bool:
         ci, di = nc_l[i], d_l[i]
+        # impatience (unsignalised lines only): the margin and the caution about one's own
+        # clearing time fade over IMPATIENCE_TIME of waiting
+        keen = (
+            min(1.0, wait_l[i] / C.IMPATIENCE_TIME)
+            if state_of[ci] == SIGNAL_CODE_UNSIGNALISED
+            else 0.0
+        )
+        tau = C.GAP_ACCEPT_MARGIN * (1.0 - keen)
+        late = C.ETA_END_ACCEL_FACTOR + (1.0 - C.ETA_END_ACCEL_FACTOR) * keen
         for foe, z_in, z_out, fz_in, fz_out in index.conflicts[ci - n_lanes]:
-            s_i, e_i = window(i, di + z_in, di + z_out + len_l[i], False)
+            s_i, e_i = window(i, di + z_in, di + z_out + len_l[i], False, tau, late)
             for j in on_link(foe):  # on the foe connector, zone not cleared
                 if pos_l[j] - len_l[j] >= fz_out:
                     continue
-                s, e = window(j, fz_in - pos_l[j], fz_out - pos_l[j] + len_l[j], pos_l[j] >= fz_in)
+                s, e = window(
+                    j, fz_in - pos_l[j], fz_out - pos_l[j] + len_l[j], pos_l[j] >= fz_in, tau,
+                    C.ETA_END_ACCEL_FACTOR,
+                )  # fmt: skip
                 if s <= e_i and s_i <= e:
                     return False
             for j in on_link(to_lane_l[foe - n_lanes]):  # left it, rear still on it
@@ -400,7 +414,9 @@ def admit(
                 p = link_len_l[foe] + pos_l[j]  # front in foe coordinates (>= fz_in)
                 if lock_l[j] != foe or p - len_l[j] >= fz_out:
                     continue
-                s, e = window(j, fz_in - p, fz_out - p + len_l[j], True)
+                s, e = window(
+                    j, fz_in - p, fz_out - p + len_l[j], True, tau, C.ETA_END_ACCEL_FACTOR
+                )
                 if s <= e_i and s_i <= e:
                     return False
             # committed vehicles planning the foe connector, and (higher-rank movement
@@ -409,7 +425,10 @@ def admit(
             higher = rank_of[foe] > rank_of[ci]
             for j in reversed(on_link(from_lane_l[foe - n_lanes])):  # nearest first
                 if nc_l[j] == foe and (committed_l[j] or higher):
-                    s, e = window(j, d_l[j] + fz_in, d_l[j] + fz_out + len_l[j], False)
+                    s, e = window(
+                        j, d_l[j] + fz_in, d_l[j] + fz_out + len_l[j], False, tau,
+                        C.ETA_END_ACCEL_FACTOR,
+                    )  # fmt: skip
                     if s <= e_i and s_i <= e:
                         return False
                 higher = higher and committed_l[j]
