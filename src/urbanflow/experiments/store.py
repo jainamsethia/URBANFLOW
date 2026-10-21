@@ -29,6 +29,7 @@ from sqlalchemy import (
     UniqueConstraint,
     create_engine,
     event,
+    func,
     select,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship
@@ -193,7 +194,12 @@ class ExperimentStore:
 
     # ------------------------------------------------------------------ experiments
     def create_experiment(
-        self, experiment_id: str, spec: ExperimentSpec, runs: Sequence[RunSpec]
+        self,
+        experiment_id: str,
+        spec: ExperimentSpec,
+        runs: Sequence[RunSpec],
+        *,
+        status: ExperimentStatus = ExperimentStatus.queued,
     ) -> ExperimentRecord:
         from urbanflow._version import __version__
 
@@ -204,7 +210,7 @@ class ExperimentStore:
                     name=spec.name,
                     description=spec.description,
                     spec_json=spec.model_dump(mode="json"),
-                    status=ExperimentStatus.queued,
+                    status=status,
                     urbanflow_version=__version__,
                     created_at=_now(),
                 )
@@ -264,6 +270,26 @@ class ExperimentStore:
             if status is not None:
                 q = q.where(_Experiment.status == status)
             return [self._record(s, r) for r in s.scalars(q.limit(limit).offset(offset))]
+
+    def count_experiments(self, *, status: str | None = None) -> int:
+        with Session(self.engine) as s:
+            q = select(func.count()).select_from(_Experiment)
+            if status is not None:
+                q = q.where(_Experiment.status == status)
+            return int(s.execute(q).scalar_one())
+
+    def mark_interrupted(self) -> list[str]:
+        """Experiments left running or queued by a process that is gone (server start):
+        they and their running runs become ``interrupted``; their ids."""
+        active = (ExperimentStatus.running, ExperimentStatus.queued)
+        with Session(self.engine) as s, s.begin():
+            rows = list(s.scalars(select(_Experiment).where(_Experiment.status.in_(active))))
+            for row in rows:
+                row.status = ExperimentStatus.interrupted
+                for run in row.runs:
+                    if run.status == RunStatus.running:
+                        run.status = RunStatus.interrupted
+            return [r.id for r in rows]
 
     def set_experiment_status(self, experiment_id: str, status: ExperimentStatus) -> None:
         with Session(self.engine) as s, s.begin():

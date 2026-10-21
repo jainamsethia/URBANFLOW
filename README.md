@@ -40,7 +40,8 @@ replays and a web workbench.
   numbers), 95 % confidence intervals and paired differences.
 - **Experiments**: experiment files (variants x seeds: controllers, config, demand scale),
   run in parallel worker processes with crash isolation, resume and cancel, stored in
-  SQLite (or PostgreSQL) with per-run artifacts; `urbanflow experiment run|list|show|compare|export`.
+  SQLite (or PostgreSQL) with per-run artifacts; `urbanflow experiment run|list|show|compare|export`,
+  or over the server's REST API (queued, one experiment at a time).
 - **RL**: `TrafficSignalEnv` (Gymnasium) and `TrafficSignalParallelEnv` (PettingZoo), with
   action masks, several rewards, and random / fixed-cycle / max-pressure / tabular-Q
   baselines.

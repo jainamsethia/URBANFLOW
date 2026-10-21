@@ -71,3 +71,25 @@ saved recordings (watch or download).
 The server binds to 127.0.0.1 by default. `urbanflow serve --host 0.0.0.0` shares it on
 your network behind an access token: open the printed `#token=...` link, or paste the
 token when the workbench asks for it. See `urbanflow serve` in [Command line](cli.md). API reference: `http://127.0.0.1:8000/api/v1/docs`.
+
+## Experiments over the API
+
+The server runs [experiments](python-api.md#experiments) for scripts and dashboards. They
+are queued and run **one at a time** (each with its own pool of worker processes); clients
+poll for progress. Every endpoint is under `/api/v1`:
+
+| endpoint | does |
+|---|---|
+| `POST /experiments` `{"spec": {...}, "run": false}` | validate (422 with JSON paths such as `variants[0].name`), expand and store as `draft`; `"run": true` queues it at once. At most 2000 runs per experiment (use the CLI beyond that) |
+| `GET /experiments?status=&limit=&offset=` | a page of summaries: status, variants, seeds and run counts per status |
+| `GET /experiments/{id}` | the spec and every run's status and progress |
+| `POST /experiments/{id}/run` `{"resume": true}` | queue it (skipping completed runs unless `resume` is false); 409 while queued or running |
+| `POST /experiments/{id}/cancel` | drop it from the queue, or stop it: running workers stop at their next check |
+| `DELETE /experiments/{id}?purge=false` | remove it (and with `purge` its run directories); 409 while active |
+| `GET /experiments/{id}/compare?baseline=&metric=` | means, 95 % CIs and paired differences of the completed runs |
+| `GET /experiments/{id}/export?what=runs\|comparison&format=csv\|json` | a download |
+| `GET /runs?experiment_id=`, `GET /runs/{run_id}` | runs, one run with its summary, config and policy |
+| `GET /runs/{run_id}/artifacts`, `GET /runs/{run_id}/artifacts/{name}` | the run directory's files (`summary.json`, `tables/trips.csv`, `replay.ufr`, ...); only listed names are served |
+
+Experiments that were queued or running when the server stopped are marked `interrupted`
+when it starts again; `POST /experiments/{id}/run` continues them.

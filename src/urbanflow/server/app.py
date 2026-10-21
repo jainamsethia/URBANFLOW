@@ -11,6 +11,8 @@
   ``GET /sessions/{id}/export/{table}.csv`` (trips, timeseries, intersections),
   ``GET /sessions/{id}/scenario``
 * ``POST /compare`` (controllers x seeds batch on one scenario; paired summary)
+* experiments and their runs (:mod:`urbanflow.server.experiments`): create, queue, run one
+  at a time, cancel, compare, export, run artifacts
 * ``WS /ws/sessions/{id}`` (JSON control/status messages + binary UFB1 frames)
 
 Security: loopback by default; an optional bearer token (``Authorization`` header, or the
@@ -23,6 +25,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 import ipaddress
+import logging
 import re
 import time
 from collections.abc import AsyncIterator
@@ -36,12 +39,21 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from urbanflow._version import __version__
-from urbanflow.core.errors import NotFoundError, ScenarioValidationError, UrbanFlowError
+from urbanflow.core.errors import (
+    ConfigError,
+    NotFoundError,
+    ScenarioValidationError,
+    UrbanFlowError,
+)
 from urbanflow.core.settings import AppSettings, load_settings
 from urbanflow.experiments.compare import CompareRequest, run_comparison
+from urbanflow.experiments.store import ExperimentStore
+from urbanflow.server.experiments import ExperimentJobs, register_experiments
 from urbanflow.server.session import Session, SessionInfo
 
 __all__ = ["create_app"]
+
+_log = logging.getLogger(__name__)
 
 API: Final = "/api/v1"
 _NAME: Final = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
@@ -146,9 +158,20 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
     settings = settings or load_settings()
     token = settings.api_token.get_secret_value() if settings.api_token else None
     sessions: dict[str, Session] = {}
+    jobs_ref: list[ExperimentJobs] = []  # created at startup (the store opens the database)
+
+    def _jobs() -> ExperimentJobs:
+        if not jobs_ref:
+            store = ExperimentStore.open(settings.resolved_database_url)
+            stale = store.mark_interrupted()  # left running by a server that is gone
+            if stale:
+                _log.warning("experiments interrupted by a restart: %s", ", ".join(stale))
+            jobs_ref.append(ExperimentJobs(store, settings))
+        return jobs_ref[0]
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        jobs = _jobs()
         reaper = asyncio.get_running_loop().create_task(_reap())
         try:
             yield
@@ -157,6 +180,9 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
             for s in list(sessions.values()):
                 await s.close()
             sessions.clear()
+            await asyncio.to_thread(jobs.shutdown)
+            jobs.store.close()
+            jobs_ref.clear()
 
     async def _reap() -> None:
         while True:
@@ -183,7 +209,7 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
             "status": status,
             "detail": str(exc),
         }
-        if isinstance(exc, ScenarioValidationError):
+        if isinstance(exc, ScenarioValidationError | ConfigError) and exc.issues:
             body["issues"] = [i.to_dict() for i in exc.issues]
         return JSONResponse(body, status_code=status, media_type="application/problem+json")
 
@@ -504,6 +530,8 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
 
     # ------------------------------------------------------------------ frontend
     front = _frontend_dir(settings)
+
+    register_experiments(app, API, _jobs)
 
     @app.get("/{path:path}", include_in_schema=False)
     def spa(path: str) -> Response:
