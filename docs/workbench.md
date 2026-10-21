@@ -44,19 +44,32 @@ saved recordings (watch or download).
   Restart, and *Choose another map*.
 - **Map**: drag to pan, scroll to zoom, double-click or F to see the whole map. Cars, buses,
   trucks and (flashing) ambulances are drawn to scale; each lane's traffic light is a
-  coloured dot; bus stops are 🚏 signs at the curb. A legend explains the colours.
+  coloured dot; bus stops are 🚏 signs at the curb. A legend explains the colours. When the
+  map is larger than the view, an overview in the corner shows where you are; click it to
+  move there.
 - **Click a car**: where it is going, its speed, how long it waited at red lights and how
   often it stopped; the roads it will take next are shaded yellow. A bus also shows its next
   stop, or how long it still waits at the stop it is at.
 - **Click a junction**: which directions may go now, the light's strategy and when it
   changes; *Manual control* gives green to a chosen direction until *Back to automatic*.
+- **Click a road**: where it goes, its lanes, length and speed limit, the cars on it and
+  standing still, their average speed, how full it is and the time to drive it.
 - **📊 Traffic**: how traffic feels (share of cars standing still), cars driving, cars
-  standing still, average speed (km/h) and finished trips, each with a trend line.
+  standing still, average speed (km/h) and finished trips, each with a trend line, and
+  **📜 What just happened**: every traffic light change ("green for north & south") and every
+  stuck car the watchdog moved on, newest first, with filters; click one to select it.
 - **🏁 Compare**: runs the same traffic with several strategies and ranks them by average
   trip time; *Show detailed statistics* gives means, 95 % intervals and paired changes, and
   the results download as CSV.
-- **⚙️ Advanced**: step through time, colour the map by lane density, speed, queue,
-  congestion, occupancy, utilisation or flow, and the raw numbers.
+- **⚙️ Advanced**: step through time, and colour the map: vehicles by type, by speed, by
+  where they are going (the side of town of their destination) or greyed out with the
+  traffic lights drawn large; or the roads by how crowded, average speed, queues, how slowed
+  down, how much is covered by cars, how full, or cars per hour; plus the raw numbers.
+
+Recordings play back the same way, with the timeline to jump around, ±1 s steps, the road
+colourings (computed from the recorded vehicles: the queue counts the cars standing still on
+a lane, and "how slowed down" compares speeds with the speed limit), road views and the light
+changes in the event log.
 
 ## Downloads
 

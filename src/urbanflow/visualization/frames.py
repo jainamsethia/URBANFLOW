@@ -11,6 +11,7 @@ Flag bits: 0 halting, 1 braking, 2 lane-change left, 3 lane-change right, 4 dwel
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import IntEnum
 from typing import TYPE_CHECKING, Any, Final
@@ -32,6 +33,7 @@ __all__ = [
     "RegistryTracker",
     "build_frame",
     "lane_values",
+    "lane_values_from",
     "vehicle_xy",
 ]
 
@@ -110,34 +112,62 @@ def vehicle_xy(
 def lane_values(engine: Engine, run: IntArray, metric: LaneMetric) -> FloatArray:
     """Per-link values of ``metric`` from the running vehicles (float32; NaN = no data)."""
     net, veh = engine.network, engine.vehicles
-    n = net.n_links
     link = veh.link[run].astype(np.intp)
+
+    def queue() -> FloatArray:
+        from urbanflow.engine.signalling import stopline_queue
+
+        lanes = net.link_length[: net.n_lanes].astype(np.float64)
+        q = stopline_queue(link, veh.pos[run], veh.uid[run], veh.halting[run], lanes)
+        out = np.full(net.n_links, np.nan)
+        out[: net.n_lanes] = q
+        return out
+
+    return lane_values_from(
+        metric,
+        net.link_length,
+        link,
+        veh.speed[run],
+        veh.length[run],
+        veh.v0[run],
+        queue,
+    )
+
+
+def lane_values_from(
+    metric: LaneMetric,
+    link_length: FloatArray,
+    link: IntArray,
+    speed: FloatArray,
+    length: NDArray[Any],
+    desired: FloatArray,
+    queue: Callable[[], FloatArray],
+) -> FloatArray:
+    """Per-link values of ``metric`` from vehicles on ``link`` with ``speed``, body
+    ``length`` and ``desired`` speed; ``queue()`` gives the per-link queue (only called for
+    that metric). float32, NaN = no data."""
+    n = int(link_length.size)
     count = np.bincount(link, minlength=n).astype(np.float64)
-    length = net.link_length.astype(np.float64)
-    speed = np.bincount(link, veh.speed[run], minlength=n)
+    road = link_length.astype(np.float64)
+    total = np.bincount(link, speed, minlength=n)
+    out: FloatArray
     with np.errstate(invalid="ignore", divide="ignore"):
-        mean_speed = np.where(count > 0, speed / count, np.nan)
-        density = count / (length / C.METRES_PER_KM)
+        mean_speed = np.where(count > 0, total / count, np.nan)
+        density = count / (road / C.METRES_PER_KM)
         if metric is LaneMetric.density:
             out = density
         elif metric is LaneMetric.speed:
             out = mean_speed
         elif metric is LaneMetric.queue:
-            from urbanflow.engine.signalling import stopline_queue
-
-            q = stopline_queue(
-                link, veh.pos[run], veh.uid[run], veh.halting[run], length[: net.n_lanes]
-            )
-            out = np.full(n, np.nan)
-            out[: net.n_lanes] = q
+            out = queue()
         elif metric is LaneMetric.congestion:
-            ratio = np.bincount(link, veh.speed[run] / np.maximum(veh.v0[run], 1e-9), minlength=n)
+            ratio = np.bincount(link, speed / np.maximum(desired, 1e-9), minlength=n)
             out = np.where(count > 0, 1.0 - ratio / count, np.nan)
         elif metric is LaneMetric.occupancy:
-            occ = np.bincount(link, veh.length[run].astype(np.float64), minlength=n)
-            out = np.minimum(1.0, occ / length)
+            occ = np.bincount(link, length.astype(np.float64), minlength=n)
+            out = np.minimum(1.0, occ / road)
         elif metric is LaneMetric.utilization:
-            cap = np.maximum(1.0, length / C.VEH_SPACING_REF_M)
+            cap = np.maximum(1.0, road / C.VEH_SPACING_REF_M)
             out = np.minimum(1.0, count / cap)
         elif metric is LaneMetric.flow:
             out = np.where(

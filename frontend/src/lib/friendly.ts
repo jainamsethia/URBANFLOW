@@ -136,6 +136,25 @@ export function townSide(g: Geometry, road: unknown): string {
   return `the ${compass(cx - mx, cy - my).name} side of town`;
 }
 
+/** Plain names of the road colourings (lane metric codes). */
+export const LANE_VIEWS: Record<number, string> = {
+  1: "how crowded (cars per km)",
+  2: "average speed",
+  3: "queues at the lights",
+  4: "how slowed down",
+  5: "how much road is covered by cars",
+  6: "how full",
+  7: "cars per hour",
+};
+
+/** Which side of town (north, east, south, west) road ``r`` (an index) lies on. */
+export function sideOfTown(g: Geometry, r: number): string {
+  if (r < 0 || r >= g.roads.id.length) return "";
+  const [mx, my] = centroid(g.intersections.point);
+  const [cx, cy] = centroid(g.roads.surfaces[r]!);
+  return compass(cx - mx, cy - my).name;
+}
+
 /** The incoming side of every movement of a junction. */
 export function movementSides(g: Geometry, junction: string): Map<string, { name: string; arrow: string }> {
   const out = new Map<string, { name: string; arrow: string }>();

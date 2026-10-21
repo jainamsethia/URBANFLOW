@@ -34,6 +34,17 @@ export const VCLASS_COLOR: Record<string, string> = {
   emergency: "#e34948",
 };
 
+/** Where a vehicle is heading (by side of town; the legend names each). */
+export const SIDE_COLOR: Record<string, string> = {
+  north: "#2a78d6",
+  east: "#eda100",
+  south: "#4a3aa7",
+  west: "#1baa7a",
+};
+
+/** Cars greyed out so the traffic lights stand out. */
+export const DIM_VEHICLE = "#cbd5e1";
+
 /** The map's light theme. */
 export const MAP = {
   grass: "#cfe8c4",

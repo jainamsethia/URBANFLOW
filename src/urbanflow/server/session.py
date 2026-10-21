@@ -19,7 +19,8 @@ import math
 import re
 import secrets
 import time
-from dataclasses import dataclass, field
+from collections import deque
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Final, Literal
 
@@ -27,10 +28,18 @@ import numpy as np
 from fastapi import WebSocket
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
+from urbanflow.core import constants as C
 from urbanflow.core.errors import CommandError, UrbanFlowError
+from urbanflow.core.events import Event, EventType
 from urbanflow.replay import ReplayReader
 from urbanflow.simulation import Simulation
-from urbanflow.visualization import LaneMetric, RegistryTracker, decode_frame, encode_frame
+from urbanflow.visualization import (
+    LaneMetric,
+    RegistryTracker,
+    decode_frame,
+    encode_frame,
+    lane_values_from,
+)
 
 __all__ = ["ClientMessage", "ReplaySession", "Session", "SessionInfo"]
 
@@ -40,6 +49,9 @@ STATUS_HZ: Final = 1.0
 MAX_STEPS_PER_TICK: Final = 2000
 MAX_SPS: Final = 10_000.0
 SEND_TIMEOUT_S: Final = 5.0
+EVENTS_KEPT: Final = 500
+"""Events waiting to be sent (older ones are dropped and counted)."""
+HALTING_FLAG: Final = 1
 State = Literal["paused", "playing", "ended", "error"]
 
 
@@ -108,7 +120,7 @@ class Record(_Msg):
 
 class Select(_Msg):
     type: Literal["select"]
-    kind: Literal["vehicle", "intersection", "none"]
+    kind: Literal["vehicle", "intersection", "road", "none"]
     id: str = Field(default="", max_length=128)
 
 
@@ -158,6 +170,23 @@ class Session:
         self.last_recording: str | None = None
         self._init_common(label, scenario)
         self.controllers = {j: str(sim.signals[j].controller) for j in sim.signals.ids}
+        sim.events.subscribe(
+            [EventType.phase_changed, EventType.vehicle_teleported], self._on_event
+        )
+
+    def _on_event(self, ev: Event) -> None:
+        """Runs in the stepping thread after each step; the event log gets plain dicts."""
+        if ev.type is EventType.phase_changed and ev.intersection is not None:
+            states = self.sim.signals[ev.intersection].movement_states
+            green = sorted(m for m, s in states.items() if s in ("G", "g"))
+            self._log({"kind": "light", "intersection": ev.intersection, "green": green}, ev)
+        elif ev.type is EventType.vehicle_teleported:
+            self._log({"kind": "stuck", "vehicle": ev.vehicle, "link": ev.link}, ev)
+
+    def _log(self, item: dict[str, Any], ev: Event) -> None:
+        if len(self._events) == EVENTS_KEPT:
+            self._dropped += 1
+        self._events.append({"step": ev.step, "time": ev.time, **item})
 
     def _init_common(self, label: str, scenario: str) -> None:
         self.id = secrets.token_hex(8)
@@ -178,6 +207,8 @@ class Session:
         self._task: asyncio.Task[None] | None = None
         self.last_activity = time.monotonic()
         self.controllers = {}
+        self._events: deque[dict[str, Any]] = deque(maxlen=EVENTS_KEPT)
+        self._dropped = 0
 
     # ------------------------------------------------------------------ lifecycle
     def start(self) -> None:
@@ -278,6 +309,10 @@ class Session:
             if now >= self._next_status or force:
                 texts.append({"type": "status", **self._status()})
                 self._next_status = now + 1.0 / STATUS_HZ
+            if self._events:
+                batch = [self._events.popleft() for _ in range(len(self._events))]
+                texts.append({"type": "events", "events": batch, "dropped": self._dropped})
+                self._dropped = 0
             if now >= self._next_metrics and changed:
                 texts.append({"type": "metrics", "values": _finite(self._latest_metrics())})
                 sel = self._selection()
@@ -407,6 +442,24 @@ class Session:
                     }
                 ),
             }
+        if kind == "road":
+            if ident not in sim.roads:
+                return {"type": "selection", "kind": kind, "id": ident, "available": False}
+            road = sim.roads[ident]
+            detail = {
+                k: getattr(road, k)
+                for k in (
+                    "from_intersection", "to_intersection", "n_lanes", "length", "speed_limit",
+                    "vehicle_count", "halting_count", "mean_speed", "utilization", "travel_time",
+                )
+            }  # fmt: skip
+            return {
+                "type": "selection",
+                "kind": kind,
+                "id": ident,
+                "available": True,
+                "detail": _jsonable(detail),
+            }
         return None
 
     # ------------------------------------------------------------------ clients
@@ -517,6 +570,15 @@ class ReplaySession(Session):
         self._mov_ids: list[str] = list(geo["movements"]["id"])
         self._mov_int: list[str] = list(geo["movements"]["intersection"])
         self._last: bytes = b""
+        lengths = [float(t["length"]) for t in geo["vehicle_types"]]
+        self._body = {
+            u: lengths[t] if 0 <= t < len(lengths) else 0.0
+            for u, (_, t, _d) in self._vehicles.items()
+        }
+        self._net = _compile(reader)
+        """The recorded network (lane values and road views); None if it cannot compile."""
+        self._shown = -1  # index of the frame last sent (light changes are diffs from it)
+        self._prev_signals: np.ndarray | None = None
 
     def _release(self) -> None:
         self.reader.close()
@@ -573,9 +635,55 @@ class ReplaySession(Session):
     def _frame_bytes(self) -> tuple[bytes, np.ndarray]:
         data = self.reader.frame_bytes(self._index)
         self._last = data
-        n = int.from_bytes(data[32:36], "little")
-        header = int.from_bytes(data[6:8], "little")
-        return data, np.frombuffer(data, dtype="<u4", count=n, offset=header)
+        frame, seq, crc = decode_frame(data)
+        self._light_changes(frame)
+        if self.lane_metric is not LaneMetric.none and self._net is not None:
+            frame = replace(
+                frame,
+                lane_values=self._lane_values(self._net, frame, self.lane_metric),
+                lane_metric=self.lane_metric,
+            )
+            data = encode_frame(frame, seq, crc, replay=True)
+        return data, frame.uid
+
+    def _lane_values(self, net: Any, frame: Any, metric: LaneMetric) -> np.ndarray:
+        """The metric from the recorded vehicles: the queue counts halting vehicles per
+        lane and the desired speed is the lane's speed limit (replays keep neither the
+        positions behind the stop line nor each vehicle's own desired speed)."""
+        link = frame.link.astype(np.intp)
+        halting = (frame.flags & HALTING_FLAG) != 0
+        body = np.array([self._body.get(int(u), 0.0) for u in frame.uid], dtype=np.float32)
+
+        def queue() -> np.ndarray:
+            q = np.bincount(link[halting], minlength=net.n_links).astype(np.float64)
+            q[net.n_lanes :] = np.nan
+            return q
+
+        speed = frame.speed.astype(np.float64)
+        return lane_values_from(
+            metric, net.link_length, link, speed, body, net.link_speed_limit[link], queue
+        )
+
+    def _light_changes(self, frame: Any) -> None:
+        """Log the junctions whose green movements changed since the frame shown last,
+        when playing forward a little (not after a seek)."""
+        signals = frame.signals
+        forward = 0 < self._index - self._shown <= MAX_STEPS_PER_TICK
+        if signals is not None and self._prev_signals is not None and forward:
+            green = (signals == 2) | (signals == 3)
+            was = (self._prev_signals == 2) | (self._prev_signals == 3)
+            changed = {self._mov_int[k] for k in np.flatnonzero(green & ~was).tolist()}
+            t = frame.step * self._dt
+            for j in sorted(changed):
+                movements = [
+                    m for k, m in enumerate(self._mov_ids) if self._mov_int[k] == j and green[k]
+                ]
+                self._events.append(
+                    {"step": frame.step, "time": t, "kind": "light", "intersection": j,
+                     "green": movements}
+                )  # fmt: skip
+        self._prev_signals = None if signals is None else signals.copy()
+        self._shown = self._index
 
     def _status(self) -> dict[str, Any]:
         steps = self.reader.steps
@@ -589,9 +697,38 @@ class ReplaySession(Session):
             "last_step": steps[-1] if steps else 0,
             "steps_per_second": self.sps,
             "vehicles": self._count(),
-            "lane_metric": 0,
+            "lane_metric": int(self.lane_metric),
             "controllers": dict(self.controllers),
             "error": self.error,
+        }
+
+    def _road_selection(self, frame: Any, ident: str) -> dict[str, Any]:
+        """A road's numbers from the recorded vehicles on its lanes."""
+        net = self._net
+        if net is None or ident not in net.road_index:
+            return {"type": "selection", "kind": "road", "id": ident, "available": False}
+        r = net.road_index[ident]
+        start, n_lanes = int(net.road_lane_start[r]), int(net.road_n_lanes[r])
+        on = (frame.link >= start) & (frame.link < start + n_lanes)
+        count = int(on.sum())
+        length = float(net.road_length[r])
+        detail = {
+            "from_intersection": net.int_ids[int(net.road_from[r])],
+            "to_intersection": net.int_ids[int(net.road_to[r])],
+            "n_lanes": n_lanes,
+            "length": length,
+            "speed_limit": float(net.road_speed_limit[r]),
+            "vehicle_count": count,
+            "halting_count": int(((frame.flags & HALTING_FLAG) != 0)[on].sum()),
+            "mean_speed": float(frame.speed[on].mean()) if count else None,
+            "utilization": min(1.0, count / max(1.0, n_lanes * length / C.VEH_SPACING_REF_M)),
+        }
+        return {
+            "type": "selection",
+            "kind": "road",
+            "id": ident,
+            "available": True,
+            "detail": _jsonable(detail),
         }
 
     def _selection(self) -> dict[str, Any] | None:
@@ -615,6 +752,8 @@ class ReplaySession(Session):
                 "available": True,
                 "detail": _jsonable(detail),
             }
+        if kind == "road":
+            return self._road_selection(frame, ident)
         codes = "rygG"
         signals = frame.signals
         states = {
@@ -652,8 +791,8 @@ class ReplaySession(Session):
                 self.sps = sps
             case Reset():
                 self.state, self._index = "paused", 0
-            case Subscribe():
-                self.lane_metric = LaneMetric.none  # replays carry no lane values
+            case Subscribe(lane_metric=code):
+                self.lane_metric = LaneMetric(code) if self._net is not None else LaneMetric.none
             case Select(kind=kind, id=ident):
                 self.selection = (kind, ident)
                 self._next_metrics = 0.0
@@ -665,6 +804,17 @@ def _first(exc: ValidationError) -> str:
     err = exc.errors()[0]
     where = ".".join(str(p) for p in err["loc"])
     return f"{where}: {err['msg']}" if where else err["msg"]
+
+
+def _compile(reader: ReplayReader) -> Any:
+    """The compiled network of a replay's scenario, or None (an old or damaged file)."""
+    from urbanflow.network import compile_network
+    from urbanflow.scenario.scenario import Scenario
+
+    try:
+        return compile_network(Scenario.from_json(reader.scenario_json()))
+    except (UrbanFlowError, KeyError, ValueError):
+        return None
 
 
 def _finite(values: dict[str, float]) -> dict[str, float | None]:

@@ -28,7 +28,7 @@ export interface Status {
 }
 
 export interface Selection {
-  kind: "vehicle" | "intersection";
+  kind: "vehicle" | "intersection" | "road";
   id: string;
   available: boolean;
   detail?: Record<string, unknown>;
@@ -43,12 +43,28 @@ export function remainingRoute(sel: Selection | null): string[] | null {
 
 export type MetricSeries = Record<string, number[]>;
 
+/** Something worth telling: a traffic light changed, or a stuck car was moved on. */
+export interface LogEvent {
+  step: number;
+  time: number;
+  kind: "light" | "stuck";
+  intersection?: string;
+  green?: string[];
+  vehicle?: string;
+  link?: string;
+}
+
+const MAX_EVENTS = 200;
+
 export interface Snapshot {
   connected: boolean;
   status: Status | null;
   metrics: Record<string, number | null>;
   series: MetricSeries;
   selection: Selection | null;
+  events: LogEvent[];
+  /** Events dropped by the server because it had too many to send. */
+  dropped: number;
   error: string | null;
 }
 
@@ -59,7 +75,7 @@ export class SessionController {
   readonly vehicles = new Map<number, VehicleMeta>();
   prev: { frame: FrameView; at: number } | null = null;
   curr: { frame: FrameView; at: number } | null = null;
-  snapshot: Snapshot = { connected: false, status: null, metrics: {}, series: {}, selection: null, error: null };
+  snapshot: Snapshot = { connected: false, status: null, metrics: {}, series: {}, selection: null, events: [], dropped: 0, error: null };
   private ws: WebSocket | null = null;
   private listeners = new Set<() => void>();
   private closed = false;
@@ -132,6 +148,7 @@ export class SessionController {
         if (m.reset) {
           this.vehicles.clear();
           this.prev = this.curr = null;
+          this.update({ events: [], dropped: 0 });
         }
         const uids: number[] = m.uids;
         uids.forEach((u, i) => this.vehicles.set(u, { id: m.ids[i], type: m.types[i], dest: m.dests[i] }));
@@ -165,6 +182,14 @@ export class SessionController {
       case "selection":
         this.update({ selection: m as Selection });
         break;
+      case "events": {
+        const fresh = (m.events as LogEvent[]).slice().reverse(); // newest first
+        this.update({
+          events: [...fresh, ...this.snapshot.events].slice(0, MAX_EVENTS),
+          dropped: this.snapshot.dropped + Number(m.dropped ?? 0),
+        });
+        break;
+      }
       case "error":
         this.update({ error: m.message });
         break;

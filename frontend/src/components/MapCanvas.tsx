@@ -3,10 +3,14 @@
 
 import { useEffect, useRef } from "react";
 import type { Geometry, LaneMetricInfo, Point } from "../lib/api";
-import { MAP, SIGNAL_COLOR, VCLASS_COLOR, speedColor, viridis } from "../lib/colors";
+import { DIM_VEHICLE, MAP, SIDE_COLOR, SIGNAL_COLOR, VCLASS_COLOR, speedColor, viridis } from "../lib/colors";
+import { sideOfTown } from "../lib/friendly";
 import type { SessionController } from "../lib/session";
 
-export type VehicleColoring = "type" | "speed";
+/** How vehicles are painted: by kind, by speed, by where they are heading, or greyed out
+ * so the traffic lights (drawn large) stand out. */
+export type VehicleColoring = "type" | "speed" | "destination" | "signals";
+export type Pick = "vehicle" | "intersection" | "road" | "none";
 
 interface Props {
   geometry: Geometry;
@@ -15,9 +19,25 @@ interface Props {
   laneMetric: LaneMetricInfo | null;
   selectedVehicle: string | null;
   selectedIntersection: string | null;
+  selectedRoad: string | null;
   /** Roads still ahead of the selected vehicle (highlighted; the last is its destination). */
   route: string[] | null;
-  onSelect: (kind: "vehicle" | "intersection" | "none", id: string) => void;
+  onSelect: (kind: Pick, id: string) => void;
+}
+
+const MINI_W = 180, MINI_H = 120;
+
+/** Distance from (x, y) to the polyline ``pts``. */
+function distToPath(pts: Point[], x: number, y: number): number {
+  let best = Infinity;
+  for (let i = 0; i + 1 < pts.length; i++) {
+    const [ax, ay] = pts[i]!, [bx, by] = pts[i + 1]!;
+    const dx = bx - ax, dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 > 0 ? Math.min(1, Math.max(0, ((x - ax) * dx + (y - ay) * dy) / len2)) : 0;
+    best = Math.min(best, Math.hypot(ax + t * dx - x, ay + t * dy - y));
+  }
+  return best;
 }
 
 interface View {
@@ -39,6 +59,7 @@ function bounds(g: Geometry): [number, number, number, number] {
 
 export function MapCanvas(props: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const miniRef = useRef<HTMLCanvasElement>(null);
   const propsRef = useRef(props);
   propsRef.current = props;
   const viewRef = useRef<View | null>(null);
@@ -60,6 +81,15 @@ export function MapCanvas(props: Props) {
     // where each vehicle was last drawn (interpolated), so clicks pick what is on screen
     let drawnUid = new Uint32Array(0), drawnX = new Float64Array(0), drawnY = new Float64Array(0);
     const roadIndex = new Map(g.roads.id.map((id, i) => [id, i]));
+    const destSide = g.roads.id.map((_, r) => sideOfTown(g, r)); // by destination road index
+    const mini = miniRef.current!;
+    const miniCtx = mini.getContext("2d")!;
+    const miniScale = Math.min(MINI_W / Math.max(1, bx1 - bx0), MINI_H / Math.max(1, by1 - by0));
+    const miniAt = (x: number, y: number): [number, number] => [
+      MINI_W / 2 + (x - (bx0 + bx1) / 2) * miniScale,
+      MINI_H / 2 - (y - (by0 + by1) / 2) * miniScale,
+    ];
+    let miniStatic: HTMLCanvasElement | null = null;
 
     const fit = () => {
       const w = canvas.clientWidth, h = canvas.clientHeight;
@@ -130,6 +160,45 @@ export function MapCanvas(props: Props) {
       return off;
     };
 
+    // overview of the whole map with the visible area, when the map does not fit the view
+    const drawMinimap = (w: number, h: number, v: View) => {
+      const fits = (bx1 - bx0) * v.scale <= w * 1.05 && (by1 - by0) * v.scale <= h * 1.05;
+      mini.style.display = fits ? "none" : "block";
+      if (fits) return;
+      const dpr = window.devicePixelRatio || 1;
+      if (!miniStatic) {
+        miniStatic = document.createElement("canvas");
+        miniStatic.width = MINI_W * dpr;
+        miniStatic.height = MINI_H * dpr;
+        const c = miniStatic.getContext("2d")!;
+        c.setTransform(dpr, 0, 0, dpr, 0, 0);
+        c.fillStyle = "rgba(255,255,255,0.92)";
+        c.fillRect(0, 0, MINI_W, MINI_H);
+        c.fillStyle = MAP.road;
+        for (const s of g.roads.surfaces) {
+          c.beginPath();
+          s.forEach((pt, i) => (i ? c.lineTo(...miniAt(pt[0], pt[1])) : c.moveTo(...miniAt(pt[0], pt[1]))));
+          c.closePath();
+          c.fill();
+          c.lineWidth = 1;
+          c.strokeStyle = MAP.road;
+          c.stroke();
+        }
+      }
+      if (mini.width !== MINI_W * dpr) {
+        mini.width = MINI_W * dpr;
+        mini.height = MINI_H * dpr;
+      }
+      miniCtx.setTransform(1, 0, 0, 1, 0, 0);
+      miniCtx.drawImage(miniStatic, 0, 0);
+      miniCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const [x0, y0] = miniAt(v.cx - w / 2 / v.scale, v.cy + h / 2 / v.scale);
+      const [x1, y1] = miniAt(v.cx + w / 2 / v.scale, v.cy - h / 2 / v.scale);
+      miniCtx.strokeStyle = MAP.routeEnd;
+      miniCtx.lineWidth = 2;
+      miniCtx.strokeRect(x0, y0, x1 - x0, y1 - y0);
+    };
+
     const render = () => {
       raf = requestAnimationFrame(render);
       const p = propsRef.current;
@@ -185,9 +254,21 @@ export function MapCanvas(props: Props) {
         });
       }
 
-      // signal heads
-      if (f.signals) {
-        const r = Math.max(3.5, 1.5 * v.scale);
+      // selected road
+      if (p.selectedRoad) {
+        const s = g.roads.surfaces[roadIndex.get(p.selectedRoad) ?? -1];
+        if (s) {
+          path(ctx, s, T, true);
+          ctx.fillStyle = MAP.route;
+          ctx.fill();
+          ctx.strokeStyle = MAP.routeEnd;
+          ctx.lineWidth = 3;
+          ctx.stroke();
+        }
+      }
+
+      const drawSignals = (r: number) => {
+        if (!f.signals) return;
         for (let i = 0; i < signalMov.length; i++) {
           const state = f.signals[signalMov[i]!]!;
           const color = SIGNAL_COLOR[state];
@@ -197,11 +278,13 @@ export function MapCanvas(props: Props) {
           ctx.arc(sx, sy, r, 0, 2 * Math.PI);
           ctx.fillStyle = color;
           ctx.fill();
-          ctx.lineWidth = 1;
-          ctx.strokeStyle = MAP.outline;
+          ctx.lineWidth = r > 6 ? 2 : 1;
+          ctx.strokeStyle = r > 6 ? MAP.lightRing : MAP.outline;
           ctx.stroke();
         }
-      }
+      };
+      const signalsMode = p.coloring === "signals";
+      if (!signalsMode) drawSignals(Math.max(3.5, 1.5 * v.scale));
 
       // interpolation set-up: index of every uid in the previous frame
       if (prv && prv.frame.seq !== prevFrameSeq) {
@@ -253,10 +336,15 @@ export function MapCanvas(props: Props) {
         ctx.rotate(-hd);
         const vclass = vt?.vclass ?? "car";
         const blink = vclass === "emergency" && Math.floor(now / 350) % 2 === 0;
-        ctx.fillStyle =
+        const paint = (): string =>
           p.coloring === "speed"
             ? speedColor(f.speed[i]! / maxSpeed)
-            : blink ? "#2563eb" : VCLASS_COLOR[vclass] ?? vt?.color ?? VCLASS_COLOR.car!;
+            : p.coloring === "destination"
+              ? SIDE_COLOR[destSide[meta?.dest ?? -1] ?? ""] ?? DIM_VEHICLE
+              : signalsMode
+                ? DIM_VEHICLE
+                : blink ? "#2563eb" : VCLASS_COLOR[vclass] ?? vt?.color ?? VCLASS_COLOR.car!;
+        ctx.fillStyle = paint();
         const pxLen = Math.max(9, len * v.scale), pxWid = Math.max(5, wid * v.scale);
         const selectedCar = meta !== undefined && meta.id === p.selectedVehicle;
         if (selectedCar) {
@@ -267,7 +355,7 @@ export function MapCanvas(props: Props) {
           ctx.lineWidth = 2;
           ctx.strokeStyle = MAP.select;
           ctx.stroke();
-          ctx.fillStyle = p.coloring === "speed" ? speedColor(f.speed[i]! / maxSpeed) : VCLASS_COLOR[vclass] ?? VCLASS_COLOR.car!;
+          ctx.fillStyle = paint();
         }
         ctx.beginPath();
         ctx.roundRect(-pxLen, -pxWid / 2, pxLen, pxWid, Math.min(pxWid / 2, 3));
@@ -277,6 +365,10 @@ export function MapCanvas(props: Props) {
         ctx.stroke();
         ctx.restore();
       }
+
+      if (signalsMode) drawSignals(Math.max(6, 3.2 * v.scale));
+
+      drawMinimap(w, h, v);
 
       // selected intersection ring
       if (p.selectedIntersection) {
@@ -333,7 +425,18 @@ export function MapCanvas(props: Props) {
         if (d < bestD) { bestD = d; best = i; }
       }
       const meta = best >= 0 ? p.controller.vehicles.get(drawnUid[best]!) : undefined;
-      if (meta) p.onSelect("vehicle", meta.id);
+      if (meta) {
+        p.onSelect("vehicle", meta.id);
+        return;
+      }
+      // else the road under the click (its lanes), if any
+      let road = -1, roadD = Math.max(2, 8 / v.scale);
+      g.links.path.forEach((pts, i) => {
+        if (g.links.kind[i] !== "lane") return;
+        const d = distToPath(pts, wx, wy) - g.links.lane_width[i]! / 2;
+        if (d < roadD) { roadD = d; road = i; }
+      });
+      if (road >= 0) p.onSelect("road", g.links.owner[road]!);
       else p.onSelect("none", "");
     };
     const onWheel = (e: WheelEvent) => {
@@ -346,6 +449,17 @@ export function MapCanvas(props: Props) {
       const scale = Math.min(200, Math.max(0.02, v.scale * Math.exp(-e.deltaY * 0.0015)));
       viewRef.current = { scale, cx: wx - mx / scale, cy: wy - my / scale };
     };
+    const onMini = (e: MouseEvent) => {
+      const rect = mini.getBoundingClientRect();
+      const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+      const v = viewRef.current!;
+      viewRef.current = {
+        ...v,
+        cx: (bx0 + bx1) / 2 + (mx - MINI_W / 2) / miniScale,
+        cy: (by0 + by1) / 2 - (my - MINI_H / 2) / miniScale,
+      };
+    };
+    mini.addEventListener("click", onMini);
     canvas.addEventListener("mousedown", onDown);
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
@@ -365,6 +479,7 @@ export function MapCanvas(props: Props) {
       canvas.removeEventListener("wheel", onWheel);
       canvas.removeEventListener("dblclick", fit);
       window.removeEventListener("keydown", onKey);
+      mini.removeEventListener("click", onMini);
       staticRef.current = null;
     };
   }, [props.geometry, props.controller]);
@@ -375,7 +490,14 @@ export function MapCanvas(props: Props) {
         ref={canvasRef}
         className="h-full w-full cursor-crosshair"
         role="application"
-        aria-label="Simulation map: drag to pan, scroll to zoom, click a vehicle or intersection"
+        aria-label="Simulation map: drag to pan, scroll to zoom, click a vehicle, junction or road"
+      />
+      <canvas
+        ref={miniRef}
+        style={{ width: MINI_W, height: MINI_H, display: "none" }}
+        className="absolute bottom-3 right-3 cursor-pointer rounded-lg shadow ring-1 ring-slate-300"
+        aria-label="Overview of the whole map: click to move there"
+        title="The whole map: click to move there"
       />
       <button
         onClick={() => fitRef.current()}

@@ -8,6 +8,7 @@ from urbanflow.visualization.frames import (
     RegistryTracker,
     build_frame,
     lane_values,
+    lane_values_from,
 )
 from urbanflow.visualization.geometry import RenderGeometry, render_geometry
 
@@ -21,5 +22,6 @@ __all__ = [
     "decode_frame",
     "encode_frame",
     "lane_values",
+    "lane_values_from",
     "render_geometry",
 ]

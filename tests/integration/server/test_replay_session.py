@@ -83,3 +83,48 @@ def test_replay_cli_info(recorded: Path, capsys: pytest.CaptureFixture[str]) -> 
     assert info.value.code in (0, None)
     doc = json.loads(capsys.readouterr().out)
     assert doc["complete"] is True and doc["n_frames"] == 201
+
+
+def _play_until(ws: Any, pred: Any, limit: int = 2000) -> Any:
+    """Play at full speed until a text message satisfies ``pred``."""
+    ws.send_json({"type": "set_speed", "steps_per_second": None})
+    ws.send_json({"type": "play"})
+    return _next(ws, lambda m: isinstance(m, dict) and pred(m), limit)
+
+
+def test_live_event_log_and_road_view(client: TestClient) -> None:
+    sid = client.post(f"{API}/sessions", json={"scenario": "single_intersection"}).json()["id"]
+    with client.websocket_connect(f"{API}/ws/sessions/{sid}") as ws:
+        ws.receive_json()
+        events = _play_until(ws, lambda m: m.get("type") == "events")
+        light = next(e for e in events["events"] if e["kind"] == "light")
+        assert light["intersection"] == "J" and light["green"] and light["step"] > 0
+        assert all(m.startswith(("N_in", "S_in", "E_in", "W_in")) for m in light["green"])
+        ws.send_json({"type": "pause"})
+        ws.send_json({"type": "select", "kind": "road", "id": "W_in"})
+        sel = _next(ws, lambda m: isinstance(m, dict) and m.get("type") == "selection")
+        d = sel["detail"]
+        assert sel["available"] and d["n_lanes"] == 2 and d["to_intersection"] == "J"
+        assert d["vehicle_count"] >= d["halting_count"] >= 0
+        ws.send_json({"type": "select", "kind": "road", "id": "nope"})
+        gone = _next(ws, lambda m: isinstance(m, dict) and m.get("type") == "selection")
+        assert gone["available"] is False
+
+
+def test_replay_lane_values_light_changes_and_road_view(client: TestClient) -> None:
+    sid = client.post(f"{API}/sessions", json={"replay": "demo"}).json()["id"]
+    with client.websocket_connect(f"{API}/ws/sessions/{sid}") as ws:
+        ws.receive_json()
+        ws.send_json({"type": "subscribe", "lane_metric": 1})  # density
+        status = _next(ws, lambda m: isinstance(m, dict) and m.get("lane_metric") == 1)
+        assert status["kind"] == "replay"
+        ws.send_json({"type": "seek", "step": 120})
+        f = _next(ws, lambda x: not isinstance(x, dict) and x.step == 120)
+        assert f.lane_values is not None and int(f.lane_metric) == 1
+        assert float(f.lane_values[f.link].max()) > 0  # lanes with vehicles have a density
+        events = _play_until(ws, lambda m: m.get("type") == "events")
+        assert events["events"][0]["kind"] == "light" and events["events"][0]["intersection"] == "J"
+        ws.send_json({"type": "pause"})
+        ws.send_json({"type": "select", "kind": "road", "id": "N_in"})
+        sel = _next(ws, lambda m: isinstance(m, dict) and m.get("type") == "selection")
+        assert sel["available"] and sel["detail"]["n_lanes"] == 2

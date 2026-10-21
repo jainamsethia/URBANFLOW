@@ -3,8 +3,8 @@
 
 import { useState } from "react";
 import { api, type CompareResult, type Geometry, type Meta, type ScenarioRef } from "../lib/api";
-import { brain, brainChoices, clock, kmh, mood, movementSides, seconds, town, TOWN_ORDER, townSide, VEHICLE } from "../lib/friendly";
-import { remainingRoute, type Selection, type SessionController, type Snapshot } from "../lib/session";
+import { brain, brainChoices, clock, kmh, mood, movementSides, seconds, sideOfTown, town, TOWN_ORDER, townSide, VEHICLE } from "../lib/friendly";
+import { remainingRoute, type LogEvent, type Selection, type SessionController, type Snapshot } from "../lib/session";
 
 export function fmt(v: unknown, digits = 1): string {
   if (typeof v !== "number" || !Number.isFinite(v)) return "–";
@@ -123,10 +123,110 @@ export function SelectionCard({
       </div>
     );
   }
+  if (selection.kind === "road") return <RoadCard selection={selection} geometry={geometry} />;
   return selection.kind === "vehicle" ? (
     <CarCard selection={selection} geometry={geometry} />
   ) : (
     <LightCard selection={selection} geometry={geometry} controller={controller} />
+  );
+}
+
+function RoadCard({ selection, geometry }: { selection: Selection; geometry: Geometry }) {
+  const d = selection.detail ?? {};
+  const r = geometry.roads.id.indexOf(selection.id);
+  const full = Number(d.utilization ?? 0);
+  const rows: [string, string, string][] = [
+    ["🧭", "Goes", `from ${String(d.from_intersection)} to ${String(d.to_intersection)}${r >= 0 ? ` (${sideOfTown(geometry, r)} side)` : ""}`],
+    ["🛣️", "Size", `${fmt(d.n_lanes, 0)} lane${d.n_lanes === 1 ? "" : "s"} · ${fmt(Number(d.length), 0)} m long`],
+    ["🚧", "Speed limit", kmh(d.speed_limit)],
+    ["🚗", "Cars on it", fmt(d.vehicle_count, 0)],
+    ["🛑", "Standing still", fmt(d.halting_count, 0)],
+    ["💨", "Average speed", d.mean_speed == null ? "no cars" : kmh(d.mean_speed)],
+  ];
+  if (d.travel_time != null) rows.push(["⏱️", "Time to drive it", seconds(d.travel_time)]);
+  return (
+    <div className={card}>
+      <div className="mb-2 flex items-center gap-2">
+        <span className="text-4xl" aria-hidden>🛣️</span>
+        <div>
+          <div className="text-lg font-semibold text-slate-900">This road</div>
+          <div className="text-xs text-slate-500">{selection.id}</div>
+        </div>
+      </div>
+      <div className="mb-2">
+        <div className="mb-1 flex justify-between text-sm text-slate-600">
+          <span>How full</span>
+          <b className="text-slate-900">{Math.round(full * 100)}%</b>
+        </div>
+        <div className="h-2 rounded-full bg-slate-200" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(full * 100)} aria-label="How full the road is">
+          <div className="h-2 rounded-full" style={{ width: `${Math.min(100, full * 100)}%`, background: full > 0.8 ? "#e34948" : full > 0.5 ? "#eda100" : "#1baa7a" }} />
+        </div>
+      </div>
+      <dl className="space-y-1.5">
+        {rows.map(([icon, k, v]) => (
+          <div key={k} className="flex items-baseline justify-between gap-2 text-sm">
+            <dt className="text-slate-600">
+              <span aria-hidden>{icon}</span> {k}
+            </dt>
+            <dd className="text-right font-semibold text-slate-900">{v}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
+/** What just happened: light changes and stuck cars, newest first, with filters. */
+export function EventLog({
+  snap,
+  geometry,
+  onPick,
+}: {
+  snap: Snapshot;
+  geometry: Geometry;
+  onPick: (kind: "vehicle" | "intersection", id: string) => void;
+}) {
+  const [show, setShow] = useState({ light: true, stuck: true });
+  const items = snap.events.filter((e) => show[e.kind]).slice(0, 60);
+  const chip = (on: boolean) =>
+    `rounded-full px-3 py-1 text-xs font-medium ring-1 ${on ? "bg-slate-900 text-white ring-slate-900" : "bg-white text-slate-600 ring-slate-300"}`;
+  const describe = (e: LogEvent): string => {
+    if (e.kind === "stuck") return `A stuck car (${e.vehicle}) was moved on to keep traffic going`;
+    const sides = movementSides(geometry, e.intersection ?? "");
+    const order = ["north", "east", "south", "west"];
+    const names = [...new Set((e.green ?? []).map((m) => sides.get(m)?.name).filter(Boolean))].sort(
+      (a, b) => order.indexOf(a!) - order.indexOf(b!),
+    );
+    return `Light ${e.intersection}: green for ${names.length ? names.join(" & ") : "nobody"}`;
+  };
+  return (
+    <div className={card}>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="text-lg font-semibold text-slate-900">📜 What just happened</div>
+        <div className="flex gap-1" role="group" aria-label="Show">
+          <button className={chip(show.light)} aria-pressed={show.light} onClick={() => setShow({ ...show, light: !show.light })}>🚦 Lights</button>
+          <button className={chip(show.stuck)} aria-pressed={show.stuck} onClick={() => setShow({ ...show, stuck: !show.stuck })}>⚠️ Stuck cars</button>
+        </div>
+      </div>
+      {items.length === 0 ? (
+        <p className="text-sm text-slate-500">Nothing yet: press Play.</p>
+      ) : (
+        <ul className="max-h-64 space-y-1 overflow-y-auto text-sm">
+          {items.map((e, i) => (
+            <li key={`${e.step}-${i}`}>
+              <button
+                className="flex w-full gap-2 rounded-lg px-2 py-1 text-left hover:bg-slate-100"
+                onClick={() => (e.kind === "light" ? onPick("intersection", e.intersection ?? "") : onPick("vehicle", e.vehicle ?? ""))}
+              >
+                <span className="shrink-0 tabular-nums text-slate-500">{clock(e.time)}</span>
+                <span className="text-slate-800">{e.kind === "light" ? "🚦" : "⚠️"} {describe(e)}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {snap.dropped > 0 && <p className="mt-1 text-xs text-slate-500">{snap.dropped} older events were skipped.</p>}
+    </div>
   );
 }
 

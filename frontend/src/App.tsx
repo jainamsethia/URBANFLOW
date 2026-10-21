@@ -1,20 +1,20 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Help } from "./components/Help";
-import { MapCanvas, type VehicleColoring } from "./components/MapCanvas";
-import { MoodCard, RacePanel, SelectionCard, StatTiles, TechnicalDetails, fmt } from "./components/Panels";
+import { MapCanvas, type Pick, type VehicleColoring } from "./components/MapCanvas";
+import { EventLog, MoodCard, RacePanel, SelectionCard, StatTiles, TechnicalDetails, fmt } from "./components/Panels";
 import { Logo, pill, StartScreen } from "./components/StartScreen";
 import { api, downloads, type Geometry, type Meta, type ScenarioRef, type SessionInfo } from "./lib/api";
-import { brain, brainChoices, clock, SPEEDS, town, VEHICLE } from "./lib/friendly";
+import { brain, brainChoices, clock, LANE_VIEWS, SPEEDS, town, VEHICLE } from "./lib/friendly";
 import { SessionController, remainingRoute, type Snapshot } from "./lib/session";
+import { SIDE_COLOR, VCLASS_COLOR } from "./lib/colors";
 
 function useSnapshot(ctl: SessionController | null): Snapshot | null {
   const sub = useCallback((fn: () => void) => (ctl ? ctl.subscribe(fn) : () => {}), [ctl]);
   return useSyncExternalStore(sub, () => (ctl ? ctl.snapshot : null));
 }
 
-const VEHICLE_COLORS: Record<string, string> = { car: "#2a78d6", bus: "#eda100", truck: "#4a3aa7", emergency: "#e34948" };
 
-function Legend({ busStops }: { busStops: boolean }) {
+function Legend({ busStops, coloring, lanes }: { busStops: boolean; coloring: VehicleColoring; lanes: string | null }) {
   const swatch = (color: string) => <span className="inline-block h-2.5 w-4 rounded-sm ring-1 ring-white" style={{ background: color }} />;
   return (
     <div className="pointer-events-none absolute bottom-3 left-3 flex flex-wrap gap-x-3 gap-y-1 rounded-xl bg-white/90 px-3 py-2 text-xs text-slate-700 shadow">
@@ -22,11 +22,21 @@ function Legend({ busStops }: { busStops: boolean }) {
       <span>🟡 Slow down</span>
       <span>🔴 Stop</span>
       <span className="mx-1 text-slate-300">|</span>
-      {(["car", "bus", "truck", "emergency"] as const).map((k) => (
-        <span key={k} className="flex items-center gap-1">
-          {swatch(VEHICLE_COLORS[k]!)} {VEHICLE[k]!.name}
-        </span>
-      ))}
+      {coloring === "type" &&
+        (["car", "bus", "truck", "emergency"] as const).map((k) => (
+          <span key={k} className="flex items-center gap-1">
+            {swatch(VCLASS_COLOR[k]!)} {VEHICLE[k]!.name}
+          </span>
+        ))}
+      {coloring === "speed" && <span>Cars: 🟥 stopped → 🟨 slow → 🟩 fast</span>}
+      {coloring === "destination" &&
+        Object.entries(SIDE_COLOR).map(([side, color]) => (
+          <span key={side} className="flex items-center gap-1">
+            {swatch(color)} going {side}
+          </span>
+        ))}
+      {coloring === "signals" && <span>Cars greyed out so the traffic lights stand out</span>}
+      {lanes && <span>Roads coloured by {lanes}: dark = low, yellow = high</span>}
       {busStops && <span>🚏 Bus stop</span>}
     </div>
   );
@@ -126,7 +136,7 @@ export default function App() {
   }, [ctl, playing, send]);
 
   const laneInfo = useMemo(() => meta?.lane_metrics.find((m) => m.code === laneMetric) ?? null, [meta, laneMetric]);
-  const select = (kind: "vehicle" | "intersection" | "none", id: string) => {
+  const select = (kind: Pick, id: string) => {
     setSelected({ kind, id });
     setHint(false);
     send({ type: "select", kind, id });
@@ -239,6 +249,7 @@ export default function App() {
               laneMetric={laneInfo}
               selectedVehicle={selected.kind === "vehicle" ? selected.id : null}
               selectedIntersection={selected.kind === "intersection" ? selected.id : null}
+              selectedRoad={selected.kind === "road" ? selected.id : null}
               route={snap?.selection?.id === selected.id ? remainingRoute(snap.selection) : null}
               onSelect={select}
             />
@@ -251,7 +262,9 @@ export default function App() {
               <span className="ml-1 text-slate-400">✕</span>
             </button>
           )}
-          {geometry && <Legend busStops={(geometry.bus_stops?.id.length ?? 0) > 0} />}
+          {geometry && (
+            <Legend busStops={(geometry.bus_stops?.id.length ?? 0) > 0} coloring={coloring} lanes={laneInfo ? LANE_VIEWS[laneInfo.code] ?? laneInfo.label : null} />
+          )}
         </section>
 
         <aside className="flex w-full flex-col border-t border-slate-200 bg-slate-100 md:w-96 md:border-l md:border-t-0">
@@ -270,6 +283,7 @@ export default function App() {
                   <MoodCard snap={snap} />
                   <SelectionCard selection={selection} geometry={geometry} controller={ctl} />
                   <StatTiles snap={snap} />
+                  <EventLog snap={snap} geometry={geometry} onPick={select} />
                 </>
               ) : (
                 <p className="text-slate-500">Connecting…</p>
@@ -301,8 +315,10 @@ export default function App() {
                       }}>
                       <option value="veh:type">Vehicles by type</option>
                       <option value="veh:speed">Vehicles by speed</option>
-                      {!isReplay && meta.lane_metrics.map((m) => (
-                        <option key={m.code} value={`lane:${m.code}`}>Lanes: {m.label}{m.unit ? ` (${m.unit})` : ""}</option>
+                      <option value="veh:destination">Vehicles by where they are going</option>
+                      <option value="veh:signals">Traffic lights (cars greyed out)</option>
+                      {meta.lane_metrics.map((m) => (
+                        <option key={m.code} value={`lane:${m.code}`}>Roads: {LANE_VIEWS[m.code] ?? m.label}</option>
                       ))}
                     </select>
                   </label>
