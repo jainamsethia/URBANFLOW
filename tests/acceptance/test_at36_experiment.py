@@ -1,8 +1,10 @@
-"""AT-36: an experiment of 2 variants x 3 seeds on 2 workers completes; a run whose worker
-process dies is marked failed with ``error.txt`` and the others complete (plan V)."""
+"""AT-36: an experiment of 3 variants x 2 seeds on 2 workers completes; a run whose worker
+process dies (killed whenever it starts) is marked failed with ``error.txt`` and the others
+complete (plan V)."""
 
 from __future__ import annotations
 
+import contextlib
 import os
 import signal
 from pathlib import Path
@@ -27,16 +29,22 @@ def test_crashed_run_is_failed_and_the_others_complete(tmp_path: Path) -> None:
             "variants": [
                 {"name": "fixed"},
                 {"name": "mp", "policy": {"kind": "controller", "controller": "max_pressure"}},
+                {  # long enough to still be running when the test kills its worker
+                    "name": "victim",
+                    "scenario": {"bundled": "grid_4x4"},
+                    "config": {"duration": 1800},
+                },
             ],
-            "seeds": {"count": 3},
+            "seeds": {"count": 2},
         }
     )
     eid = runner.submit(spec)
-    victim = f"{eid}-mp-s1"
+    victim = f"{eid}-victim-s1"
 
     def crash(event: ProgressEvent) -> None:  # the worker of the victim dies every time
         if event.kind == "started" and event.run_id == victim and event.pid is not None:
-            os.kill(event.pid, signal.SIGTERM)
+            with contextlib.suppress(ProcessLookupError):
+                os.kill(event.pid, signal.SIGTERM)
 
     assert runner.run(eid, on_progress=crash) is ExperimentStatus.partial
     runs = {r.id: r for r in store.list_runs(eid)}

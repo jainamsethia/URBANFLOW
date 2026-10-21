@@ -158,7 +158,12 @@ class ExperimentRunner:
                     try:
                         outcome = f.result()
                     except BrokenProcessPool:
-                        left = [run, *futures.values()]
+                        left = [run]
+                        for g, other in futures.items():  # keep results that did arrive
+                            if g.done() and not g.cancelled() and g.exception() is None:
+                                self._finish(other, g.result())
+                            else:
+                                left.append(other)
                         time.sleep(POLL_S)  # late "started" messages
                         self._drain(progress, started)
                         if isolated:

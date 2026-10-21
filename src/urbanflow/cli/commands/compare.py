@@ -70,11 +70,11 @@ def _print_table(result: dict[str, Any], console: Any) -> None:
     base = result["baseline"]
     others = [c for c in result["controllers"] if c != base]
     table = Table(title=f"{result['scenario']}: {len(result['seeds'])} seed(s), baseline {base}")
-    table.add_column("Metric")
+    table.add_column("Metric", overflow="fold")  # wrap, never an ellipsis (legacy consoles)
     for c in result["controllers"]:
-        table.add_column(c, justify="right")
+        table.add_column(c, justify="right", overflow="fold")
     for c in others:
-        table.add_column(f"{c} vs {base}", justify="right")
+        table.add_column(f"{c} vs {base}", justify="right", overflow="fold")
     for row in result["metrics"]:
         cells = [_fmt(**row["by_controller"][c]) for c in result["controllers"]]
         for c in others:
