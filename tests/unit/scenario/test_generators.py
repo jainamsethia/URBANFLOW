@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from hypothesis import HealthCheck, given, settings
+from hypothesis import HealthCheck, example, given, settings
 from hypothesis import strategies as st
 from pydantic import BaseModel, ValidationError
 
@@ -253,9 +253,26 @@ params_strategy = st.fixed_dictionaries(
 
 @settings(max_examples=30, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(params_strategy)
+@example(  # found by hypothesis: demand just above a slow one-lane entry's capacity (W501)
+    {
+        "arms": 3,
+        "lanes": 1,
+        "arm_length": 60.0,
+        "speed_limit": 5.0,
+        "kind": "signalized",
+        "template": "auto",
+        "green": 5,
+        "yellow": 0,
+        "demand_rate": 1089.0,
+        "arrival": "uniform",
+        "turn_ratios": {"far": 0.0, "straight": 1.0, "near": 0.0},
+    }
+)
 def test_parameter_ranges_always_validate(params: dict[str, Any]) -> None:
     scenario = generate("single_intersection", params)
     errors = [i for i in scenario.issues if i.severity == "error"]
     assert errors == []
     warnings = {i.code for i in scenario.issues}
-    assert warnings <= {"W303"}  # yellow = 0 is allowed but warned about
+    # yellow = 0 is allowed but warned about (W303); demand above an entry's capacity (one
+    # slow lane carries ~1090 veh/h at 5 m/s, below the 1200 veh/h the ranges allow) is W501
+    assert warnings <= {"W303", "W501"}
