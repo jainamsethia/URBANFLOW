@@ -45,6 +45,9 @@ export function brain(name: string): Brain {
   return BRAINS[name] ?? { icon: "🤖", title: name.replaceAll("_", " "), blurb: "A custom controller." };
 }
 
+/** Whether ``name`` is a strategy with a plain-language description. */
+export const isBrain = (name: string) => name in BRAINS;
+
 /** Controllers a child can pick (external is for programs, not people). */
 export function brainChoices(available: string[]): string[] {
   return Object.keys(BRAINS).filter((b) => b !== "external" && available.includes(b));

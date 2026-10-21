@@ -6,7 +6,8 @@ seed gives identical demand for every controller (common random numbers) and pai
 differences are valid.
 
 :func:`compare_experiment` builds the same table from a stored experiment's completed
-runs (variants instead of controllers), pairing over the seeds both variants completed.
+runs (variants instead of controllers), pairing over the seeds both variants completed;
+:func:`timeseries_overlay` averages one column of their timeseries tables over the seeds.
 """
 
 from __future__ import annotations
@@ -15,11 +16,12 @@ import math
 from collections.abc import Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from multiprocessing import get_context
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from urbanflow.metrics.manager import METRIC_DIRECTIONS
+from urbanflow.metrics.manager import GLOBAL_COLUMNS, METRIC_DIRECTIONS
 from urbanflow.metrics.stats import mean_ci, paired_diff
 
 if TYPE_CHECKING:
@@ -34,6 +36,7 @@ __all__ = [
     "comparison_csv",
     "run_comparison",
     "summary_table",
+    "timeseries_overlay",
 ]
 
 DEFAULT_METRICS: Final = (
@@ -45,6 +48,8 @@ DEFAULT_METRICS: Final = (
     "queue.mean_total_veh",
     "vehicles.arrived",
 )
+TIMESERIES_COLUMNS: Final = tuple(c for c in GLOBAL_COLUMNS if c not in ("time", "window_s"))
+"""Columns :func:`timeseries_overlay` accepts."""
 
 
 class CompareRequest(BaseModel):
@@ -167,6 +172,59 @@ def compare_experiment(
         "missing": [f"{r.variant}/s{r.seed}" for r in runs if r.status is not RunStatus.completed],
         "metrics": summary_table(by, variants, seeds, list(metrics or DEFAULT_METRICS), base),
     }
+
+
+def timeseries_overlay(
+    store: ExperimentStore,
+    experiment_id: str,
+    column: str = "active",
+    *,
+    max_points: int = 400,
+) -> dict[str, Any]:
+    """Mean and 95 % CI over seeds of one ``timeseries`` column, per variant, from the
+    completed runs' tables (JSON-ready; NaN as None).
+
+    The runs of a variant sample at the same times, so rows align by index; a variant is
+    cut to its shortest run and thinned to at most ``max_points`` samples."""
+    import numpy as np
+
+    from urbanflow.core.errors import ConfigError
+    from urbanflow.experiments.spec import RunStatus
+    from urbanflow.metrics.export import read_table
+
+    if column not in TIMESERIES_COLUMNS:
+        raise ConfigError(f'unknown column "{column}" (one of: {", ".join(TIMESERIES_COLUMNS)})')
+    rec = store.get_experiment(experiment_id)
+    done = store.list_runs(experiment_id, status=[RunStatus.completed])
+    series = []
+    for variant in (v.name for v in rec.spec.variants):
+        files = [_timeseries_file(Path(r.artifacts_dir)) for r in done if r.variant == variant]
+        tables = [read_table(f) for f in files if f is not None]
+        n = min((len(t["time"]) for t in tables), default=0)
+        if n == 0:
+            continue
+        rows = np.arange(0, n, max(1, -(-n // max_points)))
+        values = np.stack([t[column][:n][rows] for t in tables])
+        stats = [mean_ci(values[:, j].tolist()) for j in range(rows.size)]
+        series.append(
+            {
+                "variant": variant,
+                "runs": len(tables),
+                "time": [float(x) for x in tables[0]["time"][rows]],
+                "mean": [_clean(s[0]) for s in stats],
+                "lo": [_clean(s[2]) for s in stats],
+                "hi": [_clean(s[3]) for s in stats],
+            }
+        )
+    return {"experiment": experiment_id, "column": column, "series": series}
+
+
+def _timeseries_file(run_dir: Path) -> Path | None:
+    for ext in ("csv", "parquet", "json"):
+        path = run_dir / "tables" / f"timeseries.{ext}"
+        if path.is_file():
+            return path
+    return None
 
 
 def comparison_csv(report: Mapping[str, Any]) -> str:

@@ -41,7 +41,8 @@ replays and a web workbench.
 - **Experiments**: experiment files (variants x seeds: controllers, config, demand scale),
   run in parallel worker processes with crash isolation, resume and cancel, stored in
   SQLite (or PostgreSQL) with per-run artifacts; `urbanflow experiment run|list|show|compare|export`,
-  or over the server's REST API (queued, one experiment at a time).
+  over the server's REST API (queued, one experiment at a time), or in the workbench's
+  experiment pages (progress, results with 95 % ranges, traffic over time, recorded runs).
 - **RL**: `TrafficSignalEnv` (Gymnasium) and `TrafficSignalParallelEnv` (PettingZoo), with
   action masks, several rewards, and random / fixed-cycle / max-pressure / tabular-Q
   baselines.
@@ -55,7 +56,7 @@ replays and a web workbench.
   and keyboard shortcuts.
 - **Snapshots** (save/restore any state) and **state digests** for bit-exact reproducibility.
 
-Not built yet (planned): experiment dashboards in the workbench and the benchmark suite.
+Not built yet (planned): the benchmark suite.
 
 ## Quick start with Docker (no Python or Node needed)
 

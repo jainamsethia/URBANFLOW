@@ -15,6 +15,7 @@ Endpoints (under ``/api/v1``):
 * ``POST /experiments/{id}/run`` ``{"resume": true}`` (202; 409 while active),
   ``POST /experiments/{id}/cancel`` (202; 409 unless active)
 * ``GET /experiments/{id}/compare`` (``baseline``, ``metric``...),
+  ``GET /experiments/{id}/timeseries`` (``column``): mean and 95 % CI over seeds per variant,
   ``GET /experiments/{id}/export?what=runs|comparison&format=csv|json``
 * ``GET /runs?experiment_id=...``, ``GET /runs/{run_id}``,
   ``GET /runs/{run_id}/artifacts``, ``GET /runs/{run_id}/artifacts/{name}``: files are
@@ -39,7 +40,7 @@ from pydantic import BaseModel, ConfigDict
 
 from urbanflow.core.errors import ConfigError
 from urbanflow.core.settings import AppSettings
-from urbanflow.experiments.compare import compare_experiment, comparison_csv
+from urbanflow.experiments.compare import compare_experiment, comparison_csv, timeseries_overlay
 from urbanflow.experiments.runner import ExperimentRunner
 from urbanflow.experiments.spec import (
     ExperimentStatus,
@@ -198,6 +199,8 @@ def _run(r: RunRecord, *, full: bool = False) -> dict[str, Any]:
         "progress": r.progress,
         "wall_time_s": r.wall_time_s,
         "error": r.error,
+        "replay": r.status is RunStatus.completed
+        and (Path(r.artifacts_dir) / "replay.ufr").is_file(),
     }
     if full:
         out["summary"] = r.summary
@@ -317,6 +320,14 @@ def register_experiments(app: FastAPI, api: str, provider: Callable[[], Experime
         return compare_experiment(
             _store(), experiment_id, metrics=metric or None, baseline=baseline
         )
+
+    @app.get(f"{api}/experiments/{{experiment_id}}/timeseries")
+    def timeseries(
+        experiment_id: str,
+        column: Annotated[str, Query(max_length=64)] = "active",
+        max_points: Annotated[int, Query(ge=10, le=2000)] = 400,
+    ) -> dict[str, Any]:
+        return timeseries_overlay(_store(), experiment_id, column, max_points=max_points)
 
     @app.get(f"{api}/experiments/{{experiment_id}}/export")
     def export(

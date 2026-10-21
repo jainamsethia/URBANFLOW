@@ -562,7 +562,7 @@ function RaceResult({ result }: { result: CompareResult }) {
   );
 }
 
-const LABELS: Record<string, string> = {
+export const LABELS: Record<string, string> = {
   "travel_time.mean": "Mean travel time (s)",
   "delay.mean": "Mean delay (s)",
   "waiting_time_mean": "Mean waiting time (s)",
@@ -572,7 +572,7 @@ const LABELS: Record<string, string> = {
   "vehicles.arrived": "Vehicles arrived",
 };
 
-function CompareTable({ result }: { result: CompareResult }) {
+export function CompareTable({ result }: { result: CompareResult }) {
   return (
     <div className={`${card} space-y-3`}>
       <p className="text-xs text-slate-500">

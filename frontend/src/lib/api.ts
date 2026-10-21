@@ -76,6 +76,58 @@ export interface CompareResult {
   }[];
 }
 
+export type CompareRow = CompareResult["metrics"][number];
+
+export interface ExperimentSummary {
+  id: string;
+  name: string;
+  description: string;
+  status: string;
+  scenario: string | null;
+  variants: string[];
+  seeds: number[];
+  baseline: string;
+  progress: Record<string, number> & { total: number };
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export interface ExperimentRun {
+  id: string;
+  variant: string;
+  seed: number;
+  status: string;
+  progress: number;
+  wall_time_s: number | null;
+  error: string | null;
+  replay: boolean;
+}
+
+export interface ExperimentDoc extends ExperimentSummary {
+  spec: { base_config: Record<string, unknown>; record_replay: boolean | string; [k: string]: unknown };
+  runs: ExperimentRun[];
+}
+
+export interface ExperimentComparison {
+  name: string;
+  variants: string[];
+  baseline: string;
+  seeds: number[];
+  status: string;
+  missing: string[];
+  metrics: CompareRow[];
+}
+
+export interface ExperimentSeries {
+  variant: string;
+  runs: number;
+  time: number[];
+  mean: (number | null)[];
+  lo: (number | null)[];
+  hi: (number | null)[];
+}
+
 const API = "/api/v1";
 
 // A protected server prints a link ending in #token=...; keep the token in a same-site
@@ -138,6 +190,17 @@ export const api = {
   importScenario: (body: Record<string, unknown>) =>
     call<ImportResult>("/scenarios/import", { method: "POST", body: JSON.stringify(body) }),
   deleteScenario: (name: string) => call<void>(`/scenarios/${encodeURIComponent(name)}`, { method: "DELETE" }),
+  experiments: () => call<{ items: ExperimentSummary[]; total: number }>("/experiments?limit=200"),
+  experiment: (id: string) => call<ExperimentDoc>(`/experiments/${id}`),
+  createExperiment: (spec: Record<string, unknown>, run: boolean) =>
+    call<ExperimentDoc>("/experiments", { method: "POST", body: JSON.stringify({ spec, run }) }),
+  runExperiment: (id: string) => call<ExperimentDoc>(`/experiments/${id}/run`, { method: "POST", body: JSON.stringify({ resume: true }) }),
+  cancelExperiment: (id: string) => call<ExperimentDoc>(`/experiments/${id}/cancel`, { method: "POST" }),
+  deleteExperiment: (id: string) => call<void>(`/experiments/${id}?purge=true`, { method: "DELETE" }),
+  experimentCompare: (id: string, baseline: string) =>
+    call<ExperimentComparison>(`/experiments/${id}/compare?baseline=${encodeURIComponent(baseline)}`),
+  experimentTimeseries: (id: string, column: string) =>
+    call<{ column: string; series: ExperimentSeries[] }>(`/experiments/${id}/timeseries?column=${column}`),
 };
 
 export interface OpsResult {
@@ -166,6 +229,7 @@ export const downloads = {
   sessionScenario: (sessionId: string) => `${API}/sessions/${sessionId}/scenario`,
   scenario: (source: string, name: string) => `${API}/scenarios/${source}/${encodeURIComponent(name)}`,
   replay: (name: string) => `${API}/replays/${encodeURIComponent(name)}/file`,
+  experiment: (id: string, what: "runs" | "comparison", format: "csv" | "json") => `${API}/experiments/${id}/export?what=${what}&format=${format}`,
 };
 
 export function wsUrl(sessionId: string): string {

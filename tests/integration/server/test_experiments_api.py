@@ -68,6 +68,16 @@ def test_experiment_lifecycle(client: TestClient) -> None:
     report = client.get(f"{API}/experiments/{eid}/compare", params={"metric": "delay.mean"}).json()
     assert [m["metric"] for m in report["metrics"]] == ["delay.mean"]
     assert report["metrics"][0]["vs_baseline"]["mp"]["n_pairs"] == 2
+    ts = client.get(f"{API}/experiments/{eid}/timeseries", params={"column": "active"}).json()
+    assert [s["variant"] for s in ts["series"]] == ["fixed", "mp"]
+    fixed = ts["series"][0]
+    assert fixed["runs"] == 2 and len(fixed["time"]) == len(fixed["mean"]) > 1
+    assert all(
+        lo is None or lo <= m <= hi
+        for lo, m, hi in zip(fixed["lo"], fixed["mean"], fixed["hi"], strict=True)
+    )
+    bad = client.get(f"{API}/experiments/{eid}/timeseries", params={"column": "time"})
+    assert bad.status_code == 422
     csv_text = client.get(f"{API}/experiments/{eid}/export").text
     assert csv_text.startswith("run_id,variant,seed,status") and len(csv_text.splitlines()) == 5
     cmp = client.get(f"{API}/experiments/{eid}/export", params={"what": "comparison"})

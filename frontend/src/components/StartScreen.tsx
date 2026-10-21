@@ -42,6 +42,7 @@ export function StartScreen({
   onScenariosChanged,
   onHelp,
   onEdit,
+  onExperiments,
 }: {
   meta: Meta;
   scenarios: ScenarioRef[];
@@ -50,6 +51,7 @@ export function StartScreen({
   onHelp: () => void;
   /** Open the editor on a map (``null``: a new, empty map). */
   onEdit: (map: ScenarioRef | null) => void;
+  onExperiments: () => void;
 }) {
   const bundled = TOWN_ORDER.flatMap((n) => scenarios.filter((s) => s.source === "bundled" && s.name === n));
   const otherBundled = scenarios.filter((s) => s.source === "bundled" && !TOWN_ORDER.includes(s.name));
@@ -127,6 +129,7 @@ export function StartScreen({
         <Logo />
         <div className="flex items-center gap-3">
           <p className="hidden text-sm text-slate-600 md:block">Pick a map, start the traffic, and see how signal timing changes everyone's trip.</p>
+          <button onClick={onExperiments} className={pill(false)} title="Test strategies many times and compare the results">🧪 Experiments</button>
           <button onClick={onHelp} className={pill(false)}>❓ Help</button>
         </div>
       </header>

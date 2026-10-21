@@ -111,6 +111,31 @@ The server binds to 127.0.0.1 by default. `urbanflow serve --host 0.0.0.0` share
 your network behind an access token: open the printed `#token=...` link, or paste the
 token when the workbench asks for it. See `urbanflow serve` in [Command line](cli.md). API reference: `http://127.0.0.1:8000/api/v1/docs`.
 
+## Experiments
+
+*🧪 Experiments* on the start screen keeps [experiments](python-api.md#experiments) in the
+workspace: each traffic-light strategy runs several times on the same map, every repeat
+with different random traffic (the same traffic for every strategy, so the comparison is
+paired), in parallel worker processes.
+
+- **New experiment**: a map (bundled or your own), the strategies to test (the first is
+  the reference the others are compared with), the amount of traffic, the simulated time,
+  the number of repeats, and whether to record the first repeat of each strategy.
+- **The list** shows every experiment with its status and progress; it keeps running while
+  you watch a simulation or draw a map.
+- **An experiment**: live progress (how much of the work is done), *Stop*, *Run the
+  unfinished* (completed runs are kept), *Delete* (with its result files).
+- **Results**: for each measure (trip time, time lost, time standing still, stops, cars
+  arriving per hour, queues) a bar per strategy with its 95 % range, and a sentence saying
+  which did best and whether the difference held across the repeats (a paired 95 %
+  interval that excludes zero) or may be luck. *Compare against* changes the reference;
+  *Show all the numbers* lists every measure with the paired differences.
+- **Over time**: cars driving, standing still, average speed, queues and cars waiting to
+  enter, averaged over the repeats with a shaded 95 % band.
+- **Every simulation**: each run's status, how long it took, its error if it failed, and
+  *▶ Watch* for recorded runs (the replay viewer; closing it returns to the experiment).
+- **Downloads**: the comparison and every run's results as CSV or JSON.
+
 ## Experiments over the API
 
 The server runs [experiments](python-api.md#experiments) for scripts and dashboards. They
@@ -126,6 +151,7 @@ poll for progress. Every endpoint is under `/api/v1`:
 | `POST /experiments/{id}/cancel` | drop it from the queue, or stop it: running workers stop at their next check |
 | `DELETE /experiments/{id}?purge=false` | remove it (and with `purge` its run directories); 409 while active |
 | `GET /experiments/{id}/compare?baseline=&metric=` | means, 95 % CIs and paired differences of the completed runs |
+| `GET /experiments/{id}/timeseries?column=active&max_points=400` | per variant, the mean and 95 % CI over seeds of one `timeseries` column (`active`, `halting`, `speed_mean`, `queue_mean`, `backlog`, ...) |
 | `GET /experiments/{id}/export?what=runs\|comparison&format=csv\|json` | a download |
 | `GET /runs?experiment_id=`, `GET /runs/{run_id}` | runs, one run with its summary, config and policy |
 | `GET /runs/{run_id}/artifacts`, `GET /runs/{run_id}/artifacts/{name}` | the run directory's files (`summary.json`, `tables/trips.csv`, `replay.ufr`, ...); only listed names are served |

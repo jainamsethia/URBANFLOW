@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { BLANK_MAP, Editor, type Draft } from "./components/Editor";
+import { ExperimentsPage } from "./components/Experiments";
 import { Help } from "./components/Help";
 import { MapCanvas, type Pick, type VehicleColoring } from "./components/MapCanvas";
 import { EventLog, MoodCard, RacePanel, SelectionCard, StatTiles, TechnicalDetails, fmt } from "./components/Panels";
@@ -85,6 +86,8 @@ export default function App() {
   const [help, setHelp] = useState(false);
   const [fatal, setFatal] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ draft: Draft; name: string } | null>(null);
+  // The experiments page: undefined = not shown, null = the list, else an experiment id.
+  const [experiments, setExperiments] = useState<string | null | undefined>(undefined);
   const snap = useSnapshot(ctl);
 
   const refreshScenarios = useCallback(() => api.scenarios().then(setScenarios), []);
@@ -184,17 +187,30 @@ export default function App() {
       .then((doc) => setEditing({ draft: doc as unknown as Draft, name: map.source === "workspace" ? map.name : `${map.name}-copy` }))
       .catch((e) => setFatal(String(e)));
   };
+  if (!session && experiments !== undefined)
+    return (
+      <ExperimentsPage
+        meta={meta}
+        scenarios={scenarios}
+        open={experiments}
+        onOpen={setExperiments}
+        onBack={() => setExperiments(undefined)}
+        onWatch={async (runId, label) => setSession(await api.createSession({ replay: runId, label }))}
+      />
+    );
   if (!session)
     return (
       <>
-        <StartScreen meta={meta} scenarios={scenarios} onCreated={setSession} onScenariosChanged={refreshScenarios} onHelp={() => setHelp(true)} onEdit={openEditor} />
+        <StartScreen meta={meta} scenarios={scenarios} onCreated={setSession} onScenariosChanged={refreshScenarios} onHelp={() => setHelp(true)} onEdit={openEditor} onExperiments={() => setExperiments(null)} />
         {helpPanel}
       </>
     );
 
-  const t = scenarios.some((s) => s.source === "workspace" && s.name === session.scenario)
-    ? { icon: "🗺️", title: session.scenario }
-    : town(session.scenario || session.label);
+  const t = isReplay && session.label
+    ? { icon: "⏺", title: session.label.replace(/^replay: /, "") }
+    : scenarios.some((s) => s.source === "workspace" && s.name === session.scenario)
+      ? { icon: "🗺️", title: session.scenario }
+      : town(session.scenario || session.label);
   const [stateText, stateClass] = STATE_PILL[status?.state ?? ""] ?? ["Connecting…", "bg-slate-100 text-slate-700"];
   const selection = snap?.selection && selected.kind !== "none" ? snap.selection : null;
   const recording = Boolean(status?.recording);

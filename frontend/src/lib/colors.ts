@@ -26,6 +26,10 @@ export function speedColor(ratio: number): string {
   return `hsl(${Math.round(r * 130)}, 80%, 55%)`;
 }
 
+/** Experiment variants, in spec order (validated categorical slots, fixed order; a
+ * variant keeps its colour whatever is filtered or sorted). Past eight, charts fold. */
+export const SERIES_COLOR = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"];
+
 /** Vehicle colours by class (validated categorical slots; the legend names each). */
 export const VCLASS_COLOR: Record<string, string> = {
   car: "#2a78d6",
