@@ -1,0 +1,18 @@
+{
+  "format": "urbanflow.experiment",
+  "version": "1.0",
+  "name": "grid-controllers",
+  "description": "Fixed-time, actuated, max-pressure and Webster signals on the 4x4 grid, 5 seeds.",
+  "scenario": {"bundled": "grid_4x4"},
+  "base_config": {"duration": 1800},
+  "variants": [
+    {"name": "fixed-time"},
+    {"name": "actuated", "policy": {"kind": "controller", "controller": "actuated"}},
+    {"name": "max-pressure", "policy": {"kind": "controller", "controller": "max_pressure"}},
+    {"name": "webster", "policy": {"kind": "controller", "controller": "webster"}},
+    {"name": "max-pressure-heavy", "demand_scale": 1.5,
+     "policy": {"kind": "controller", "controller": "max_pressure"}}
+  ],
+  "baseline": "fixed-time",
+  "seeds": {"start": 0, "count": 5}
+}

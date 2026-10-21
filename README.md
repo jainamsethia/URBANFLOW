@@ -38,6 +38,9 @@ replays and a web workbench.
 - **Replay**: compact `.ufr` recordings with seek, step back and rewind.
 - **Controller comparison**: controllers x seeds on identical demand (common random
   numbers), 95 % confidence intervals and paired differences.
+- **Experiments**: experiment files (variants x seeds: controllers, config, demand scale),
+  run in parallel worker processes with crash isolation, resume and cancel, stored in
+  SQLite (or PostgreSQL) with per-run artifacts; `urbanflow experiment run|list|show|compare|export`.
 - **RL**: `TrafficSignalEnv` (Gymnasium) and `TrafficSignalParallelEnv` (PettingZoo), with
   action masks, several rewards, and random / fixed-cycle / max-pressure / tabular-Q
   baselines.
@@ -48,8 +51,8 @@ replays and a web workbench.
   and keyboard shortcuts.
 - **Snapshots** (save/restore any state) and **state digests** for bit-exact reproducibility.
 
-Not built yet (planned): the visual scenario editor, the experiment database/dashboards
-and the benchmark suite.
+Not built yet (planned): the visual scenario editor, experiment dashboards in the
+workbench and the benchmark suite.
 
 ## Quick start with Docker (no Python or Node needed)
 

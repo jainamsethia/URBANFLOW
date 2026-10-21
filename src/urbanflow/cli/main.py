@@ -152,6 +152,7 @@ def _register_commands() -> None:
     from urbanflow.cli.commands import (
         compare,
         doctor,
+        experiment,
         generate,
         import_,
         init,
@@ -162,7 +163,19 @@ def _register_commands() -> None:
         validate,
     )
 
-    for module in (init, validate, generate, import_, schema, run, replay, compare, serve, doctor):
+    for module in (
+        init,
+        validate,
+        generate,
+        import_,
+        schema,
+        run,
+        replay,
+        compare,
+        experiment,
+        serve,
+        doctor,
+    ):
         module.register(app)
 
 

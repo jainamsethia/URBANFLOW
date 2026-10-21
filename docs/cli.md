@@ -223,6 +223,34 @@ to every controller.
 uv run urbanflow compare grid_3x3 -c fixed_time -c actuated -c max_pressure --seeds 3 --duration 1800
 ```
 
+### `urbanflow experiment run SPEC`
+
+Run an experiment file (below) in parallel worker processes: every variant on every seed,
+seed by seed, each run in its own spawned process. Runs are stored in the workspace
+database (`.urbanflow/urbanflow.db`, or `URBANFLOW_DATABASE_URL`) and written to
+`runs/<experiment>-<variant>-s<seed>/` (`spec.json`, `scenario.json`, `env.json`, the metric
+tables under `tables/`, an optional `replay.ufr`, `result.json` and, last, `summary.json`; a
+failed run has `error.txt`). A run that fails, or whose worker process dies, does not stop
+the others. At the end the comparison table is printed. Options: `--workers N`,
+`--dry-run` (validate and list the runs), `--resume` (continue the latest experiment with
+the same spec, skipping its completed runs; Ctrl+C prints the command).
+
+```bash
+uv run urbanflow experiment run examples/experiment_comparison/controllers.json --workers 6
+```
+
+### `urbanflow experiment list|show|compare|export`
+
+- `list [--limit N] [--status S] [--json]`: experiments, most recent first, with runs done.
+- `show ID [--json]`: one experiment and its runs (status, wall time, error). `ID` may be
+  a unique prefix of the id or the experiment's name (the most recent one).
+- `compare ID [-m METRIC ...] [--baseline VARIANT] [--format table|csv|json]`: mean and
+  95 % CI per variant and the paired difference against the baseline over the seeds both
+  completed (`*` marks differences whose 95 % CI excludes 0); runs that did not complete
+  are listed as missing.
+- `export ID [-o DIR] [--format csv|json]`: `<name>-<id>-runs.<fmt>` (one row per run with
+  every summary metric) and `<name>-<id>-comparison.<fmt>`.
+
 ## Workbench
 
 ### `urbanflow serve`

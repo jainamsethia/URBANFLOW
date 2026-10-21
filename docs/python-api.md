@@ -317,6 +317,87 @@ distinguishable) and `state_digest` (the engine state digest at the end of the r
 `to_dict()` is JSON-ready (NaN becomes null);
 `save(directory)` / `load(directory)` round-trip losslessly.
 
+## Experiments
+
+An experiment file describes variants of one scenario and the seeds they all run on:
+
+```json
+{
+  "format": "urbanflow.experiment",
+  "version": "1.0",
+  "name": "grid-controllers",
+  "scenario": {"bundled": "grid_4x4"},
+  "base_config": {"duration": 1800},
+  "variants": [
+    {"name": "fixed-time"},
+    {"name": "max-pressure", "policy": {"kind": "controller", "controller": "max_pressure"}},
+    {"name": "heavy", "demand_scale": 1.5, "config": {"lane_changing": false}}
+  ],
+  "baseline": "fixed-time",
+  "seeds": {"start": 0, "count": 5}
+}
+```
+
+| field | meaning |
+|---|---|
+| `name` | lower-case slug (also of every variant): it names the runs and their directories |
+| `scenario` | exactly one of `bundled`, `path` (relative to the workspace, which it may not leave) or `generator` with `params`; `demand_scale` multiplies every flow |
+| `base_config` | simulation config overrides for every variant (`duration`, `dt`, `router`, ...) |
+| `variants[]` | `name`, `config` (overrides over `base_config`), optional own `scenario`, `demand_scale`, and `policy`: `{"kind": "scenario"}` (the scenario's signals) or `{"kind": "controller", "controller": NAME, "params": {...}, "intersections": [...]}` |
+| `baseline` | the variant others are compared against (default: the first) |
+| `seeds` | a list, or `{"start", "count"}` (default 3 seeds from 0) |
+| `record_replay` | `true`, `"first_seed"` or `false` |
+| `export_format` | `csv` or `parquet` per-run metric tables |
+| `max_workers`, `run_timeout_s` | parallelism; wall-time limit per run |
+
+Every variant runs on the same seeds and demand is drawn per flow at spawn, so a seed gives
+every variant identical demand and the differences are paired. Runs are expanded seed by
+seed (a partial experiment stays balanced) and identified by a content key (scenario,
+config, policy, seed, urbanflow version).
+
+```python
+import tempfile
+from pathlib import Path
+
+from urbanflow.experiments.compare import compare_experiment
+from urbanflow.experiments.runner import ExperimentRunner
+from urbanflow.experiments.spec import parse_experiment
+from urbanflow.experiments.store import ExperimentStore
+
+spec = parse_experiment(
+    {
+        "name": "demo",
+        "scenario": {"bundled": "single_intersection"},
+        "base_config": {"duration": 60},
+        "variants": [
+            {"name": "fixed"},
+            {"name": "mp", "policy": {"kind": "controller", "controller": "max_pressure"}},
+        ],
+        "seeds": [0, 1],
+    }
+)
+workspace = Path(tempfile.mkdtemp())
+store = ExperimentStore.open(f"sqlite:///{(workspace / 'uf.db').as_posix()}")
+runner = ExperimentRunner(workspace, store, max_workers=2)
+experiment_id = runner.submit(spec)  # validates every config, stores the runs
+status = runner.run(experiment_id)  # blocks; on_progress=callback for events
+assert status.value == "completed"
+report = compare_experiment(store, experiment_id)
+travel = next(r for r in report["metrics"] if r["metric"] == "travel_time.mean")
+print(travel["vs_baseline"]["mp"])  # delta, delta_pct, ci95, n_pairs, significant
+store.close()
+```
+
+`ExperimentRunner.run(id, on_progress=..., resume=True)` executes the runs that have not
+completed, each in a fresh spawned process (`max_tasks_per_child=1`); `cancel()` (from
+another thread) stops running workers at their next check and never starts the pending
+runs. A run that raises is marked failed with `error.txt`; when a worker process dies the
+pool breaks for every run in flight, so the runs that had started are re-run one at a time
+and only the one that kills its worker again is marked failed. `ExperimentStore` keeps
+experiments and runs in SQLite (WAL, safe to read while another process runs) or
+PostgreSQL; `list_experiments`, `find_experiment` (id prefix or name), `list_runs`,
+`delete_experiment` return plain records.
+
 ## Errors
 
 | error | when |

@@ -5,14 +5,14 @@ Every variant runs on the same seeds; demand is drawn at spawn from per-flow str
 seed gives identical demand for every controller (common random numbers) and paired
 differences are valid.
 
-ponytail: an in-memory batch (no experiment store/DB, no resume); the plan's experiment
-runner adds persistence and cancellation.
+:func:`compare_experiment` builds the same table from a stored experiment's completed
+runs (variants instead of controllers), pairing over the seeds both variants completed.
 """
 
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from multiprocessing import get_context
 from typing import TYPE_CHECKING, Any, Final
@@ -23,9 +23,18 @@ from urbanflow.metrics.manager import METRIC_DIRECTIONS
 from urbanflow.metrics.stats import mean_ci, paired_diff
 
 if TYPE_CHECKING:
+    from urbanflow.experiments.store import ExperimentStore
     from urbanflow.scenario.scenario import Scenario
 
-__all__ = ["DEFAULT_METRICS", "CompareRequest", "compare_controllers", "run_comparison"]
+__all__ = [
+    "DEFAULT_METRICS",
+    "CompareRequest",
+    "compare_controllers",
+    "compare_experiment",
+    "comparison_csv",
+    "run_comparison",
+    "summary_table",
+]
 
 DEFAULT_METRICS: Final = (
     "travel_time.mean",
@@ -79,6 +88,111 @@ def _run_one(job: tuple[str, str, int, float | None]) -> dict[str, Any]:
     }
 
 
+def summary_table(
+    by: Mapping[tuple[str, int], Mapping[str, float | None]],
+    names: Sequence[str],
+    seeds: Sequence[int],
+    metrics: Sequence[str],
+    baseline: str,
+) -> list[dict[str, Any]]:
+    """Per metric: mean, std and 95 % CI of every arm over ``seeds`` (``by[(arm, seed)]`` is
+    a run's summary; missing runs and values count as NaN and are skipped) and the paired
+    difference of every other arm against ``baseline`` over the seeds both have."""
+    table = []
+    for metric in metrics:
+        values = {c: [_value(by.get((c, s)), metric) for s in seeds] for c in names}
+        row: dict[str, Any] = {
+            "metric": metric,
+            "direction": METRIC_DIRECTIONS.get(metric),
+            "by_controller": {},
+            "vs_baseline": {},
+        }
+        for c, vals in values.items():
+            mean, std, lo, hi = mean_ci(vals)
+            row["by_controller"][c] = {
+                "mean": _clean(mean),
+                "std": _clean(std),
+                "ci95": [_clean(lo), _clean(hi)],
+                "values": [_clean(v) for v in vals],
+            }
+            if c == baseline:
+                continue
+            d, dlo, dhi, n = paired_diff(vals, values[baseline])
+            base_mean = mean_ci(values[baseline])[0]
+            row["vs_baseline"][c] = {
+                "delta": _clean(d),
+                "delta_pct": _clean(100.0 * d / base_mean) if base_mean else None,
+                "ci95": [_clean(dlo), _clean(dhi)],
+                "n_pairs": n,
+                "significant": bool(
+                    math.isfinite(dlo) and math.isfinite(dhi) and (dlo > 0 or dhi < 0)
+                ),
+            }
+        table.append(row)
+    return table
+
+
+def _value(summary: Mapping[str, float | None] | None, metric: str) -> float:
+    value = None if summary is None else summary.get(metric)
+    return math.nan if value is None else float(value)
+
+
+def compare_experiment(
+    store: ExperimentStore,
+    experiment_id: str,
+    *,
+    metrics: Sequence[str] | None = None,
+    baseline: str | None = None,
+) -> dict[str, Any]:
+    """The comparison table of a stored experiment's completed runs (JSON-ready);
+    ``missing`` lists the (variant, seed) runs that did not complete."""
+    from urbanflow.core.errors import ConfigError
+    from urbanflow.experiments.spec import RunStatus
+
+    rec = store.get_experiment(experiment_id)
+    variants = [v.name for v in rec.spec.variants]
+    base = baseline or rec.spec.baseline_name
+    if base not in variants:
+        raise ConfigError(f'baseline "{base}" is not a variant ({", ".join(variants)})')
+    seeds = rec.spec.seed_list()
+    runs = store.list_runs(experiment_id)
+    by = {(r.variant, r.seed): r.summary or {} for r in runs if r.status is RunStatus.completed}
+    return {
+        "experiment": experiment_id,
+        "name": rec.spec.name,
+        "variants": variants,
+        "baseline": base,
+        "seeds": seeds,
+        "status": rec.status.value,
+        "missing": [f"{r.variant}/s{r.seed}" for r in runs if r.status is not RunStatus.completed],
+        "metrics": summary_table(by, variants, seeds, list(metrics or DEFAULT_METRICS), base),
+    }
+
+
+def comparison_csv(report: Mapping[str, Any]) -> str:
+    """One row per (metric, variant): mean, CI and the paired difference to the baseline."""
+    import csv
+    import io
+
+    buf = io.StringIO()
+    w = csv.writer(buf, lineterminator="\n")
+    w.writerow(
+        ["metric", "variant", "mean", "ci95_lo", "ci95_hi", "delta", "delta_pct",
+         "delta_ci95_lo", "delta_ci95_hi", "n_pairs", "significant"]
+    )  # fmt: skip
+    for row in report["metrics"]:
+        for name, stats in row["by_controller"].items():
+            d = row["vs_baseline"].get(name)
+            paired = (
+                [d["delta"], d["delta_pct"], *d["ci95"], d["n_pairs"], d["significant"]]
+                if d
+                else [""] * 6
+            )
+            cells = [row["metric"], name, stats["mean"], *stats["ci95"], *paired]
+            w.writerow(["" if c is None else c for c in cells])
+    return buf.getvalue()
+
+
 def _clean(value: float) -> float | None:
     return value if math.isfinite(value) else None
 
@@ -125,39 +239,7 @@ def compare_controllers(
             runs = list(pool.map(_run_one, jobs))
     by = {(r["controller"], r["seed"]): r["summary"] for r in runs}
     base = controllers[0]
-    table = []
-    for metric in metrics:
-        values = {
-            c: [float(by[(c, s)].get(metric, math.nan)) for s in seed_list] for c in controllers
-        }
-        row: dict[str, Any] = {
-            "metric": metric,
-            "direction": METRIC_DIRECTIONS.get(metric),
-            "by_controller": {},
-            "vs_baseline": {},
-        }
-        for c, vals in values.items():
-            mean, std, lo, hi = mean_ci(vals)
-            row["by_controller"][c] = {
-                "mean": _clean(mean),
-                "std": _clean(std),
-                "ci95": [_clean(lo), _clean(hi)],
-                "values": [_clean(v) for v in vals],
-            }
-            if c == base:
-                continue
-            d, dlo, dhi, n = paired_diff(vals, values[base])
-            base_mean = mean_ci(values[base])[0]
-            row["vs_baseline"][c] = {
-                "delta": _clean(d),
-                "delta_pct": _clean(100.0 * d / base_mean) if base_mean else None,
-                "ci95": [_clean(dlo), _clean(dhi)],
-                "n_pairs": n,
-                "significant": bool(
-                    math.isfinite(dlo) and math.isfinite(dhi) and (dlo > 0 or dhi < 0)
-                ),
-            }
-        table.append(row)
+    table = summary_table(by, controllers, seed_list, metrics, base)
     return {
         "scenario": name or scenario.name,
         "controllers": list(controllers),
