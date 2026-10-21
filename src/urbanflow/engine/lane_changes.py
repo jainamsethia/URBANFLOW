@@ -27,6 +27,10 @@ with bias ``EMERGENCY_YIELD_BIAS`` and politeness 0, still only into a lane that
 route and with every safety check; and no discretionary change ends within that distance
 ahead of an emergency vehicle on the target lane.
 
+**Transit buses** (``stops``) use only the lanes their next stop asks for: the stop lane
+on the stop's road (urgency measured to the stop), the lanes feeding it on the road
+before. Off them the change toward them is mandatory; on them the bus stays.
+
 Accepted changes run sequentially in (mandatory first, incentive desc, uid) order, each
 re-validated against vehicles already moved into the same lane this step. A change is
 instantaneous for the longitudinal model; ``lat_offset`` decays for rendering only. There
@@ -48,6 +52,7 @@ from urbanflow.vehicles.car_following import CarFollowingInputs, desired_speed, 
 
 if TYPE_CHECKING:
     from urbanflow.engine.leaders import Leaders
+    from urbanflow.engine.transit import StopTargets
     from urbanflow.network.compiled import CompiledNetwork
     from urbanflow.routing.base import RouteTable
     from urbanflow.vehicles.car_following import CarFollowingModel
@@ -96,8 +101,10 @@ def lane_change_step(
     step: int,
     time: float,
     rng: np.random.Generator,
+    stops: StopTargets | None = None,
 ) -> LaneChanges:
-    """Evaluate and execute lane changes for ``run`` (see the module docstring)."""
+    """Evaluate and execute lane changes for ``run`` (see the module docstring);
+    ``stops`` are the transit stops the buses of ``run`` head for."""
     none = LaneChanges(np.zeros(0, dtype=np.intp), np.zeros(0, dtype=np.intp))
     n_lanes = net.n_lanes
     link = veh.link[run].astype(np.intp)
@@ -110,6 +117,12 @@ def lane_change_step(
     cursor = veh.route_cursor[run].astype(np.intp)
     last = cursor + 1 >= routes.lengths[veh.route_id[run]]
     mandatory = on_lane & (veh.next_conn[run] < 0) & ~last
+    to_stop = np.zeros(run.size, dtype=bool)
+    if stops is not None:  # buses: only the lanes their next stop asks for
+        to_stop = on_lane & (stops.mask > 0)
+        lane_k = net.link_lane_index[np.minimum(link, n_lanes - 1)].astype(np.int64)
+        mandatory = np.where(to_stop, (stops.mask >> lane_k) & 1 == 0, mandatory)
+        d = np.where(to_stop & ~np.isnan(stops.dist), stops.dist, d)
     emergency = types.vclass[veh.type_idx[run]] == VehicleClass.emergency.code
     # emergency vehicles on lanes, by key = link * K + pos
     ev_keys = np.sort(link[on_lane & emergency] * C.LC_SORT_KEY_SCALE + pos[on_lane & emergency])
@@ -174,6 +187,8 @@ def lane_change_step(
     ev_c = emergency[ci]
     lane_index = net.link_lane_index[l_c].astype(np.int64)
     valid = veh.valid_mask[h_c].astype(np.int64)
+    if stops is not None:
+        valid = np.where(to_stop[ci], stops.mask[ci], valid)
 
     # current situation of the candidates (from the step-4 leaders)
     v0_c = veh.v0[h_c]
@@ -365,6 +380,7 @@ def zipper_swaps(
     *,
     step: int,
     time: float,
+    pinned: BoolArray | None = None,
 ) -> LaneChanges:
     """Resolve lane-end swap deadlocks: two (nearly) stopped vehicles side by side near the
     end of adjacent lanes, each needing the other's lane for its next road, trade places.
@@ -372,7 +388,7 @@ def zipper_swaps(
     Each takes the other's position, so the leaders are unchanged; the swap is skipped
     unless the vehicle behind each new spot has room for the (possibly longer) newcomer.
     Without it, mandatory changes there wait for a gap that never comes (the watchdog then
-    teleports them).
+    teleports them). ``pinned`` vehicles (buses heading for their stop) never swap.
     """
     none = LaneChanges(np.zeros(0, dtype=np.intp), np.zeros(0, dtype=np.intp))
     n_lanes = net.n_lanes
@@ -391,6 +407,8 @@ def zipper_swaps(
         & (d <= C.ZIPPER_LANE_END_DISTANCE)
         & (veh.dwell_left[run] <= 0)
     )
+    if pinned is not None:
+        stuck &= ~pinned
     cand = run[stuck]
     if cand.size < 2:
         return none

@@ -278,6 +278,12 @@ ISSUE_CODES: Final[Mapping[str, IssueTemplate]] = MappingProxyType(
             "never end",
             "Q",
         ),
+        "E508": IssueTemplate(
+            _E,
+            'transit line has a "headway" but no "end" and simulation.duration is null; the '
+            "run would never end",
+            "Q",
+        ),
         "W501": IssueTemplate(
             _W,
             '{rate} veh/h exceeds the entry capacity of road "{road}" (~{cap:.0f} veh/h); '
@@ -1142,12 +1148,22 @@ def _flow_config_issues(
 def demand_config_issues(
     demand: DemandSpec, dt: float, duration: float | None
 ) -> list[ValidationIssue]:
-    """The config-dependent flow rules E506 and E507 for the run's final ``dt`` and
-    ``duration`` (the deep check re-runs them after Python/CLI overrides)."""
+    """The config-dependent demand rules E506, E507 and E508 for the run's final ``dt``
+    and ``duration`` (the deep check re-runs them after Python/CLI overrides)."""
     return [
         i
         for k, flow in enumerate(demand.flows)
         for i in _flow_config_issues(("demand", "flows", k), flow, dt, duration)
+    ] + _transit_config_issues(demand, duration)
+
+
+def _transit_config_issues(demand: DemandSpec, duration: float | None) -> list[ValidationIssue]:
+    if duration is not None:
+        return []
+    return [
+        issue("E508", ("demand", "transit", k))
+        for k, line in enumerate(demand.transit)
+        if line.headway is not None and line.end is None
     ]
 
 
@@ -1233,6 +1249,7 @@ def _start(item: TripSpec | TransitLineSpec) -> tuple[float, Loc]:
 
 def check_transit(ctx: CheckContext) -> Iterator[ValidationIssue]:
     res, topo = ctx.final(), ctx.index
+    yield from _transit_config_issues(res.demand, res.simulation.duration)
     d = _demand_lookups(ctx)
     connections: dict[tuple[str, str], set[int]] = {}
     for ix in res.network.intersections:

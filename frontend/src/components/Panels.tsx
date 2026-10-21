@@ -130,6 +130,12 @@ export function SelectionCard({
   );
 }
 
+/** "bus_fwd.2" -> "number 3" (stop ids are "{line}.{k}" unless the scenario names them). */
+function busStopNumber(id: string): string {
+  const k = Number(id.split(".").pop());
+  return Number.isInteger(k) ? `number ${k + 1}` : `"${id}"`;
+}
+
 function CarCard({ selection, geometry }: { selection: Selection; geometry: Geometry }) {
   const d = selection.detail ?? {};
   const kind = VEHICLE[String(d.vclass)] ?? VEHICLE.car!;
@@ -155,6 +161,15 @@ function CarCard({ selection, geometry }: { selection: Selection; geometry: Geom
           🚨 Traffic lights turn green for it, and cars move over to let it pass.
         </p>
       )}
+      {Number(d.dwell_left) > 0 ? (
+        <p className="mb-2 rounded-lg bg-amber-50 p-2 text-sm text-amber-900">
+          🚏 Stopped at a bus stop so people can get on and off. It leaves in {seconds(d.dwell_left)}.
+        </p>
+      ) : d.next_stop ? (
+        <p className="mb-2 rounded-lg bg-amber-50 p-2 text-sm text-amber-900">
+          🚏 On its way to bus stop {busStopNumber(String(d.next_stop))}.
+        </p>
+      ) : null}
       <dl className="space-y-1.5">
         {rows.map(([icon, k, v]) => (
           <div key={k} className="flex items-baseline justify-between gap-2 text-sm">

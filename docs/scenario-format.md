@@ -201,6 +201,7 @@ Stage B codes come from the builder.
 | E505 | error | Q (post-derive) | `lane {k} does not exist on road "{road}" ({n} lanes)` / `lane {k} of road "{road}" has no connection to the next road "{next}" of the route` |
 | E506 | error | Q (post-derive) | `binomial arrivals allow at most one vehicle per step: {rate} veh/h > {max:.0f} veh/h at dt={dt} s (use "poisson" or split the flow)` |
 | E507 | error | Q (post-derive) | `flow has neither "end" nor "count" but simulation.duration is null; the run would never end` |
+| E508 | error | Q (post-derive) | `transit line has a "headway" but no "end" and simulation.duration is null; the run would never end` |
 | E601 | error | Q (post-derive) | `stop road "{road}" is not on the line's route` |
 | E602 | error | Q (post-derive) | `stops must follow route order: stop {k} is before stop {k1} along the route` |
 | E604 | error | Q (post-derive) | `lane {k} does not exist on road "{road}" ({n} lanes)` |
@@ -294,6 +295,9 @@ Custom generators register with `@register_generator("name", params=Params)`.
 | `corridor` | an arterial with side streets and green-wave offsets | `corridor` |
 | `emergency` | a base scenario plus emergency trips, signals wrapped in `preemption` | `emergency` |
 | `rush_hour` | a base scenario's demand shaped into a directional peak | `rush_hour` |
+| `transit` | a base scenario plus bus lines with far-side stops | `transit` |
+| `downtown` | avenues and one-way streets, signalised and priority junctions | `downtown` |
+| `high_density` | a signalised grid loaded close to saturation | `high_density` |
 
 `rush_hour` splits every flow of its base (`base="corridor"`, `base_params={}`) into
 constant-rate slices `"{flow}:{k}"` of `slice` seconds (300) over `duration` (7200 s). Slice
@@ -323,6 +327,33 @@ s = generate(
 )
 assert s.resolved.demand.flows[0].id.endswith(":0")
 ```
+
+`transit` keeps its base's traffic (`base="corridor"`) and adds line `bus_fwd` along the
+longest boundary-to-boundary route (among equally long ones the one with the fewest turns:
+a turn leaves the bus away from the curb) and, with `bidirectional`, `bus_rev` the other way.
+Each road of a line that starts at a junction gets a far-side stop `stop_position` (30 m)
+after it, on the curb lane, if the road leaves at least 50 m from the stop to its stop line;
+buses run every `headway` (300 s) and dwell `dwell` (20 s). How buses serve their stops is
+described in the [vehicle model](vehicle-model.md#buses-and-stops).
+
+`downtown` lays junctions `r{r}c{c}` on a `rows` x `cols` (6 x 8) grid `block` (120 m) apart.
+Every `avenue_every`-th (3rd) row and column is a two-way avenue with `avenue_lanes` (3)
+lanes per direction at 60 km/h; the others are one-lane streets at 40 km/h, one-way in
+alternating directions. Avenue junctions are signalised (`controller`, `template`), street
+x street junctions are priority junctions. Its `od_rate` (2000 veh/h in total) goes to
+origin/destination flows `"{entry}>{destination}"` from every boundary entry to the exits on
+other sides and, for `core_share` (30 %) of it, to the streets of the centre, weighted by
+lanes(origin) x lanes(destination) and sampled with `seed` down to `max_od_pairs` (200). The
+default demand is measured, not guessed: at 2000 veh/h the bundled map runs an hour with no
+backlog and no teleports (mean trip 141 s); at 3000 and 4000 veh/h the fixed-time lights
+gridlock around the busiest avenue junction (28 and 81 watchdog teleports), while
+`max_pressure` still clears 3000 veh/h. Protected left turns (`template="protected_left"`)
+make it worse: the longer cycles cost more green than they save.
+
+`high_density` takes the `grid` parameters and sets every entry to
+`saturation` x 1800 x lanes x g / C veh/h (v/c 0.95 by default: 1508 veh/h per two-lane
+entry with 30 s greens), with `deadlock_timeout` in the scenario. It is a stress test: the
+interior approaches also carry the crossing traffic, so queues grow at the entries.
 
 ## Importing OpenStreetMap
 

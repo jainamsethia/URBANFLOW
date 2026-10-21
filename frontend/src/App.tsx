@@ -14,7 +14,7 @@ function useSnapshot(ctl: SessionController | null): Snapshot | null {
 
 const VEHICLE_COLORS: Record<string, string> = { car: "#2a78d6", bus: "#eda100", truck: "#4a3aa7", emergency: "#e34948" };
 
-function Legend() {
+function Legend({ busStops }: { busStops: boolean }) {
   const swatch = (color: string) => <span className="inline-block h-2.5 w-4 rounded-sm ring-1 ring-white" style={{ background: color }} />;
   return (
     <div className="pointer-events-none absolute bottom-3 left-3 flex flex-wrap gap-x-3 gap-y-1 rounded-xl bg-white/90 px-3 py-2 text-xs text-slate-700 shadow">
@@ -27,6 +27,7 @@ function Legend() {
           {swatch(VEHICLE_COLORS[k]!)} {VEHICLE[k]!.name}
         </span>
       ))}
+      {busStops && <span>🚏 Bus stop</span>}
     </div>
   );
 }
@@ -250,7 +251,7 @@ export default function App() {
               <span className="ml-1 text-slate-400">✕</span>
             </button>
           )}
-          {geometry && <Legend />}
+          {geometry && <Legend busStops={(geometry.bus_stops?.id.length ?? 0) > 0} />}
         </section>
 
         <aside className="flex w-full flex-col border-t border-slate-200 bg-slate-100 md:w-96 md:border-l md:border-t-0">

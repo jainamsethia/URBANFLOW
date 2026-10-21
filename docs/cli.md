@@ -199,8 +199,8 @@ Run saved: runs/20260929T110843-single-intersection-s7-0b3c
 ```
 
 Exit codes: 3 invalid scenario (including the deep checks), 4 bad option or config value
-(or a non-empty `--out`), 5 missing scenario or config file, 6 a feature not available
-yet (transit lines), 7 invariant violation, 130 interrupted.
+(or a non-empty `--out`), 5 missing scenario or config file, 6 a simulation error (a
+feature not available, such as `accel="numba"`), 7 invariant violation, 130 interrupted.
 
 ### `urbanflow replay FILE`
 

@@ -17,6 +17,7 @@ Every simulation carries a metrics manager (`sim.metrics`) that updates after ea
 | `throughput_vph` | arrivals per hour |
 | `space_mean_speed`, `vkt`, `vht` | VKT / VHT, vehicle-kilometres, vehicle-hours |
 | `queue.mean_total_veh`, `queue.max_lane_veh` | time-mean network queue; worst lane queue |
+| `transit.stops_served`, `transit.stops_missed` | bus stops where a bus dwelt; stops a bus passed without stopping ([buses](vehicle-model.md#buses-and-stops)) |
 
 Trips departing before `metrics.warmup` and samples before it are left out of the summary
 (counts stay totals). A vehicle halts when its speed is below `halting_speed` (0.1 m/s).

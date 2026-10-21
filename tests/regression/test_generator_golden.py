@@ -29,6 +29,9 @@ GOLDEN = [
         {"arms": 3},
         "fb0ac9593c9ca78df7bcba17d950e7d9fa60553ef1f68846f86c70469b88d23d",
     ),
+    ("transit", {}, "5ad7ebddb95683035cc5eb7ad97d3f5ba31276796554762ff973461d44280302"),
+    ("high_density", {}, "5ea2eb1f64afbfa6bc99388809750dce9199fa5f4f97a7cfeb3acbe8aa88ace7"),
+    ("downtown", {}, "153ebc41bdd07f1cc1eb731251d941bfa755e48ae58e9c7e58a733d62602f63d"),
 ]
 
 

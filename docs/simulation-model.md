@@ -20,8 +20,10 @@ the order in which vehicles are stored never changes the result. Time is always
 | 9 | bookkeeping | halting, waiting times, stops, distance, free-flow time; the watchdog (below); arrived vehicles are freed | `vehicle_stopped`, `vehicle_resumed`, `vehicle_teleported` |
 | 10 | finish | `step_count += 1`; invariant checks | – |
 
-Sub-step 5 (lane changes) arrives with lane changing. Until then the engine refuses
-scenarios with transit lines with an error naming them.
+Sub-step 5 (lane changes) runs when lane changing is on. Transit buses use the lanes their
+next stop needs in sub-step 5, see the stop as an obstacle in sub-steps 6-7 and do not move
+while they dwell; dwell timers, dwell starts and missed stops are updated after sub-step 8
+([buses and stops](vehicle-model.md#buses-and-stops)).
 
 Every event of a step carries `step = step_count` after the step. Spawn, insertion and
 command events are stamped with the step's start time; link crossings and arrivals with

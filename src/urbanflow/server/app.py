@@ -408,13 +408,16 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
 
     @app.get(f"{API}/sessions/{{sid}}/geometry")
     def geometry(sid: str) -> Response:
+        from urbanflow.engine.transit import TransitStops
         from urbanflow.server.session import ReplaySession
         from urbanflow.visualization import render_geometry
 
         s = _session(sid)
         if isinstance(s, ReplaySession):
             return Response(s.reader.geometry_json(), media_type="application/json")
-        body = render_geometry(s.sim.network.compiled).model_dump_json()
+        net = s.sim.network.compiled
+        stops = TransitStops.build(net, s.sim.scenario.resolved.demand)
+        body = render_geometry(net, stops).model_dump_json()
         return Response(body, media_type="application/json")
 
     @app.get(f"{API}/sessions/{{sid}}/summary")

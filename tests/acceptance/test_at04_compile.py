@@ -24,6 +24,9 @@ GOLDEN: dict[str, tuple[int, int, list[int]]] = {
     "grid_3x3": (96, 144, [324, 72, 72]),  # 9 junctions x the single-junction counts
     "grid_4x4": (160, 256, [576, 128, 128]),
     "single_intersection": (16, 16, [36, 8, 8]),
+    "transit": (44, 70, [120, 50, 50]),  # the corridor network
+    "high_density": (96, 144, [324, 72, 72]),  # the grid_3x3 network
+    "downtown": (305, 350, [314, 150, 106]),  # 6x8 avenues and one-way streets
 }
 
 

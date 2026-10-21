@@ -146,6 +146,11 @@ class VehicleView:
     stops: int
     distance: float
     speed_override: float | None
+    next_stop: str | None = None
+    """Transit buses: the id of the next stop to serve (None for other vehicles, or once
+    every stop is served or missed)."""
+    dwell_left: float = 0.0
+    """Transit buses: seconds left at the stop they dwell at (0 when not dwelling)."""
 
 
 def _status(status: VehicleStatus | str) -> VehicleStatus:
@@ -260,6 +265,8 @@ class VehicleCollection:
             stops=int(veh.stops[h]),
             distance=float(veh.distance[h]),
             speed_override=override_or_none,
+            next_stop=eng.transit.ids[int(veh.stop_idx[h])] if veh.stop_idx[h] >= 0 else None,
+            dwell_left=float(veh.dwell_left[h]),
         )
 
     def __getitem__(self, vehicle_id: str) -> VehicleView:

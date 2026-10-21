@@ -37,6 +37,8 @@ SUMMARY_KEYS = {
     "vehicles.backlog",
     "vehicles.removed",
     "vehicles.teleported",
+    "transit.stops_served",
+    "transit.stops_missed",
     "travel_time.mean",
     "travel_time.median",
     "travel_time.p95",

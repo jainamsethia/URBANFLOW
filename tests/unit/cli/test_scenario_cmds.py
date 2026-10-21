@@ -86,7 +86,8 @@ def test_init_uses_the_global_workspace(tmp_path: Path, workspace: Path) -> None
         (
             ["init", "--template", "gird"],
             5,
-            "available: corridor, emergency, grid_3x3, grid_4x4, rush_hour, single_intersection",
+            "available: corridor, downtown, emergency, grid_3x3, grid_4x4, high_density, "
+            "rush_hour, single_intersection, transit",
         ),
         (["init", "--name", "../evil"], 4, "--name must be a plain file name"),
     ],

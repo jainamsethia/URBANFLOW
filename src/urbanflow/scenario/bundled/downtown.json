@@ -1,0 +1,3692 @@
+{
+  "format": "urbanflow.scenario",
+  "version": "1.0",
+  "meta": {
+    "name": "downtown_6x8",
+    "description": "6x8 city centre: avenues every 3 blocks, one-way streets, signalised avenue junctions and priority street junctions.",
+    "generator": {
+      "name": "downtown",
+      "params": {
+        "rows": 6,
+        "cols": 8,
+        "block": 120.0,
+        "avenue_every": 3,
+        "avenue_lanes": 3,
+        "avenue_speed": 16.67,
+        "street_lanes": 1,
+        "street_speed": 11.11,
+        "one_way_streets": true,
+        "controller": "fixed_time",
+        "template": "auto",
+        "od_rate": 2000.0,
+        "core_share": 0.3,
+        "max_od_pairs": 200,
+        "arrival": "poisson",
+        "duration": 3600.0,
+        "seed": 0
+      },
+      "urbanflow_version": "0.1.0"
+    }
+  },
+  "simulation": {
+    "duration": 3600.0
+  },
+  "network": {
+    "drive_side": "right",
+    "lane_width": 3.2,
+    "speed_limit": 13.89,
+    "intersections": [
+      {
+        "id": "r0c0",
+        "point": [
+          0.0,
+          0.0
+        ],
+        "kind": "priority"
+      },
+      {
+        "id": "r0c1",
+        "point": [
+          120.0,
+          0.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          }
+        }
+      },
+      {
+        "id": "r0c2",
+        "point": [
+          240.0,
+          0.0
+        ],
+        "kind": "priority"
+      },
+      {
+        "id": "r0c3",
+        "point": [
+          360.0,
+          0.0
+        ],
+        "kind": "priority"
+      },
+      {
+        "id": "r0c4",
+        "point": [
+          480.0,
+          0.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          }
+        }
+      },
+      {
+        "id": "r0c5",
+        "point": [
+          600.0,
+          0.0
+        ],
+        "kind": "priority"
+      },
+      {
+        "id": "r0c6",
+        "point": [
+          720.0,
+          0.0
+        ],
+        "kind": "priority"
+      },
+      {
+        "id": "r0c7",
+        "point": [
+          840.0,
+          0.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          }
+        }
+      },
+      {
+        "id": "r1c0",
+        "point": [
+          0.0,
+          120.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          }
+        }
+      },
+      {
+        "id": "r1c1",
+        "point": [
+          120.0,
+          120.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          }
+        }
+      },
+      {
+        "id": "r1c2",
+        "point": [
+          240.0,
+          120.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          }
+        }
+      },
+      {
+        "id": "r1c3",
+        "point": [
+          360.0,
+          120.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          }
+        }
+      },
+      {
+        "id": "r1c4",
+        "point": [
+          480.0,
+          120.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          }
+        }
+      },
+      {
+        "id": "r1c5",
+        "point": [
+          600.0,
+          120.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          }
+        }
+      },
+      {
+        "id": "r1c6",
+        "point": [
+          720.0,
+          120.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          }
+        }
+      },
+      {
+        "id": "r1c7",
+        "point": [
+          840.0,
+          120.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          }
+        }
+      },
+      {
+        "id": "r2c0",
+        "point": [
+          0.0,
+          240.0
+        ],
+        "kind": "priority"
+      },
+      {
+        "id": "r2c1",
+        "point": [
+          120.0,
+          240.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          }
+        }
+      },
+      {
+        "id": "r2c2",
+        "point": [
+          240.0,
+          240.0
+        ],
+        "kind": "priority"
+      },
+      {
+        "id": "r2c3",
+        "point": [
+          360.0,
+          240.0
+        ],
+        "kind": "priority"
+      },
+      {
+        "id": "r2c4",
+        "point": [
+          480.0,
+          240.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          }
+        }
+      },
+      {
+        "id": "r2c5",
+        "point": [
+          600.0,
+          240.0
+        ],
+        "kind": "priority"
+      },
+      {
+        "id": "r2c6",
+        "point": [
+          720.0,
+          240.0
+        ],
+        "kind": "priority"
+      },
+      {
+        "id": "r2c7",
+        "point": [
+          840.0,
+          240.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          }
+        }
+      },
+      {
+        "id": "r3c0",
+        "point": [
+          0.0,
+          360.0
+        ],
+        "kind": "priority"
+      },
+      {
+        "id": "r3c1",
+        "point": [
+          120.0,
+          360.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          }
+        }
+      },
+      {
+        "id": "r3c2",
+        "point": [
+          240.0,
+          360.0
+        ],
+        "kind": "priority"
+      },
+      {
+        "id": "r3c3",
+        "point": [
+          360.0,
+          360.0
+        ],
+        "kind": "priority"
+      },
+      {
+        "id": "r3c4",
+        "point": [
+          480.0,
+          360.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          }
+        }
+      },
+      {
+        "id": "r3c5",
+        "point": [
+          600.0,
+          360.0
+        ],
+        "kind": "priority"
+      },
+      {
+        "id": "r3c6",
+        "point": [
+          720.0,
+          360.0
+        ],
+        "kind": "priority"
+      },
+      {
+        "id": "r3c7",
+        "point": [
+          840.0,
+          360.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          }
+        }
+      },
+      {
+        "id": "r4c0",
+        "point": [
+          0.0,
+          480.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          }
+        }
+      },
+      {
+        "id": "r4c1",
+        "point": [
+          120.0,
+          480.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          }
+        }
+      },
+      {
+        "id": "r4c2",
+        "point": [
+          240.0,
+          480.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          }
+        }
+      },
+      {
+        "id": "r4c3",
+        "point": [
+          360.0,
+          480.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          }
+        }
+      },
+      {
+        "id": "r4c4",
+        "point": [
+          480.0,
+          480.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          }
+        }
+      },
+      {
+        "id": "r4c5",
+        "point": [
+          600.0,
+          480.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          }
+        }
+      },
+      {
+        "id": "r4c6",
+        "point": [
+          720.0,
+          480.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          }
+        }
+      },
+      {
+        "id": "r4c7",
+        "point": [
+          840.0,
+          480.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          }
+        }
+      },
+      {
+        "id": "r5c0",
+        "point": [
+          0.0,
+          600.0
+        ],
+        "kind": "priority"
+      },
+      {
+        "id": "r5c1",
+        "point": [
+          120.0,
+          600.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          }
+        }
+      },
+      {
+        "id": "r5c2",
+        "point": [
+          240.0,
+          600.0
+        ],
+        "kind": "priority"
+      },
+      {
+        "id": "r5c3",
+        "point": [
+          360.0,
+          600.0
+        ],
+        "kind": "priority"
+      },
+      {
+        "id": "r5c4",
+        "point": [
+          480.0,
+          600.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          }
+        }
+      },
+      {
+        "id": "r5c5",
+        "point": [
+          600.0,
+          600.0
+        ],
+        "kind": "priority"
+      },
+      {
+        "id": "r5c6",
+        "point": [
+          720.0,
+          600.0
+        ],
+        "kind": "priority"
+      },
+      {
+        "id": "r5c7",
+        "point": [
+          840.0,
+          600.0
+        ],
+        "kind": "signalized",
+        "signal": {
+          "controller": {
+            "type": "fixed_time"
+          }
+        }
+      },
+      {
+        "id": "bW0",
+        "point": [
+          -120.0,
+          0.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bE0",
+        "point": [
+          960.0,
+          0.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bW1",
+        "point": [
+          -120.0,
+          120.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bE1",
+        "point": [
+          960.0,
+          120.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bW2",
+        "point": [
+          -120.0,
+          240.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bE2",
+        "point": [
+          960.0,
+          240.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bW3",
+        "point": [
+          -120.0,
+          360.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bE3",
+        "point": [
+          960.0,
+          360.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bW4",
+        "point": [
+          -120.0,
+          480.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bE4",
+        "point": [
+          960.0,
+          480.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bW5",
+        "point": [
+          -120.0,
+          600.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bE5",
+        "point": [
+          960.0,
+          600.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bS0",
+        "point": [
+          0.0,
+          -120.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bN0",
+        "point": [
+          0.0,
+          720.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bS1",
+        "point": [
+          120.0,
+          -120.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bN1",
+        "point": [
+          120.0,
+          720.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bS2",
+        "point": [
+          240.0,
+          -120.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bN2",
+        "point": [
+          240.0,
+          720.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bS3",
+        "point": [
+          360.0,
+          -120.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bN3",
+        "point": [
+          360.0,
+          720.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bS4",
+        "point": [
+          480.0,
+          -120.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bN4",
+        "point": [
+          480.0,
+          720.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bS5",
+        "point": [
+          600.0,
+          -120.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bN5",
+        "point": [
+          600.0,
+          720.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bS6",
+        "point": [
+          720.0,
+          -120.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bN6",
+        "point": [
+          720.0,
+          720.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bS7",
+        "point": [
+          840.0,
+          -120.0
+        ],
+        "kind": "boundary"
+      },
+      {
+        "id": "bN7",
+        "point": [
+          840.0,
+          720.0
+        ],
+        "kind": "boundary"
+      }
+    ],
+    "roads": [
+      {
+        "id": "bW0_r0c0",
+        "from": "bW0",
+        "to": "r0c0",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r0c0_r0c1",
+        "from": "r0c0",
+        "to": "r0c1",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r0c1_r0c2",
+        "from": "r0c1",
+        "to": "r0c2",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r0c2_r0c3",
+        "from": "r0c2",
+        "to": "r0c3",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r0c3_r0c4",
+        "from": "r0c3",
+        "to": "r0c4",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r0c4_r0c5",
+        "from": "r0c4",
+        "to": "r0c5",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r0c5_r0c6",
+        "from": "r0c5",
+        "to": "r0c6",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r0c6_r0c7",
+        "from": "r0c6",
+        "to": "r0c7",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r0c7_bE0",
+        "from": "r0c7",
+        "to": "bE0",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "bW1_r1c0",
+        "from": "bW1",
+        "to": "r1c0",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r1c0_bW1",
+        "from": "r1c0",
+        "to": "bW1",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r1c0_r1c1",
+        "from": "r1c0",
+        "to": "r1c1",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r1c1_r1c0",
+        "from": "r1c1",
+        "to": "r1c0",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r1c1_r1c2",
+        "from": "r1c1",
+        "to": "r1c2",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r1c2_r1c1",
+        "from": "r1c2",
+        "to": "r1c1",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r1c2_r1c3",
+        "from": "r1c2",
+        "to": "r1c3",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r1c3_r1c2",
+        "from": "r1c3",
+        "to": "r1c2",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r1c3_r1c4",
+        "from": "r1c3",
+        "to": "r1c4",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r1c4_r1c3",
+        "from": "r1c4",
+        "to": "r1c3",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r1c4_r1c5",
+        "from": "r1c4",
+        "to": "r1c5",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r1c5_r1c4",
+        "from": "r1c5",
+        "to": "r1c4",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r1c5_r1c6",
+        "from": "r1c5",
+        "to": "r1c6",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r1c6_r1c5",
+        "from": "r1c6",
+        "to": "r1c5",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r1c6_r1c7",
+        "from": "r1c6",
+        "to": "r1c7",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r1c7_r1c6",
+        "from": "r1c7",
+        "to": "r1c6",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r1c7_bE1",
+        "from": "r1c7",
+        "to": "bE1",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "bE1_r1c7",
+        "from": "bE1",
+        "to": "r1c7",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "bW2_r2c0",
+        "from": "bW2",
+        "to": "r2c0",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r2c0_r2c1",
+        "from": "r2c0",
+        "to": "r2c1",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r2c1_r2c2",
+        "from": "r2c1",
+        "to": "r2c2",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r2c2_r2c3",
+        "from": "r2c2",
+        "to": "r2c3",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r2c3_r2c4",
+        "from": "r2c3",
+        "to": "r2c4",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r2c4_r2c5",
+        "from": "r2c4",
+        "to": "r2c5",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r2c5_r2c6",
+        "from": "r2c5",
+        "to": "r2c6",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r2c6_r2c7",
+        "from": "r2c6",
+        "to": "r2c7",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r2c7_bE2",
+        "from": "r2c7",
+        "to": "bE2",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "bE3_r3c7",
+        "from": "bE3",
+        "to": "r3c7",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r3c7_r3c6",
+        "from": "r3c7",
+        "to": "r3c6",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r3c6_r3c5",
+        "from": "r3c6",
+        "to": "r3c5",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r3c5_r3c4",
+        "from": "r3c5",
+        "to": "r3c4",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r3c4_r3c3",
+        "from": "r3c4",
+        "to": "r3c3",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r3c3_r3c2",
+        "from": "r3c3",
+        "to": "r3c2",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r3c2_r3c1",
+        "from": "r3c2",
+        "to": "r3c1",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r3c1_r3c0",
+        "from": "r3c1",
+        "to": "r3c0",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r3c0_bW3",
+        "from": "r3c0",
+        "to": "bW3",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "bW4_r4c0",
+        "from": "bW4",
+        "to": "r4c0",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r4c0_bW4",
+        "from": "r4c0",
+        "to": "bW4",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r4c0_r4c1",
+        "from": "r4c0",
+        "to": "r4c1",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r4c1_r4c0",
+        "from": "r4c1",
+        "to": "r4c0",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r4c1_r4c2",
+        "from": "r4c1",
+        "to": "r4c2",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r4c2_r4c1",
+        "from": "r4c2",
+        "to": "r4c1",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r4c2_r4c3",
+        "from": "r4c2",
+        "to": "r4c3",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r4c3_r4c2",
+        "from": "r4c3",
+        "to": "r4c2",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r4c3_r4c4",
+        "from": "r4c3",
+        "to": "r4c4",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r4c4_r4c3",
+        "from": "r4c4",
+        "to": "r4c3",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r4c4_r4c5",
+        "from": "r4c4",
+        "to": "r4c5",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r4c5_r4c4",
+        "from": "r4c5",
+        "to": "r4c4",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r4c5_r4c6",
+        "from": "r4c5",
+        "to": "r4c6",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r4c6_r4c5",
+        "from": "r4c6",
+        "to": "r4c5",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r4c6_r4c7",
+        "from": "r4c6",
+        "to": "r4c7",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r4c7_r4c6",
+        "from": "r4c7",
+        "to": "r4c6",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r4c7_bE4",
+        "from": "r4c7",
+        "to": "bE4",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "bE4_r4c7",
+        "from": "bE4",
+        "to": "r4c7",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "bE5_r5c7",
+        "from": "bE5",
+        "to": "r5c7",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r5c7_r5c6",
+        "from": "r5c7",
+        "to": "r5c6",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r5c6_r5c5",
+        "from": "r5c6",
+        "to": "r5c5",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r5c5_r5c4",
+        "from": "r5c5",
+        "to": "r5c4",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r5c4_r5c3",
+        "from": "r5c4",
+        "to": "r5c3",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r5c3_r5c2",
+        "from": "r5c3",
+        "to": "r5c2",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r5c2_r5c1",
+        "from": "r5c2",
+        "to": "r5c1",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r5c1_r5c0",
+        "from": "r5c1",
+        "to": "r5c0",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r5c0_bW5",
+        "from": "r5c0",
+        "to": "bW5",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "bS0_r0c0",
+        "from": "bS0",
+        "to": "r0c0",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r0c0_r1c0",
+        "from": "r0c0",
+        "to": "r1c0",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r1c0_r2c0",
+        "from": "r1c0",
+        "to": "r2c0",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r2c0_r3c0",
+        "from": "r2c0",
+        "to": "r3c0",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r3c0_r4c0",
+        "from": "r3c0",
+        "to": "r4c0",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r4c0_r5c0",
+        "from": "r4c0",
+        "to": "r5c0",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r5c0_bN0",
+        "from": "r5c0",
+        "to": "bN0",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "bS1_r0c1",
+        "from": "bS1",
+        "to": "r0c1",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r0c1_bS1",
+        "from": "r0c1",
+        "to": "bS1",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r0c1_r1c1",
+        "from": "r0c1",
+        "to": "r1c1",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r1c1_r0c1",
+        "from": "r1c1",
+        "to": "r0c1",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r1c1_r2c1",
+        "from": "r1c1",
+        "to": "r2c1",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r2c1_r1c1",
+        "from": "r2c1",
+        "to": "r1c1",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r2c1_r3c1",
+        "from": "r2c1",
+        "to": "r3c1",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r3c1_r2c1",
+        "from": "r3c1",
+        "to": "r2c1",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r3c1_r4c1",
+        "from": "r3c1",
+        "to": "r4c1",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r4c1_r3c1",
+        "from": "r4c1",
+        "to": "r3c1",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r4c1_r5c1",
+        "from": "r4c1",
+        "to": "r5c1",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r5c1_r4c1",
+        "from": "r5c1",
+        "to": "r4c1",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r5c1_bN1",
+        "from": "r5c1",
+        "to": "bN1",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "bN1_r5c1",
+        "from": "bN1",
+        "to": "r5c1",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "bS2_r0c2",
+        "from": "bS2",
+        "to": "r0c2",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r0c2_r1c2",
+        "from": "r0c2",
+        "to": "r1c2",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r1c2_r2c2",
+        "from": "r1c2",
+        "to": "r2c2",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r2c2_r3c2",
+        "from": "r2c2",
+        "to": "r3c2",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r3c2_r4c2",
+        "from": "r3c2",
+        "to": "r4c2",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r4c2_r5c2",
+        "from": "r4c2",
+        "to": "r5c2",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r5c2_bN2",
+        "from": "r5c2",
+        "to": "bN2",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "bN3_r5c3",
+        "from": "bN3",
+        "to": "r5c3",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r5c3_r4c3",
+        "from": "r5c3",
+        "to": "r4c3",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r4c3_r3c3",
+        "from": "r4c3",
+        "to": "r3c3",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r3c3_r2c3",
+        "from": "r3c3",
+        "to": "r2c3",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r2c3_r1c3",
+        "from": "r2c3",
+        "to": "r1c3",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r1c3_r0c3",
+        "from": "r1c3",
+        "to": "r0c3",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r0c3_bS3",
+        "from": "r0c3",
+        "to": "bS3",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "bS4_r0c4",
+        "from": "bS4",
+        "to": "r0c4",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r0c4_bS4",
+        "from": "r0c4",
+        "to": "bS4",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r0c4_r1c4",
+        "from": "r0c4",
+        "to": "r1c4",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r1c4_r0c4",
+        "from": "r1c4",
+        "to": "r0c4",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r1c4_r2c4",
+        "from": "r1c4",
+        "to": "r2c4",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r2c4_r1c4",
+        "from": "r2c4",
+        "to": "r1c4",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r2c4_r3c4",
+        "from": "r2c4",
+        "to": "r3c4",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r3c4_r2c4",
+        "from": "r3c4",
+        "to": "r2c4",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r3c4_r4c4",
+        "from": "r3c4",
+        "to": "r4c4",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r4c4_r3c4",
+        "from": "r4c4",
+        "to": "r3c4",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r4c4_r5c4",
+        "from": "r4c4",
+        "to": "r5c4",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r5c4_r4c4",
+        "from": "r5c4",
+        "to": "r4c4",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r5c4_bN4",
+        "from": "r5c4",
+        "to": "bN4",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "bN4_r5c4",
+        "from": "bN4",
+        "to": "r5c4",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "bN5_r5c5",
+        "from": "bN5",
+        "to": "r5c5",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r5c5_r4c5",
+        "from": "r5c5",
+        "to": "r4c5",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r4c5_r3c5",
+        "from": "r4c5",
+        "to": "r3c5",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r3c5_r2c5",
+        "from": "r3c5",
+        "to": "r2c5",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r2c5_r1c5",
+        "from": "r2c5",
+        "to": "r1c5",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r1c5_r0c5",
+        "from": "r1c5",
+        "to": "r0c5",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r0c5_bS5",
+        "from": "r0c5",
+        "to": "bS5",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "bS6_r0c6",
+        "from": "bS6",
+        "to": "r0c6",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r0c6_r1c6",
+        "from": "r0c6",
+        "to": "r1c6",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r1c6_r2c6",
+        "from": "r1c6",
+        "to": "r2c6",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r2c6_r3c6",
+        "from": "r2c6",
+        "to": "r3c6",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r3c6_r4c6",
+        "from": "r3c6",
+        "to": "r4c6",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r4c6_r5c6",
+        "from": "r4c6",
+        "to": "r5c6",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "r5c6_bN6",
+        "from": "r5c6",
+        "to": "bN6",
+        "lanes": [
+          {}
+        ],
+        "speed_limit": 11.11
+      },
+      {
+        "id": "bS7_r0c7",
+        "from": "bS7",
+        "to": "r0c7",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r0c7_bS7",
+        "from": "r0c7",
+        "to": "bS7",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r0c7_r1c7",
+        "from": "r0c7",
+        "to": "r1c7",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r1c7_r0c7",
+        "from": "r1c7",
+        "to": "r0c7",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r1c7_r2c7",
+        "from": "r1c7",
+        "to": "r2c7",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r2c7_r1c7",
+        "from": "r2c7",
+        "to": "r1c7",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r2c7_r3c7",
+        "from": "r2c7",
+        "to": "r3c7",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r3c7_r2c7",
+        "from": "r3c7",
+        "to": "r2c7",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r3c7_r4c7",
+        "from": "r3c7",
+        "to": "r4c7",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r4c7_r3c7",
+        "from": "r4c7",
+        "to": "r3c7",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r4c7_r5c7",
+        "from": "r4c7",
+        "to": "r5c7",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r5c7_r4c7",
+        "from": "r5c7",
+        "to": "r4c7",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "r5c7_bN7",
+        "from": "r5c7",
+        "to": "bN7",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      },
+      {
+        "id": "bN7_r5c7",
+        "from": "bN7",
+        "to": "r5c7",
+        "lanes": [
+          {},
+          {},
+          {}
+        ],
+        "speed_limit": 16.67
+      }
+    ]
+  },
+  "demand": {
+    "flows": [
+      {
+        "id": "bE1_r1c7>r0c3_bS3",
+        "origin": "bE1_r1c7",
+        "destination": "r0c3_bS3",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE1_r1c7>r0c4_bS4",
+        "origin": "bE1_r1c7",
+        "destination": "r0c4_bS4",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE1_r1c7>r0c7_bS7",
+        "origin": "bE1_r1c7",
+        "destination": "r0c7_bS7",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE1_r1c7>r1c0_bW1",
+        "origin": "bE1_r1c7",
+        "destination": "r1c0_bW1",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE1_r1c7>r5c7_bN7",
+        "origin": "bE1_r1c7",
+        "destination": "r5c7_bN7",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE3_r3c7>r0c3_bS3",
+        "origin": "bE3_r3c7",
+        "destination": "r0c3_bS3",
+        "rate": 2.348993288590604,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE3_r3c7>r0c4_bS4",
+        "origin": "bE3_r3c7",
+        "destination": "r0c4_bS4",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE3_r3c7>r1c0_bW1",
+        "origin": "bE3_r3c7",
+        "destination": "r1c0_bW1",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE3_r3c7>r5c0_bN0",
+        "origin": "bE3_r3c7",
+        "destination": "r5c0_bN0",
+        "rate": 2.348993288590604,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE3_r3c7>r5c0_bW5",
+        "origin": "bE3_r3c7",
+        "destination": "r5c0_bW5",
+        "rate": 2.348993288590604,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE3_r3c7>r5c2_bN2",
+        "origin": "bE3_r3c7",
+        "destination": "r5c2_bN2",
+        "rate": 2.348993288590604,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE3_r3c7>r5c6_bN6",
+        "origin": "bE3_r3c7",
+        "destination": "r5c6_bN6",
+        "rate": 2.348993288590604,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE3_r3c7>r5c7_bN7",
+        "origin": "bE3_r3c7",
+        "destination": "r5c7_bN7",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE4_r4c7>r0c1_bS1",
+        "origin": "bE4_r4c7",
+        "destination": "r0c1_bS1",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE4_r4c7>r0c3_bS3",
+        "origin": "bE4_r4c7",
+        "destination": "r0c3_bS3",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE4_r4c7>r0c4_bS4",
+        "origin": "bE4_r4c7",
+        "destination": "r0c4_bS4",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE4_r4c7>r0c7_bS7",
+        "origin": "bE4_r4c7",
+        "destination": "r0c7_bS7",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE4_r4c7>r4c0_bW4",
+        "origin": "bE4_r4c7",
+        "destination": "r4c0_bW4",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE4_r4c7>r5c0_bN0",
+        "origin": "bE4_r4c7",
+        "destination": "r5c0_bN0",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE4_r4c7>r5c1_bN1",
+        "origin": "bE4_r4c7",
+        "destination": "r5c1_bN1",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE4_r4c7>r5c4_bN4",
+        "origin": "bE4_r4c7",
+        "destination": "r5c4_bN4",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE4_r4c7>r5c7_bN7",
+        "origin": "bE4_r4c7",
+        "destination": "r5c7_bN7",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE5_r5c7>r0c1_bS1",
+        "origin": "bE5_r5c7",
+        "destination": "r0c1_bS1",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE5_r5c7>r0c3_bS3",
+        "origin": "bE5_r5c7",
+        "destination": "r0c3_bS3",
+        "rate": 2.348993288590604,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE5_r5c7>r0c5_bS5",
+        "origin": "bE5_r5c7",
+        "destination": "r0c5_bS5",
+        "rate": 2.348993288590604,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE5_r5c7>r0c7_bS7",
+        "origin": "bE5_r5c7",
+        "destination": "r0c7_bS7",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE5_r5c7>r1c0_bW1",
+        "origin": "bE5_r5c7",
+        "destination": "r1c0_bW1",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE5_r5c7>r3c0_bW3",
+        "origin": "bE5_r5c7",
+        "destination": "r3c0_bW3",
+        "rate": 2.348993288590604,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE5_r5c7>r4c0_bW4",
+        "origin": "bE5_r5c7",
+        "destination": "r4c0_bW4",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE5_r5c7>r5c4_bN4",
+        "origin": "bE5_r5c7",
+        "destination": "r5c4_bN4",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE5_r5c7>r5c7_bN7",
+        "origin": "bE5_r5c7",
+        "destination": "r5c7_bN7",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN1_r5c1>r0c1_bS1",
+        "origin": "bN1_r5c1",
+        "destination": "r0c1_bS1",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN1_r5c1>r0c4_bS4",
+        "origin": "bN1_r5c1",
+        "destination": "r0c4_bS4",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN1_r5c1>r0c7_bE0",
+        "origin": "bN1_r5c1",
+        "destination": "r0c7_bE0",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN1_r5c1>r0c7_bS7",
+        "origin": "bN1_r5c1",
+        "destination": "r0c7_bS7",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN1_r5c1>r1c7_bE1",
+        "origin": "bN1_r5c1",
+        "destination": "r1c7_bE1",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN1_r5c1>r2c7_bE2",
+        "origin": "bN1_r5c1",
+        "destination": "r2c7_bE2",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN1_r5c1>r3c0_bW3",
+        "origin": "bN1_r5c1",
+        "destination": "r3c0_bW3",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN1_r5c1>r5c0_bW5",
+        "origin": "bN1_r5c1",
+        "destination": "r5c0_bW5",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN3_r5c3>r0c1_bS1",
+        "origin": "bN3_r5c3",
+        "destination": "r0c1_bS1",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN3_r5c3>r0c5_bS5",
+        "origin": "bN3_r5c3",
+        "destination": "r0c5_bS5",
+        "rate": 2.348993288590604,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN3_r5c3>r0c7_bE0",
+        "origin": "bN3_r5c3",
+        "destination": "r0c7_bE0",
+        "rate": 2.348993288590604,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN3_r5c3>r0c7_bS7",
+        "origin": "bN3_r5c3",
+        "destination": "r0c7_bS7",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN3_r5c3>r4c7_bE4",
+        "origin": "bN3_r5c3",
+        "destination": "r4c7_bE4",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN3_r5c3>r5c0_bW5",
+        "origin": "bN3_r5c3",
+        "destination": "r5c0_bW5",
+        "rate": 2.348993288590604,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN4_r5c4>r0c3_bS3",
+        "origin": "bN4_r5c4",
+        "destination": "r0c3_bS3",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN4_r5c4>r0c4_bS4",
+        "origin": "bN4_r5c4",
+        "destination": "r0c4_bS4",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN4_r5c4>r0c7_bS7",
+        "origin": "bN4_r5c4",
+        "destination": "r0c7_bS7",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN4_r5c4>r1c0_bW1",
+        "origin": "bN4_r5c4",
+        "destination": "r1c0_bW1",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN4_r5c4>r4c7_bE4",
+        "origin": "bN4_r5c4",
+        "destination": "r4c7_bE4",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN4_r5c4>r5c0_bW5",
+        "origin": "bN4_r5c4",
+        "destination": "r5c0_bW5",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN5_r5c5>r0c1_bS1",
+        "origin": "bN5_r5c5",
+        "destination": "r0c1_bS1",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN5_r5c5>r0c7_bS7",
+        "origin": "bN5_r5c5",
+        "destination": "r0c7_bS7",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN5_r5c5>r1c0_bW1",
+        "origin": "bN5_r5c5",
+        "destination": "r1c0_bW1",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN5_r5c5>r1c7_bE1",
+        "origin": "bN5_r5c5",
+        "destination": "r1c7_bE1",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN5_r5c5>r2c7_bE2",
+        "origin": "bN5_r5c5",
+        "destination": "r2c7_bE2",
+        "rate": 2.348993288590604,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN5_r5c5>r5c0_bW5",
+        "origin": "bN5_r5c5",
+        "destination": "r5c0_bW5",
+        "rate": 2.348993288590604,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN7_r5c7>r0c1_bS1",
+        "origin": "bN7_r5c7",
+        "destination": "r0c1_bS1",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN7_r5c7>r0c3_bS3",
+        "origin": "bN7_r5c7",
+        "destination": "r0c3_bS3",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN7_r5c7>r0c4_bS4",
+        "origin": "bN7_r5c7",
+        "destination": "r0c4_bS4",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN7_r5c7>r0c5_bS5",
+        "origin": "bN7_r5c7",
+        "destination": "r0c5_bS5",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN7_r5c7>r1c0_bW1",
+        "origin": "bN7_r5c7",
+        "destination": "r1c0_bW1",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN7_r5c7>r1c7_bE1",
+        "origin": "bN7_r5c7",
+        "destination": "r1c7_bE1",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN7_r5c7>r2c7_bE2",
+        "origin": "bN7_r5c7",
+        "destination": "r2c7_bE2",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN7_r5c7>r3c0_bW3",
+        "origin": "bN7_r5c7",
+        "destination": "r3c0_bW3",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN7_r5c7>r4c0_bW4",
+        "origin": "bN7_r5c7",
+        "destination": "r4c0_bW4",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN7_r5c7>r5c0_bW5",
+        "origin": "bN7_r5c7",
+        "destination": "r5c0_bW5",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS0_r0c0>r1c0_bW1",
+        "origin": "bS0_r0c0",
+        "destination": "r1c0_bW1",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS0_r0c0>r3c0_bW3",
+        "origin": "bS0_r0c0",
+        "destination": "r3c0_bW3",
+        "rate": 2.348993288590604,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS0_r0c0>r4c7_bE4",
+        "origin": "bS0_r0c0",
+        "destination": "r4c7_bE4",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS0_r0c0>r5c0_bN0",
+        "origin": "bS0_r0c0",
+        "destination": "r5c0_bN0",
+        "rate": 2.348993288590604,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS0_r0c0>r5c0_bW5",
+        "origin": "bS0_r0c0",
+        "destination": "r5c0_bW5",
+        "rate": 2.348993288590604,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS0_r0c0>r5c1_bN1",
+        "origin": "bS0_r0c0",
+        "destination": "r5c1_bN1",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS0_r0c0>r5c4_bN4",
+        "origin": "bS0_r0c0",
+        "destination": "r5c4_bN4",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS0_r0c0>r5c7_bN7",
+        "origin": "bS0_r0c0",
+        "destination": "r5c7_bN7",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS1_r0c1>r1c0_bW1",
+        "origin": "bS1_r0c1",
+        "destination": "r1c0_bW1",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS1_r0c1>r1c7_bE1",
+        "origin": "bS1_r0c1",
+        "destination": "r1c7_bE1",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS1_r0c1>r2c7_bE2",
+        "origin": "bS1_r0c1",
+        "destination": "r2c7_bE2",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS1_r0c1>r5c1_bN1",
+        "origin": "bS1_r0c1",
+        "destination": "r5c1_bN1",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS1_r0c1>r5c2_bN2",
+        "origin": "bS1_r0c1",
+        "destination": "r5c2_bN2",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS2_r0c2>r0c7_bE0",
+        "origin": "bS2_r0c2",
+        "destination": "r0c7_bE0",
+        "rate": 2.348993288590604,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS2_r0c2>r2c7_bE2",
+        "origin": "bS2_r0c2",
+        "destination": "r2c7_bE2",
+        "rate": 2.348993288590604,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS2_r0c2>r4c0_bW4",
+        "origin": "bS2_r0c2",
+        "destination": "r4c0_bW4",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS2_r0c2>r4c7_bE4",
+        "origin": "bS2_r0c2",
+        "destination": "r4c7_bE4",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS2_r0c2>r5c0_bN0",
+        "origin": "bS2_r0c2",
+        "destination": "r5c0_bN0",
+        "rate": 2.348993288590604,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS2_r0c2>r5c0_bW5",
+        "origin": "bS2_r0c2",
+        "destination": "r5c0_bW5",
+        "rate": 2.348993288590604,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS2_r0c2>r5c6_bN6",
+        "origin": "bS2_r0c2",
+        "destination": "r5c6_bN6",
+        "rate": 2.348993288590604,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS4_r0c4>r0c7_bE0",
+        "origin": "bS4_r0c4",
+        "destination": "r0c7_bE0",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS4_r0c4>r4c0_bW4",
+        "origin": "bS4_r0c4",
+        "destination": "r4c0_bW4",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS4_r0c4>r4c7_bE4",
+        "origin": "bS4_r0c4",
+        "destination": "r4c7_bE4",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS4_r0c4>r5c0_bN0",
+        "origin": "bS4_r0c4",
+        "destination": "r5c0_bN0",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS4_r0c4>r5c2_bN2",
+        "origin": "bS4_r0c4",
+        "destination": "r5c2_bN2",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS4_r0c4>r5c7_bN7",
+        "origin": "bS4_r0c4",
+        "destination": "r5c7_bN7",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS6_r0c6>r0c7_bE0",
+        "origin": "bS6_r0c6",
+        "destination": "r0c7_bE0",
+        "rate": 2.348993288590604,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS6_r0c6>r1c0_bW1",
+        "origin": "bS6_r0c6",
+        "destination": "r1c0_bW1",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS6_r0c6>r1c7_bE1",
+        "origin": "bS6_r0c6",
+        "destination": "r1c7_bE1",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS6_r0c6>r4c0_bW4",
+        "origin": "bS6_r0c6",
+        "destination": "r4c0_bW4",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS6_r0c6>r5c0_bW5",
+        "origin": "bS6_r0c6",
+        "destination": "r5c0_bW5",
+        "rate": 2.348993288590604,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS6_r0c6>r5c2_bN2",
+        "origin": "bS6_r0c6",
+        "destination": "r5c2_bN2",
+        "rate": 2.348993288590604,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS6_r0c6>r5c6_bN6",
+        "origin": "bS6_r0c6",
+        "destination": "r5c6_bN6",
+        "rate": 2.348993288590604,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS6_r0c6>r5c7_bN7",
+        "origin": "bS6_r0c6",
+        "destination": "r5c7_bN7",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS7_r0c7>r0c7_bE0",
+        "origin": "bS7_r0c7",
+        "destination": "r0c7_bE0",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS7_r0c7>r2c7_bE2",
+        "origin": "bS7_r0c7",
+        "destination": "r2c7_bE2",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS7_r0c7>r5c0_bN0",
+        "origin": "bS7_r0c7",
+        "destination": "r5c0_bN0",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS7_r0c7>r5c1_bN1",
+        "origin": "bS7_r0c7",
+        "destination": "r5c1_bN1",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS7_r0c7>r5c2_bN2",
+        "origin": "bS7_r0c7",
+        "destination": "r5c2_bN2",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS7_r0c7>r5c4_bN4",
+        "origin": "bS7_r0c7",
+        "destination": "r5c4_bN4",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS7_r0c7>r5c7_bN7",
+        "origin": "bS7_r0c7",
+        "destination": "r5c7_bN7",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW0_r0c0>r0c1_bS1",
+        "origin": "bW0_r0c0",
+        "destination": "r0c1_bS1",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW0_r0c0>r0c4_bS4",
+        "origin": "bW0_r0c0",
+        "destination": "r0c4_bS4",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW0_r0c0>r1c7_bE1",
+        "origin": "bW0_r0c0",
+        "destination": "r1c7_bE1",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW0_r0c0>r2c7_bE2",
+        "origin": "bW0_r0c0",
+        "destination": "r2c7_bE2",
+        "rate": 2.348993288590604,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW0_r0c0>r4c7_bE4",
+        "origin": "bW0_r0c0",
+        "destination": "r4c7_bE4",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW0_r0c0>r5c0_bN0",
+        "origin": "bW0_r0c0",
+        "destination": "r5c0_bN0",
+        "rate": 2.348993288590604,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW0_r0c0>r5c4_bN4",
+        "origin": "bW0_r0c0",
+        "destination": "r5c4_bN4",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW1_r1c0>r0c3_bS3",
+        "origin": "bW1_r1c0",
+        "destination": "r0c3_bS3",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW1_r1c0>r0c5_bS5",
+        "origin": "bW1_r1c0",
+        "destination": "r0c5_bS5",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW1_r1c0>r1c7_bE1",
+        "origin": "bW1_r1c0",
+        "destination": "r1c7_bE1",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW1_r1c0>r2c7_bE2",
+        "origin": "bW1_r1c0",
+        "destination": "r2c7_bE2",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW1_r1c0>r4c7_bE4",
+        "origin": "bW1_r1c0",
+        "destination": "r4c7_bE4",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW1_r1c0>r5c1_bN1",
+        "origin": "bW1_r1c0",
+        "destination": "r5c1_bN1",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW1_r1c0>r5c4_bN4",
+        "origin": "bW1_r1c0",
+        "destination": "r5c4_bN4",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW1_r1c0>r5c7_bN7",
+        "origin": "bW1_r1c0",
+        "destination": "r5c7_bN7",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW2_r2c0>r0c5_bS5",
+        "origin": "bW2_r2c0",
+        "destination": "r0c5_bS5",
+        "rate": 2.348993288590604,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW2_r2c0>r0c7_bE0",
+        "origin": "bW2_r2c0",
+        "destination": "r0c7_bE0",
+        "rate": 2.348993288590604,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW2_r2c0>r1c7_bE1",
+        "origin": "bW2_r2c0",
+        "destination": "r1c7_bE1",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW2_r2c0>r4c7_bE4",
+        "origin": "bW2_r2c0",
+        "destination": "r4c7_bE4",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW2_r2c0>r5c0_bN0",
+        "origin": "bW2_r2c0",
+        "destination": "r5c0_bN0",
+        "rate": 2.348993288590604,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW2_r2c0>r5c2_bN2",
+        "origin": "bW2_r2c0",
+        "destination": "r5c2_bN2",
+        "rate": 2.348993288590604,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW2_r2c0>r5c4_bN4",
+        "origin": "bW2_r2c0",
+        "destination": "r5c4_bN4",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW2_r2c0>r5c6_bN6",
+        "origin": "bW2_r2c0",
+        "destination": "r5c6_bN6",
+        "rate": 2.348993288590604,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW2_r2c0>r5c7_bN7",
+        "origin": "bW2_r2c0",
+        "destination": "r5c7_bN7",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW4_r4c0>r0c3_bS3",
+        "origin": "bW4_r4c0",
+        "destination": "r0c3_bS3",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW4_r4c0>r0c5_bS5",
+        "origin": "bW4_r4c0",
+        "destination": "r0c5_bS5",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW4_r4c0>r0c7_bE0",
+        "origin": "bW4_r4c0",
+        "destination": "r0c7_bE0",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW4_r4c0>r0c7_bS7",
+        "origin": "bW4_r4c0",
+        "destination": "r0c7_bS7",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW4_r4c0>r5c0_bN0",
+        "origin": "bW4_r4c0",
+        "destination": "r5c0_bN0",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW4_r4c0>r5c2_bN2",
+        "origin": "bW4_r4c0",
+        "destination": "r5c2_bN2",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW4_r4c0>r5c6_bN6",
+        "origin": "bW4_r4c0",
+        "destination": "r5c6_bN6",
+        "rate": 7.046979865771812,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW4_r4c0>r5c7_bN7",
+        "origin": "bW4_r4c0",
+        "destination": "r5c7_bN7",
+        "rate": 21.140939597315437,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE1_r1c7>r1c2_r2c2",
+        "origin": "bE1_r1c7",
+        "destination": "r1c2_r2c2",
+        "rate": 14.754098360655737,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE1_r1c7>r3c2_r4c2",
+        "origin": "bE1_r1c7",
+        "destination": "r3c2_r4c2",
+        "rate": 14.754098360655737,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE1_r1c7>r3c3_r2c3",
+        "origin": "bE1_r1c7",
+        "destination": "r3c3_r2c3",
+        "rate": 14.754098360655737,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE1_r1c7>r3c5_r3c4",
+        "origin": "bE1_r1c7",
+        "destination": "r3c5_r3c4",
+        "rate": 14.754098360655737,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE3_r3c7>r2c2_r3c2",
+        "origin": "bE3_r3c7",
+        "destination": "r2c2_r3c2",
+        "rate": 4.918032786885246,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE4_r4c7>r3c2_r4c2",
+        "origin": "bE4_r4c7",
+        "destination": "r3c2_r4c2",
+        "rate": 14.754098360655737,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE4_r4c7>r3c5_r3c4",
+        "origin": "bE4_r4c7",
+        "destination": "r3c5_r3c4",
+        "rate": 14.754098360655737,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE4_r4c7>r4c3_r3c3",
+        "origin": "bE4_r4c7",
+        "destination": "r4c3_r3c3",
+        "rate": 14.754098360655737,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE5_r5c7>r2c5_r1c5",
+        "origin": "bE5_r5c7",
+        "destination": "r2c5_r1c5",
+        "rate": 4.918032786885246,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE5_r5c7>r3c3_r2c3",
+        "origin": "bE5_r5c7",
+        "destination": "r3c3_r2c3",
+        "rate": 4.918032786885246,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE5_r5c7>r3c4_r3c3",
+        "origin": "bE5_r5c7",
+        "destination": "r3c4_r3c3",
+        "rate": 4.918032786885246,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bE5_r5c7>r3c5_r2c5",
+        "origin": "bE5_r5c7",
+        "destination": "r3c5_r2c5",
+        "rate": 4.918032786885246,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN1_r5c1>r2c2_r2c3",
+        "origin": "bN1_r5c1",
+        "destination": "r2c2_r2c3",
+        "rate": 14.754098360655737,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN1_r5c1>r2c3_r1c3",
+        "origin": "bN1_r5c1",
+        "destination": "r2c3_r1c3",
+        "rate": 14.754098360655737,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN1_r5c1>r2c3_r2c4",
+        "origin": "bN1_r5c1",
+        "destination": "r2c3_r2c4",
+        "rate": 14.754098360655737,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN1_r5c1>r3c5_r3c4",
+        "origin": "bN1_r5c1",
+        "destination": "r3c5_r3c4",
+        "rate": 14.754098360655737,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN3_r5c3>r3c3_r3c2",
+        "origin": "bN3_r5c3",
+        "destination": "r3c3_r3c2",
+        "rate": 4.918032786885246,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN3_r5c3>r3c4_r3c3",
+        "origin": "bN3_r5c3",
+        "destination": "r3c4_r3c3",
+        "rate": 4.918032786885246,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN4_r5c4>r2c3_r1c3",
+        "origin": "bN4_r5c4",
+        "destination": "r2c3_r1c3",
+        "rate": 14.754098360655737,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN4_r5c4>r3c2_r4c2",
+        "origin": "bN4_r5c4",
+        "destination": "r3c2_r4c2",
+        "rate": 14.754098360655737,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN4_r5c4>r3c3_r3c2",
+        "origin": "bN4_r5c4",
+        "destination": "r3c3_r3c2",
+        "rate": 14.754098360655737,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN5_r5c5>r3c3_r3c2",
+        "origin": "bN5_r5c5",
+        "destination": "r3c3_r3c2",
+        "rate": 4.918032786885246,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN5_r5c5>r3c5_r2c5",
+        "origin": "bN5_r5c5",
+        "destination": "r3c5_r2c5",
+        "rate": 4.918032786885246,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bN7_r5c7>r2c3_r1c3",
+        "origin": "bN7_r5c7",
+        "destination": "r2c3_r1c3",
+        "rate": 14.754098360655737,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS0_r0c0>r2c2_r2c3",
+        "origin": "bS0_r0c0",
+        "destination": "r2c2_r2c3",
+        "rate": 4.918032786885246,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS0_r0c0>r2c4_r2c5",
+        "origin": "bS0_r0c0",
+        "destination": "r2c4_r2c5",
+        "rate": 4.918032786885246,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS0_r0c0>r3c3_r2c3",
+        "origin": "bS0_r0c0",
+        "destination": "r3c3_r2c3",
+        "rate": 4.918032786885246,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS0_r0c0>r4c5_r3c5",
+        "origin": "bS0_r0c0",
+        "destination": "r4c5_r3c5",
+        "rate": 4.918032786885246,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS1_r0c1>r1c2_r2c2",
+        "origin": "bS1_r0c1",
+        "destination": "r1c2_r2c2",
+        "rate": 14.754098360655737,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS1_r0c1>r2c3_r1c3",
+        "origin": "bS1_r0c1",
+        "destination": "r2c3_r1c3",
+        "rate": 14.754098360655737,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS1_r0c1>r2c3_r2c4",
+        "origin": "bS1_r0c1",
+        "destination": "r2c3_r2c4",
+        "rate": 14.754098360655737,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS1_r0c1>r3c3_r2c3",
+        "origin": "bS1_r0c1",
+        "destination": "r3c3_r2c3",
+        "rate": 14.754098360655737,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS2_r0c2>r2c4_r2c5",
+        "origin": "bS2_r0c2",
+        "destination": "r2c4_r2c5",
+        "rate": 4.918032786885246,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS2_r0c2>r3c2_r4c2",
+        "origin": "bS2_r0c2",
+        "destination": "r3c2_r4c2",
+        "rate": 4.918032786885246,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS2_r0c2>r3c5_r2c5",
+        "origin": "bS2_r0c2",
+        "destination": "r3c5_r2c5",
+        "rate": 4.918032786885246,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS2_r0c2>r3c5_r3c4",
+        "origin": "bS2_r0c2",
+        "destination": "r3c5_r3c4",
+        "rate": 4.918032786885246,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS4_r0c4>r1c2_r2c2",
+        "origin": "bS4_r0c4",
+        "destination": "r1c2_r2c2",
+        "rate": 14.754098360655737,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS4_r0c4>r2c4_r2c5",
+        "origin": "bS4_r0c4",
+        "destination": "r2c4_r2c5",
+        "rate": 14.754098360655737,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS6_r0c6>r3c2_r4c2",
+        "origin": "bS6_r0c6",
+        "destination": "r3c2_r4c2",
+        "rate": 4.918032786885246,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS6_r0c6>r3c3_r2c3",
+        "origin": "bS6_r0c6",
+        "destination": "r3c3_r2c3",
+        "rate": 4.918032786885246,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS6_r0c6>r3c5_r3c4",
+        "origin": "bS6_r0c6",
+        "destination": "r3c5_r3c4",
+        "rate": 4.918032786885246,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bS7_r0c7>r3c2_r4c2",
+        "origin": "bS7_r0c7",
+        "destination": "r3c2_r4c2",
+        "rate": 14.754098360655737,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW0_r0c0>r2c2_r3c2",
+        "origin": "bW0_r0c0",
+        "destination": "r2c2_r3c2",
+        "rate": 4.918032786885246,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW0_r0c0>r2c5_r1c5",
+        "origin": "bW0_r0c0",
+        "destination": "r2c5_r1c5",
+        "rate": 4.918032786885246,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW0_r0c0>r3c3_r2c3",
+        "origin": "bW0_r0c0",
+        "destination": "r3c3_r2c3",
+        "rate": 4.918032786885246,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW0_r0c0>r3c4_r3c3",
+        "origin": "bW0_r0c0",
+        "destination": "r3c4_r3c3",
+        "rate": 4.918032786885246,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW0_r0c0>r3c5_r2c5",
+        "origin": "bW0_r0c0",
+        "destination": "r3c5_r2c5",
+        "rate": 4.918032786885246,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW1_r1c0>r2c2_r2c3",
+        "origin": "bW1_r1c0",
+        "destination": "r2c2_r2c3",
+        "rate": 14.754098360655737,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW1_r1c0>r2c2_r3c2",
+        "origin": "bW1_r1c0",
+        "destination": "r2c2_r3c2",
+        "rate": 14.754098360655737,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW1_r1c0>r2c4_r2c5",
+        "origin": "bW1_r1c0",
+        "destination": "r2c4_r2c5",
+        "rate": 14.754098360655737,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW1_r1c0>r3c3_r3c2",
+        "origin": "bW1_r1c0",
+        "destination": "r3c3_r3c2",
+        "rate": 14.754098360655737,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW1_r1c0>r4c5_r3c5",
+        "origin": "bW1_r1c0",
+        "destination": "r4c5_r3c5",
+        "rate": 14.754098360655737,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW2_r2c0>r2c2_r2c3",
+        "origin": "bW2_r2c0",
+        "destination": "r2c2_r2c3",
+        "rate": 4.918032786885246,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW2_r2c0>r2c3_r1c3",
+        "origin": "bW2_r2c0",
+        "destination": "r2c3_r1c3",
+        "rate": 4.918032786885246,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW2_r2c0>r3c4_r3c3",
+        "origin": "bW2_r2c0",
+        "destination": "r3c4_r3c3",
+        "rate": 4.918032786885246,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW2_r2c0>r4c5_r3c5",
+        "origin": "bW2_r2c0",
+        "destination": "r4c5_r3c5",
+        "rate": 4.918032786885246,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW4_r4c0>r2c2_r3c2",
+        "origin": "bW4_r4c0",
+        "destination": "r2c2_r3c2",
+        "rate": 14.754098360655737,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW4_r4c0>r2c3_r1c3",
+        "origin": "bW4_r4c0",
+        "destination": "r2c3_r1c3",
+        "rate": 14.754098360655737,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW4_r4c0>r2c5_r1c5",
+        "origin": "bW4_r4c0",
+        "destination": "r2c5_r1c5",
+        "rate": 14.754098360655737,
+        "arrival": "poisson"
+      },
+      {
+        "id": "bW4_r4c0>r3c5_r2c5",
+        "origin": "bW4_r4c0",
+        "destination": "r3c5_r2c5",
+        "rate": 14.754098360655737,
+        "arrival": "poisson"
+      }
+    ]
+  }
+}

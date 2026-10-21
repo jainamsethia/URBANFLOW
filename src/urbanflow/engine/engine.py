@@ -4,9 +4,12 @@
 sub-steps 4-7 read the state committed at ``t_n`` plus earlier sub-steps' results. The
 sub-steps run in plan order: 0 begin, 1 signals, 2 spawn, 3 insert, 4 leaders,
 6 intersections (admission with end-of-green clearing, then zone locks), 7 longitudinal,
-8 advance (then the zone locks whose rear has cleared are released), 9 bookkeeping (with
-the ``deadlock_timeout`` watchdog), 10 finish. Sub-step 5 (lane changes) arrives with lane
-changing.
+8 advance (then the zone locks whose rear has cleared are released, and the transit
+buses' dwell timers, dwell starts and missed stops are updated), 9 bookkeeping (with the
+``deadlock_timeout`` watchdog), 10 finish. Sub-step 5 (lane changes) runs with lane
+changing on. Buses heading for a stop on their road treat its lane as the only valid one in
+sub-step 5 and the stop as an obstacle in sub-steps 6-7; dwelling buses do not move
+(:mod:`urbanflow.engine.transit`).
 
 Sub-step 1: every signalised intersection in green asks its controller (``decide``, with
 a lazily filled :class:`~urbanflow.signals.controllers.base.ControllerContext`), then
@@ -60,6 +63,13 @@ from urbanflow.engine.lane_changes import (
 from urbanflow.engine.leaders import SiblingGroups, compute_leaders, remaining_roads
 from urbanflow.engine.longitudinal import expire_overrides, longitudinal_step
 from urbanflow.engine.signalling import LaneStats, detector_occupancy
+from urbanflow.engine.transit import (
+    TransitStops,
+    hold_dwelling,
+    stop_obstacles,
+    stop_targets,
+    transit_step,
+)
 from urbanflow.network.compiled import CompiledNetwork
 from urbanflow.network.graph import build_road_graph
 from urbanflow.routing.base import Router, RouteTable
@@ -84,14 +94,8 @@ ControllerSpecDict = dict[str, JsonValue]
 """``{"type": registry or class name, "params": validated parameters (JSON form)}``."""
 
 
-def _check_supported(config: SimulationConfig, demand: DemandSpec) -> None:
+def _check_supported(config: SimulationConfig) -> None:
     """Fail early and by name on features scheduled for later versions of the engine."""
-    if demand.transit:
-        ids = ", ".join(f'"{line.id}"' for line in demand.transit)
-        raise SimulationError(
-            f"transit lines ({ids}) are not supported by this version of the engine yet; "
-            "remove them from the scenario's demand to run it"
-        )
     if config.accel != "numpy":
         raise SimulationError(
             f'accel="{config.accel}" is not available in this version; use accel="numpy"'
@@ -126,8 +130,7 @@ class Engine:
     of every signalised intersection (:func:`~urbanflow.signals.program.build_programs`);
     ``controllers`` optionally replaces the configured controller of some of them (by
     intersection index: a registry name, ``{"type", "params"}``, a ``ControllerSpec``, an
-    instance or a factory). The constructor rejects transit lines (a later version) with a
-    :class:`SimulationError` naming them.
+    instance or a factory).
     """
 
     def __init__(
@@ -143,7 +146,7 @@ class Engine:
         signals: Sequence[SignalProgram] = (),
         controllers: Mapping[int, ControllerRef] | None = None,
     ) -> None:
-        _check_supported(config, demand)
+        _check_supported(config)
         overrides = dict(controllers or {})
         _check_signals(network, signals, overrides)
         self.network = network
@@ -158,6 +161,8 @@ class Engine:
         self.junctions = JunctionIndex.build(network)
         """Static per-connector data of admission and zone locks."""
         self._lane_int = network.link_intersection[: network.n_lanes]
+        self.transit = TransitStops.build(network, demand)
+        """Every stop of every transit line (static)."""
         self.commands = EngineCommands(self)
         """Validated vehicle commands (F.4)."""
         self.queues = InsertionQueues(network)
@@ -198,6 +203,10 @@ class Engine:
         self.red_runs = 0
         self.zone_conflicts = 0
         self.safety_cap_violations = 0
+        self.stops_served = 0
+        """Transit stops where a bus dwelt."""
+        self.stops_missed = 0
+        """Transit stops a bus passed without stopping."""
         self.sneakers = np.full(self.network.n_lanes, -1, dtype=np.int64)
         """Per lane: uid of the vehicle eligible for end-of-green clearing at its stop line,
         -1 if none (F.3, B.2 #25): reset to -1 whenever its intersection is not in yellow,
@@ -444,6 +453,10 @@ class Engine:
         remaining = remaining_roads(veh, self.routes, run)
         leaders = compute_leaders(net, veh, run, types, remaining, self.sibling_groups)
 
+        targets = None
+        if len(self.transit):
+            targets = stop_targets(net, veh, self.routes, self.transit, run)
+
         # 5 lane changes (then the leaders again)
         if cfg.lane_changing:
             changes = lane_change_step(
@@ -460,8 +473,12 @@ class Engine:
                 step=tag,
                 time=t,
                 rng=self._model_rng,
+                stops=targets,
             )
-            swaps = zipper_swaps(net, veh, types, self.routes, run, events, step=tag, time=t)
+            pinned = None if targets is None else targets.mask > 0
+            swaps = zipper_swaps(
+                net, veh, types, self.routes, run, events, step=tag, time=t, pinned=pinned
+            )
             if changes.handles.size or swaps.handles.size:
                 leaders = compute_leaders(net, veh, run, types, remaining, self.sibling_groups)
 
@@ -509,10 +526,14 @@ class Engine:
                 self.signals.movement_state,
             )
             obstacle = np.minimum(obstacle, ahead)
+        cap = np.minimum(stop_cap, leaders.stop_gap)
+        if len(self.transit):  # the buses' next stops (after this step's lane changes)
+            stop_gap, stop_at = stop_obstacles(net, veh, types, self.transit, run)
+            obstacle = np.minimum(obstacle, stop_gap)
+            cap = np.minimum(cap, stop_at)
 
         # 7 longitudinal
         v0_start = veh.v0[run].copy()
-        cap = np.minimum(stop_cap, leaders.stop_gap)
         lon = longitudinal_step(
             net,
             veh,
@@ -525,6 +546,8 @@ class Engine:
             dt=dt,
             rng=self._model_rng,
         )
+        if len(self.transit):
+            hold_dwelling(veh, run, lon.dx, dt)
 
         # 8 advance
         adv = advance_links(
@@ -544,6 +567,18 @@ class Engine:
         self.arrived += int(adv.arrived.size)
         self.safety_cap_violations += lon.violations + adv.violations
         release_locks(net, veh, self.junctions, run)
+        if len(self.transit):
+            served, missed = transit_step(
+                net,
+                veh,
+                self.routes,
+                self.transit,
+                run,
+                dt=dt,
+                halting_speed=cfg.halting_speed,
+            )
+            self.stops_served += served
+            self.stops_missed += missed
 
         # 9 bookkeeping
         book = bookkeeping_step(

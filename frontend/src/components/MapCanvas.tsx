@@ -114,6 +114,18 @@ export function MapCanvas(props: Props) {
       c.strokeStyle = MAP.stopLine;
       c.lineWidth = Math.max(1.5, 0.5 * v.scale);
       for (const p of g.stop_lines.path) { path(c, p, T, false); c.stroke(); }
+      // bus stops: a sign at the curb
+      const stops = g.bus_stops?.position ?? [];
+      if (stops.length) {
+        const size = Math.max(12, 2.6 * v.scale);
+        c.font = `${size}px sans-serif`;
+        c.textAlign = "center";
+        c.textBaseline = "middle";
+        for (const [x, y] of stops) {
+          const [sx, sy] = T(x, y);
+          c.fillText("🚏", sx, sy);
+        }
+      }
       staticRef.current = { canvas: off, key };
       return off;
     };

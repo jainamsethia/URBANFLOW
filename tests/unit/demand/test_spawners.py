@@ -13,7 +13,7 @@ import pytest
 from urbanflow.core.config import SimulationConfig
 from urbanflow.core.rng import RngStreams
 from urbanflow.demand import FlowSpawner, SpawnRequest, TripSchedule, build_spawners
-from urbanflow.demand.spawners import Spawner, emission_step
+from urbanflow.demand.spawners import Spawner, TransitSpawner, emission_step
 from urbanflow.network import CompiledNetwork, compile_network
 from urbanflow.network.graph import build_road_graph
 from urbanflow.routing import RouteTable, ShortestPathRouter
@@ -320,3 +320,31 @@ def test_trip_schedule_state_dict(build: Build) -> None:
     assert sa.state_dict() == {"next": 3}
     sb.load_state_dict(sa.state_dict())
     assert [r.vehicle_id for r in sb.due(10)] == ["t3", "t4"] and sb.exhausted
+
+
+def test_transit_lines(build: Build) -> None:
+    line = {
+        "id": "L",
+        "route": ROUTE_E,
+        "stops": [{"road": "J1_J2", "position": 50.0}, {"road": "J2_E", "position": 40.0}],
+        "headway": 120.0,
+        "begin": 10.0,
+        "end": 400.0,
+    }
+    timetable = {**line, "id": "M", "headway": None, "departures": [5.0, 6.0]}
+    demand = build(flows=[_flow(period=100.0, count=1)], transit=[line, timetable])
+    bus, timed = demand.spawners[1], demand.spawners[2]
+    assert isinstance(bus, TransitSpawner) and isinstance(timed, TransitSpawner)
+    out = [r for n in range(500) for r in bus.due(n)]
+    assert [r.vehicle_id for r in out] == ["L.0", "L.1", "L.2", "L.3"]
+    assert [r.depart_time for r in out] == [10.0, 130.0, 250.0, 370.0]  # < end
+    assert bus.exhausted and all(r.source_idx == 1 for r in out)
+    assert {r.stop_idx for r in out} == {0} and timed.first_stop == 2  # stops of all lines
+    assert out[0].type_idx == demand.types.index["bus"]
+    # "best": the lane feeding the first stop's (curb) lane 2 of J1_J2 is lane 1 of W_J1
+    assert {r.depart_lane for r in out} == {1}
+    assert [r.vehicle_id for r in timed.due(6)] == ["M.0", "M.1"] and timed.exhausted
+    fresh = build(transit=[line]).spawners[0]
+    assert isinstance(fresh, TransitSpawner)
+    fresh.load_state_dict(bus.state_dict())
+    assert fresh.count == 4 and fresh.exhausted

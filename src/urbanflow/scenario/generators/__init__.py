@@ -58,6 +58,9 @@ BUNDLED_SCENARIOS: Final[Mapping[str, tuple[str, Mapping[str, Any]]]] = MappingP
         "corridor": ("corridor", MappingProxyType({})),
         "emergency": ("emergency", MappingProxyType({})),
         "rush_hour": ("rush_hour", MappingProxyType({})),
+        "downtown": ("downtown", MappingProxyType({})),
+        "high_density": ("high_density", MappingProxyType({})),
+        "transit": ("transit", MappingProxyType({})),
     }
 )
 """Bundled scenario name -> (generator, params); see ``scripts/regen_bundled_scenarios.py``."""
@@ -128,5 +131,8 @@ for _module in (
     "corridor",
     "emergency",
     "rush_hour",
+    "downtown",
+    "high_density",
+    "transit",
 ):  # built-ins register on import
     importlib.import_module(f"{__name__}.{_module}")

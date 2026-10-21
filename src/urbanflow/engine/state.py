@@ -87,6 +87,8 @@ COUNTERS: Final = (
     "red_runs",
     "zone_conflicts",
     "safety_cap_violations",
+    "stops_served",
+    "stops_missed",
 )
 """Digest item 1, in order (``next_seq`` is the commit counter)."""
 
@@ -273,7 +275,7 @@ def _restore(engine: Engine, state: EngineState) -> None:
     engine._step_count = int(counters["step_count"])
     engine._next_seq = int(counters["next_seq"])
     for name in COUNTERS[3:]:
-        setattr(engine, name, int(counters[name]))
+        setattr(engine, name, int(counters.get(name, 0)))  # older files lack new counters
     columns = {n: arrays[f"veh.{n}"] for n in COLUMNS}
     engine.vehicles.load_state_dict({**meta["vehicles"], "columns": columns})
     engine.routes.load_state_dict({"routes": meta["routes"]})

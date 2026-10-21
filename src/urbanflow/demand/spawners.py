@@ -8,8 +8,13 @@ Per flow, headway ``h = 3600 / rate`` (or ``period``):
   time ``n dt`` lies in ``[begin, end)``;
 
 while ``t_k < end`` and ``k < count``. A vehicle scheduled at ``t_k`` is emitted in step
-``ceil(t_k / dt - 1e-9)``. Every random draw of a flow comes from its own stream
-``flow:{id}`` (trips: ``trip:{id}``), in the fixed per-vehicle order type (``type_mix``)
+``ceil(t_k / dt - 1e-9)``. Transit lines depart at ``begin + k headway`` (while before
+``end``) or at their ``departures``; their buses are ``"{line}.{k}"`` and carry the index
+of the line's first stop (:class:`~urbanflow.engine.transit.TransitStops` order).
+
+Every random draw of a flow comes from its own stream
+``flow:{id}`` (trips: ``trip:{id}``, transit: ``transit:{id}``), in the fixed per-vehicle
+order type (``type_mix``)
 -> route (``routes``) -> speed factor -> ``random`` depart lane, so adding or changing one
 flow never changes another flow's vehicles (common random numbers, AG.1 R11). A poisson
 flow draws its next inter-arrival gap after each vehicle's attributes.
@@ -19,7 +24,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 import numpy as np
@@ -29,8 +34,8 @@ from urbanflow.core.rng import RngStreams
 from urbanflow.core.types import FloatArray
 from urbanflow.network.compiled import CompiledNetwork
 from urbanflow.routing.base import Router, RouteTable
-from urbanflow.routing.lanes import valid_mask
-from urbanflow.scenario.schema import DemandSpec, FlowSpec, TripSpec
+from urbanflow.routing.lanes import feeding_lanes, valid_mask
+from urbanflow.scenario.schema import DemandSpec, FlowSpec, TransitLineSpec, TripSpec
 from urbanflow.vehicles.table import DEPART_LANE_BEST, DEPART_LANE_FIRST
 from urbanflow.vehicles.types import VehicleTypes
 
@@ -38,6 +43,7 @@ __all__ = [
     "FlowSpawner",
     "SpawnRequest",
     "Spawner",
+    "TransitSpawner",
     "TripSchedule",
     "api_request",
     "build_spawners",
@@ -62,6 +68,8 @@ class SpawnRequest:
     """m/s; NaN = ``"max"``."""
     depart_time: float
     """Scheduled time, s (the vehicle is emitted in step ``emission_step(depart_time)``)."""
+    stop_idx: int = -1
+    """Transit buses: their line's first stop; -1 for every other vehicle."""
 
 
 def emission_step(t: float, dt: float) -> int:
@@ -78,16 +86,17 @@ class _Vehicles:
         routes: RouteTable,
         router: Router,
         types: VehicleTypes,
-        item: FlowSpec | TripSpec,
+        item: FlowSpec | TripSpec | TransitLineSpec,
     ) -> None:
         self.net, self.routes, self.router, self.types = net, routes, router, types
         self.lane_mode = item.depart_lane
-        speed = item.depart_speed
+        speed = getattr(item, "depart_speed", "max")  # transit lines: always "max"
         self.depart_speed = math.nan if speed == "max" else float(speed)
         self.od: tuple[int, int] | None = None
-        if item.origin is not None and item.destination is not None:
-            self.od = (self.road(item.origin), self.road(item.destination))
-        self.via = tuple(self.road(v) for v in item.via)
+        origin, destination = getattr(item, "origin", None), getattr(item, "destination", None)
+        if origin is not None and destination is not None:
+            self.od = (self.road(origin), self.road(destination))
+        self.via = tuple(self.road(v) for v in getattr(item, "via", ()))
 
     def road(self, road_id: str) -> int:
         return self.net.road_index[road_id]
@@ -294,7 +303,90 @@ class TripSchedule:
         return out
 
 
-Spawner = FlowSpawner | TripSchedule
+def _bus_lane(net: CompiledNetwork, line: TransitLineSpec) -> int | None:
+    """The departure lane of a ``"best"`` bus line: the first stop's lane when the stop is
+    on the first road, the curb-most lane feeding it when it is on the second road; None
+    (keep ``"best"``) otherwise or when that lane cannot reach the second road."""
+    route = [net.road_index[r] for r in line.route]
+    stop = line.stops[0]
+    road = net.road_index[stop.road]
+    index = stop.lane if stop.lane is not None else int(net.road_n_lanes[road]) - 1
+    nxt = route[1] if len(route) > 1 else -1
+    if road == route[0]:
+        bits = 1 << index
+    elif road == nxt:
+        bits = feeding_lanes(net, route[0], nxt, int(net.road_lane_start[road]) + index)
+    else:
+        return None
+    bits &= valid_mask(net, route[0], nxt)
+    return bits.bit_length() - 1 if bits else None
+
+
+class TransitSpawner:
+    """Buses of one transit line: departures at ``begin + k headway`` while before ``end``
+    (or at the explicit ``departures``), each drawing from ``transit:{id}``. A ``"best"``
+    departure lane means the lane that serves the first stop (:func:`_bus_lane`)."""
+
+    def __init__(
+        self,
+        line: TransitLineSpec,
+        source_idx: int,
+        first_stop: int,
+        *,
+        net: CompiledNetwork,
+        routes: RouteTable,
+        router: Router,
+        types: VehicleTypes,
+        rng: np.random.Generator,
+        dt: float,
+    ) -> None:
+        self.line = line
+        self.source_idx = source_idx
+        self.first_stop = first_stop
+        self.rng = rng
+        self.dt = dt
+        self.count = 0
+        """Buses emitted so far (``k`` of the next bus)."""
+        self._v = _Vehicles(net, routes, router, types, line)
+        if line.depart_lane == "best":
+            lane = _bus_lane(net, line)
+            self._v.lane_mode = "best" if lane is None else lane
+        self._route = self._v.intern(line.route)
+        self._type = types.type_index(line.vehicle_type)
+        self._end = math.inf if line.end is None else line.end
+
+    def _time(self, k: int) -> float:
+        if self.line.departures is not None:
+            return self.line.departures[k] if k < len(self.line.departures) else math.inf
+        return self.line.begin + k * float(self.line.headway or math.inf)
+
+    @property
+    def exhausted(self) -> bool:
+        return self._time(self.count) >= self._end
+
+    def due(self, step: int) -> list[SpawnRequest]:
+        """Buses emitted in ``step`` (and in any earlier step not asked for yet)."""
+        out: list[SpawnRequest] = []
+        while not self.exhausted and emission_step(self._time(self.count), self.dt) <= step:
+            t, k = self._time(self.count), self.count
+            self.count += 1
+            req = self._v.request(
+                self.rng, f"{self.line.id}.{k}", self.source_idx, self._type, self._route, t
+            )
+            out.append(replace(req, stop_idx=self.first_stop))
+        return out
+
+    def state_dict(self) -> dict[str, Any]:
+        """JSON-safe runtime state: buses emitted so far and the stream's state."""
+        return {"count": self.count, "rng": self.rng.bit_generator.state}
+
+    def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        """Restore :meth:`state_dict` output (the generator is restored in place)."""
+        self.count = int(state["count"])
+        self.rng.bit_generator.state = dict(state["rng"])
+
+
+Spawner = FlowSpawner | TripSchedule | TransitSpawner
 
 
 def api_request(
@@ -332,10 +424,8 @@ def build_spawners(
     rng: RngStreams,
     dt: float,
 ) -> list[Spawner]:
-    """Spawners of the *resolved* ``demand``: one per flow (file order), then the trips.
-
-    Transit lines are not spawned here: ``Engine`` rejects them first (a later version).
-    """
+    """Spawners of the *resolved* ``demand``: one per flow (file order), then the trips,
+    then one per transit line (source indices continue in that order)."""
     spawners: list[Spawner] = [
         FlowSpawner(
             flow,
@@ -362,4 +452,20 @@ def build_spawners(
                 dt=dt,
             )
         )
+    first_stop = 0
+    for i, line in enumerate(demand.transit):
+        spawners.append(
+            TransitSpawner(
+                line,
+                len(demand.flows) + len(demand.trips) + i,
+                first_stop,
+                net=net,
+                routes=routes,
+                router=router,
+                types=types,
+                rng=rng.stream(f"transit:{line.id}"),
+                dt=dt,
+            )
+        )
+        first_stop += len(line.stops)
     return spawners

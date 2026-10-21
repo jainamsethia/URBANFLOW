@@ -119,6 +119,36 @@ change to an adjacent lane, keeping its relative position on the road.
   for the physics; a lateral offset fades out over 2 s for drawing only. There are no
   shadow vehicles, so lane counts are exact. `lane_changing=False` turns it off.
 
+## Buses and stops
+
+A transit line (`demand.transit`) departs a bus every `headway` seconds from `begin` until
+`end`, or at its `departures`; buses are `"{line}.{k}"` and draw from the stream
+`transit:{id}`. A line's `"best"` departure lane is the lane that serves its first stop
+(the stop lane on the first road, or the curb-most lane feeding it on the second road).
+Each stop has a road, a lane (default: the curb lane), the position where the bus front
+stops and a dwell time. A bus works through its stops in order, matched by road (so a bus
+moved on by the watchdog keeps its remaining stops):
+
+- **lanes**: when the next stop is on the next road, only the lanes with a connector to the
+  stop lane count as valid; on the stop's road, only the stop lane (with the urgency of a
+  mandatory change measured to the stop). The bus therefore arrives on, and stays in, the
+  stop lane; a far-side stop 30 m past a junction leaves no room to change lanes later.
+- **stopping**: the stop is an obstacle like a stop line (IDM gap d + s<sub>0</sub> − 0.5,
+  safe-speed cap d), with d the path distance from the bus front to the stop. It is seen
+  already through the junction (on the lane whose planned connector leads onto the stop
+  lane, and on that connector), so the bus brakes in time, as long as it can still stop
+  there (v² / 2d ≤ b<sub>emerg</sub>).
+- **dwelling**: a bus halting on the stop lane with its front within 1 m of the stop dwells
+  for the stop's `dwell` (a whole number of steps: dwell ± dt). It does not move or change
+  lanes meanwhile; traffic behind it queues or overtakes on the next lane. Then the stop is
+  *served* and the bus heads for the next one.
+- **missed stops**: a bus that passes its stop by more than 1 m, or leaves its road without
+  stopping, has *missed* it.
+
+The summary reports `transit.stops_served` and `transit.stops_missed`; a vehicle's view has
+`next_stop` (the stop id, `"{line}.{k}"` unless named) and `dwell_left`. On the bundled
+`transit` scenario every bus serves all its stops (114 of 114 in an hour).
+
 ## Parameters
 
 Defaults are the built-in `car`; `bus`, `truck` and `emergency` override some of them (see

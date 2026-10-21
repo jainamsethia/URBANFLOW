@@ -368,6 +368,8 @@ class MetricsManager:
             "vht": self._s_vht,
             "queue.mean_total_veh": self._s_qsum / self._s_steps if self._s_steps else math.nan,
             "queue.max_lane_veh": float(self._s_lane_qmax),
+            "transit.stops_served": eng.stops_served,
+            "transit.stops_missed": eng.stops_missed,
         }
 
 

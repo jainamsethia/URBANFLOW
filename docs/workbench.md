@@ -14,7 +14,7 @@ explains each part in the app.
 ## Start screen
 
 1. **Choose a map**: the bundled maps (one crossing, small and big grid towns, main street,
-   ambulance rescue, rush hour), your imported maps (with *Download* and *Remove*), or
+   ambulance rescue, rush hour, bus line, downtown, packed town), your imported maps (with *Download* and *Remove*), or
    *Build a grid* (streets across and down, a few / some / lots of cars).
 2. **How should the traffic lights work?** The map's own plan, or Timer (`fixed_time`),
    Sensor (`actuated`), Smart (`max_pressure`), Planner (`webster`) or Ambulance helper
@@ -44,9 +44,10 @@ saved recordings (watch or download).
   Restart, and *Choose another map*.
 - **Map**: drag to pan, scroll to zoom, double-click or F to see the whole map. Cars, buses,
   trucks and (flashing) ambulances are drawn to scale; each lane's traffic light is a
-  coloured dot. A legend explains the colours.
+  coloured dot; bus stops are 🚏 signs at the curb. A legend explains the colours.
 - **Click a car**: where it is going, its speed, how long it waited at red lights and how
-  often it stopped; the roads it will take next are shaded yellow.
+  often it stopped; the roads it will take next are shaded yellow. A bus also shows its next
+  stop, or how long it still waits at the stop it is at.
 - **Click a junction**: which directions may go now, the light's strategy and when it
   changes; *Manual control* gives green to a chosen direction until *Back to automatic*.
 - **📊 Traffic**: how traffic feels (share of cars standing still), cars driving, cars

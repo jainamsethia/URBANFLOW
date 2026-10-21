@@ -134,8 +134,9 @@ A `VehicleView` is a frozen snapshot with the identity (`id`, `uid`, `type`, `vc
 `link_index`, `lane_index`, `position`, `x`, `y`, `heading`, `lateral_offset`; None while
 waiting to be inserted), the motion (`speed`, `acceleration`, `desired_speed`), the route
 (`route`, `route_index`, `next_road`, `destination`) and the trip so far (`depart_time`,
-`insert_time`, `travel_time`, `waiting_time`, `stops`, `distance`, `speed_override`).
-Coordinates are world coordinates; headings are radians counter-clockwise from +x.
+`insert_time`, `travel_time`, `waiting_time`, `stops`, `distance`, `speed_override`), and
+for transit buses `next_stop` (the id of the next stop to serve, else None) and
+`dwell_left` (seconds left at the stop it dwells at, else 0). Coordinates are world coordinates; headings are radians counter-clockwise from +x.
 
 ## Lanes, roads and the network
 

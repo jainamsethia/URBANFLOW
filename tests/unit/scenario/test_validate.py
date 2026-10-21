@@ -506,6 +506,17 @@ CASES = [
         ("E507", "demand.flows[0]"),
         ("E507", "demand.flows[1]"),
         ("E507", "demand.flows[3]"),
+        ("E508", "demand.transit[0]"),
+    ),
+    case(
+        "E508",
+        mutate(
+            put(("simulation", "duration"), None),
+            put((*FLOWS, 0, "end"), 600),
+            put((*FLOWS, 1, "end"), 600),
+            put((*FLOWS, 3, "end"), 600),
+        ),
+        ("E508", "demand.transit[0]"),
     ),
     case("W501", mutate(put((*FLOWS, 0, "rate"), 5000)), ("W501", "demand.flows[0].rate")),
     case("W502", mutate(put((*TRIPS, 0, "depart"), 4000)), ("W502", "demand.trips[0].depart")),

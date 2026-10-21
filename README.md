@@ -21,9 +21,12 @@ replays and a web workbench.
 - **Scenarios**: versioned JSON format with friendly, JSON-path validation errors; derived
   movements, lane mappings and signal programs; generators `single_intersection`, `grid`
   `corridor` (an arterial with green-wave signal offsets), `emergency` (emergency
-  vehicles crossing a base scenario, with preemption) and `rush_hour` (a base scenario's
-  demand shaped into a directional peak); bundled: `single_intersection`, `grid_3x3`,
-  `grid_4x4`, `corridor`, `emergency`, `rush_hour`.
+  vehicles crossing a base scenario, with preemption), `rush_hour` (a base scenario's
+  demand shaped into a directional peak), `transit` (bus lines with far-side stops),
+  `downtown` (avenues and one-way streets, signalised and priority junctions) and
+  `high_density` (a grid close to saturation); all of them are bundled.
+- **Buses**: transit lines on a headway or timetable; buses move to the stop lane, brake for
+  the stop, dwell, and count served and missed stops; traffic queues behind or overtakes.
 - **Real maps**: an OpenStreetMap importer (`urbanflow import osm --osm map.osm`, or upload in
   the workbench) builds roads, lanes, one-ways, speed limits, signalised and priority
   junctions and traffic from an openstreetmap.org export; a CityFlow importer
@@ -45,8 +48,8 @@ replays and a web workbench.
   and keyboard shortcuts.
 - **Snapshots** (save/restore any state) and **state digests** for bit-exact reproducibility.
 
-Not built yet (planned): more generators (downtown), transit, the visual
-scenario editor, the experiment database/dashboards and the benchmark suite.
+Not built yet (planned): the visual scenario editor, the experiment database/dashboards
+and the benchmark suite.
 
 ## Quick start with Docker (no Python or Node needed)
 

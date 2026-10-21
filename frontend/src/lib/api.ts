@@ -15,6 +15,7 @@ export interface Geometry {
   lane_markings: { road: number[]; dashed: boolean[]; path: Point[][] };
   stop_lines: { link: number[]; path: Point[][] };
   vehicle_types: { id: string; vclass: string; length: number; width: number; color: string | null }[];
+  bus_stops?: { id: string[]; position: Point[] };
 }
 
 export interface LaneMetricInfo {

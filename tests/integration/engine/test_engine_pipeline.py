@@ -103,13 +103,20 @@ def test_signal_programs_must_cover_every_signalized_intersection(
         make_engine(scenario, controllers={net.int_index["N"]: "external"})
 
 
-def test_rejects_transit_lines(make_engine: MakeEngine, junction_builder: Builder) -> None:
+def test_builds_the_transit_stop_table(make_engine: MakeEngine, junction_builder: Builder) -> None:
     b = junction_builder()
     b.transit_line(
-        "L1", route=["W_in", "E_out"], stops=[{"road": "W_in", "position": 50.0}], headway=300.0
+        "L1",
+        route=["W_in", "E_out"],
+        stops=[{"road": "W_in", "position": 50.0}, {"road": "E_out", "position": 40.0}],
+        headway=300.0,
     )
-    with pytest.raises(SimulationError, match='transit lines \\("L1"\\)'):
-        make_engine(b.build())
+    engine = make_engine(b.build())
+    net, stops = engine.network, engine.transit
+    assert len(stops) == 2 and stops.next.tolist() == [1, -1]
+    w = net.road_index["W_in"]
+    assert stops.lane[0] == net.road_lane_start[w] + net.road_n_lanes[w] - 1  # the curb lane
+    assert stops.pos.tolist() == [50.0, 40.0]
 
 
 def test_rejects_the_numba_backend(make_engine: MakeEngine, junction_builder: Builder) -> None:

@@ -98,6 +98,7 @@ def enqueue(
     veh.depart_time[h] = req.depart_time
     veh.depart_lane[h] = req.depart_lane
     veh.depart_speed[h] = req.depart_speed
+    veh.stop_idx[h] = req.stop_idx
     queues.push(int(routes.get(req.route_id)[0]), h)
     return h
 

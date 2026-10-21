@@ -15,6 +15,9 @@ const TOWNS: Record<string, Town> = {
   corridor: { icon: "🛣️", title: "Main street", blurb: "Lights timed so cars catch green after green." },
   emergency: { icon: "🚑", title: "Ambulance rescue", blurb: "Lights turn green for ambulances and cars move over." },
   rush_hour: { icon: "⏰", title: "Rush hour", blurb: "Traffic builds up to a busy peak, then calms down." },
+  transit: { icon: "🚌", title: "Bus line", blurb: "Buses stop at every bus stop on main street; cars pass them." },
+  downtown: { icon: "🌆", title: "Downtown", blurb: "Big avenues with lights and one-way streets in between." },
+  high_density: { icon: "🚗", title: "Packed town", blurb: "Almost more cars than the lights can handle." },
 };
 
 export function town(name: string): Town {

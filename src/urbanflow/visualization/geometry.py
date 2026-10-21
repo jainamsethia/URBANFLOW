@@ -29,7 +29,8 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from urbanflow.core import constants as C
-from urbanflow.core.types import FloatArray, IntersectionKind, TurnKind, VehicleClass
+from urbanflow.core.types import DriveSide, FloatArray, IntersectionKind, TurnKind, VehicleClass
+from urbanflow.engine.transit import TransitStops
 from urbanflow.geometry import offset_polyline
 from urbanflow.network.compiled import CompiledNetwork
 
@@ -137,6 +138,13 @@ class StopLines(_Columns):
     path: list[Path]
 
 
+class BusStops(_Columns):
+    """Transit stops: a marker on the curb side of the stop lane where the bus front stops."""
+
+    id: list[str] = Field(default_factory=list)
+    position: list[Point] = Field(default_factory=list)
+
+
 class RenderVehicleType(_Model):
     """A vehicle type as drawn by clients (``vehicles_added.types[]`` index this list)."""
 
@@ -165,6 +173,8 @@ class RenderGeometry(_Model):
     lane_markings: LaneMarkings
     stop_lines: StopLines
     vehicle_types: list[RenderVehicleType]
+    bus_stops: BusStops = Field(default_factory=BusStops)
+    """Transit stops of the scenario (empty unless given to :func:`render_geometry`)."""
 
 
 # --------------------------------------------------------------------------- helpers
@@ -317,8 +327,19 @@ def _stop_lines(net: CompiledNetwork) -> StopLines:
     )
 
 
-def render_geometry(net: CompiledNetwork) -> RenderGeometry:
-    """The :class:`RenderGeometry` of ``net`` (see the module docstring for the contents)."""
+def _bus_stops(net: CompiledNetwork, stops: TransitStops | None) -> BusStops:
+    if stops is None or not len(stops):
+        return BusStops()
+    xy, heading = net.point_at(stops.lane, stops.pos)
+    away = net.link_width[stops.lane].astype(np.float64) / 2 + C.BUS_STOP_MARKER_OFFSET
+    curb = 1.0 if net.drive_side is DriveSide.right else -1.0
+    normal = np.column_stack((np.sin(heading), -np.cos(heading))) * curb
+    return BusStops(id=list(stops.ids), position=_path(xy + normal * away[:, None]))
+
+
+def render_geometry(net: CompiledNetwork, stops: TransitStops | None = None) -> RenderGeometry:
+    """The :class:`RenderGeometry` of ``net`` (see the module docstring for the contents),
+    with the transit ``stops`` of a scenario as ``bus_stops``."""
     roads, markings = _roads_and_markings(net)
     return RenderGeometry(
         geometry_crc=net.geometry_crc,
@@ -337,4 +358,5 @@ def render_geometry(net: CompiledNetwork) -> RenderGeometry:
             )
             for t in net.vehicle_types
         ],
+        bus_stops=_bus_stops(net, stops),
     )

@@ -209,6 +209,8 @@ OPPOSING_MIN_ANGLE: Final = math.radians(135.0)  # rad; approaches pair into an 
 STOP_DWELL: Final = 20.0  # s; default transit dwell (E.7 Stop)
 STOP_END_CLEARANCE: Final = 1.0  # m; stop position <= lane length - 1 m (E807)
 STOP_NEAR_LINE_DISTANCE: Final = 50.0  # m; W306 threshold
+STOP_REACH: Final = 1.0  # m; a halting bus front this close to its stop dwells (G.1)
+BUS_STOP_MARKER_OFFSET: Final = 1.0  # m beyond the curb edge of the stop lane (render)
 
 # --------------------------------------------------------------------------- signals (E.7, H)
 PHASE_DURATION: Final = 30.0  # s; default fixed-time green
@@ -317,6 +319,17 @@ CORRIDOR_MAIN_SHARE: Final = 0.6  # share of effective green for the main street
 CORRIDOR_MAIN_RATE: Final = 900.0  # veh/h entering at each main-street end
 CORRIDOR_SIDE_RATE: Final = 200.0  # veh/h entering from each side-street end
 EMERGENCY_TIMES: Final = (300.0, 1200.0, 2100.0)  # s; emergency generator departures (E.10)
+TRANSIT_HEADWAY: Final = 300.0  # s between buses of a transit-generator line (E.10)
+TRANSIT_STOP_POSITION: Final = 30.0  # m; far-side stop position after each junction
+DOWNTOWN_ROWS: Final = 6  # downtown generator (E.10): junction rows
+DOWNTOWN_COLS: Final = 8  # junction columns
+DOWNTOWN_BLOCK: Final = 120.0  # m between junctions
+DOWNTOWN_AVENUE_EVERY: Final = 3  # every 3rd row / column is a two-way avenue
+DOWNTOWN_AVENUE_LANES: Final = 3  # lanes per direction on avenues
+DOWNTOWN_OD_RATE: Final = 2000.0  # veh/h total; 4000 gridlocks the default fixed-time signals
+DOWNTOWN_CORE_SHARE: Final = 0.3  # share of the demand ending on core streets
+DOWNTOWN_MAX_OD_PAIRS: Final = 200  # sampled origin/destination pairs at most
+HIGH_DENSITY_SATURATION: Final = 0.95  # v/c of every grid entry (E.10)
 RUSH_HOUR_DURATION: Final = 7200.0  # s; rush_hour generator (E.10)
 RUSH_HOUR_PEAK_TIME: Final = 3600.0  # s
 RUSH_HOUR_PEAK_WIDTH: Final = 1800.0  # s; half-width of the triangular peak

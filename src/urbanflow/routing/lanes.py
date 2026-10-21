@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from urbanflow.core.types import IntArray
 from urbanflow.network.compiled import CompiledNetwork
 
-__all__ = ["plan_connector", "valid_mask"]
+__all__ = ["feeding_lanes", "plan_connector", "valid_mask"]
 
 
 def valid_mask(net: CompiledNetwork, road: int, next_road: int) -> int:
@@ -18,6 +18,17 @@ def valid_mask(net: CompiledNetwork, road: int, next_road: int) -> int:
     if next_road < 0:
         return (1 << int(net.road_n_lanes[road])) - 1
     return net.road_pair_mask.get((road, next_road), 0)
+
+
+def feeding_lanes(net: CompiledNetwork, road: int, next_road: int, to_lane: int) -> int:
+    """Bit ``k`` set iff lane ``k`` of ``road`` has a connector to lane link ``to_lane`` of
+    ``next_road``."""
+    bits = 0
+    for c in net.road_pair_conns.get((road, next_road), ()):
+        k = c - net.n_lanes
+        if int(net.conn_to_lane[k]) == to_lane:
+            bits |= 1 << int(net.link_lane_index[net.conn_from_lane[k]])
+    return bits
 
 
 def plan_connector(

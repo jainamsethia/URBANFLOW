@@ -153,3 +153,23 @@ def test_session_router(client: TestClient) -> None:
     assert r.status_code == 201
     bad = client.post(f"{API}/sessions", json={"scenario": "grid_3x3", "router": "teleport"})
     assert bad.status_code == 422
+
+
+def test_bus_stops_and_bus_details(client: TestClient) -> None:
+    r = client.post(f"{API}/sessions", json={"scenario": "transit", "seed": 0})
+    assert r.status_code == 201
+    sid = r.json()["id"]
+    stops = client.get(f"{API}/sessions/{sid}/geometry").json()["bus_stops"]
+    assert len(stops["id"]) == len(stops["position"]) == 10  # 2 lines x 5 stops
+    with client.websocket_connect(f"{API}/ws/sessions/{sid}") as ws:
+        assert ws.receive_json()["type"] == "hello"
+        ws.send_json({"type": "step", "n": 20})
+        ws.send_json({"type": "select", "kind": "vehicle", "id": "bus_fwd.0"})
+        for _ in range(400):
+            msg = ws.receive()
+            sel = json.loads(msg["text"]) if msg.get("text") else {}
+            if sel.get("type") == "selection":
+                break
+        detail = sel["detail"]
+        assert detail["vclass"] == "bus" and detail["next_stop"].startswith("bus_fwd.")
+        assert detail["dwell_left"] >= 0

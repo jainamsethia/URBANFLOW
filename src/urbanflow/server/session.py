@@ -365,7 +365,7 @@ class Session:
                 for k in (
                     "type", "vclass", "status", "road", "lane", "speed", "desired_speed",
                     "acceleration", "waiting_time", "stops", "distance", "travel_time",
-                    "destination", "route", "route_index",
+                    "destination", "route", "route_index", "next_stop", "dwell_left",
                 )
             }  # fmt: skip
             return {
