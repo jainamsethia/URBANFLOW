@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { BLANK_MAP, Editor, type Draft } from "./components/Editor";
 import { Help } from "./components/Help";
 import { MapCanvas, type Pick, type VehicleColoring } from "./components/MapCanvas";
 import { EventLog, MoodCard, RacePanel, SelectionCard, StatTiles, TechnicalDetails, fmt } from "./components/Panels";
@@ -83,6 +84,7 @@ export default function App() {
   const [hint, setHint] = useState(true);
   const [help, setHelp] = useState(false);
   const [fatal, setFatal] = useState<string | null>(null);
+  const [editing, setEditing] = useState<{ draft: Draft; name: string } | null>(null);
   const snap = useSnapshot(ctl);
 
   const refreshScenarios = useCallback(() => api.scenarios().then(setScenarios), []);
@@ -156,10 +158,36 @@ export default function App() {
   const helpPanel = help && meta ? <Help controllers={meta.controllers} onClose={() => setHelp(false)} /> : null;
   if (fatal) return <div className="p-8 text-lg text-red-700">Cannot reach the UrbanFlow server. Is it running? ({fatal})</div>;
   if (!meta) return <div className="p-8 text-lg text-slate-500">🚦 Loading…</div>;
+  if (editing)
+    return (
+      <Editor
+        meta={meta}
+        initial={editing.draft}
+        initialName={editing.name}
+        onExit={() => {
+          setEditing(null);
+          refreshScenarios().catch(() => {});
+        }}
+        onRun={(name) => {
+          api.createSession({ scenario: name, source: "workspace" })
+            .then((s) => {
+              setEditing(null);
+              setSession(s);
+            })
+            .catch((e) => setFatal(String(e)));
+        }}
+      />
+    );
+  const openEditor = (map: ScenarioRef | null) => {
+    if (!map) return setEditing({ draft: BLANK_MAP, name: "my-map" });
+    api.scenarioDoc(map.source, map.name)
+      .then((doc) => setEditing({ draft: doc as unknown as Draft, name: map.source === "workspace" ? map.name : `${map.name}-copy` }))
+      .catch((e) => setFatal(String(e)));
+  };
   if (!session)
     return (
       <>
-        <StartScreen meta={meta} scenarios={scenarios} onCreated={setSession} onScenariosChanged={refreshScenarios} onHelp={() => setHelp(true)} />
+        <StartScreen meta={meta} scenarios={scenarios} onCreated={setSession} onScenariosChanged={refreshScenarios} onHelp={() => setHelp(true)} onEdit={openEditor} />
         {helpPanel}
       </>
     );

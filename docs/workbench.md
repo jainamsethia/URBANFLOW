@@ -37,6 +37,32 @@ Problems are shown in plain words with the exact place in the file; anything con
 approximately is listed after the import. *Advanced options* holds the random seed and the
 saved recordings (watch or download).
 
+## Draw your own map
+
+*✏️ Draw your own map* on the start screen opens the map editor on an empty map; *✏️ Edit*
+on any map opens it (a bundled map is saved as a copy, `<name>-copy`).
+
+- **Tools**: *👆 Select / move* (click to select, drag a junction to move it), *🛣️ Draw
+  road* (click junctions or empty ground one after the other: each click adds a road both
+  ways with the chosen number of lanes; Esc stops), *📍 Add junction* and *🧽 Erase*. Scroll
+  to zoom, drag the ground to pan; positions snap to 5 m.
+- **A junction**: its type (automatic, traffic light, give way, no control, or an edge of
+  the map where cars enter and leave; automatic picks edge for a dead end, no control for a
+  plain bend and a traffic light otherwise), and for lights the strategy and green time.
+- **A road**: lanes and speed limit; remove one direction or both.
+- **Traffic**: flows from an edge of the map to another, in cars per hour, editable.
+- **Problems**: what still stops the map from running, in plain words; click one to select
+  the junction or road it is about. *Save* and *▶ Try it* (save, then run it) work once
+  there are none.
+- *↶ Undo* / *↷ Redo* (Ctrl+Z / Ctrl+Y), and *{ } JSON* to see or paste the whole scenario
+  document.
+
+Every change is an editor operation that the server applies and validates
+(`POST /api/v1/scenarios/ops` with `{"scenario": ..., "ops": [...]}`: the result, whether it
+is valid and its issues; `POST /api/v1/scenarios/generate` returns a generated map to start
+from), so the map you see is exactly what will run. The operations are listed in the
+[Python API](python-api.md#editing-operations).
+
 ## While it runs
 
 - **Controls**: Play / Pause (Space), speed (slow, normal, fast, as fast as possible),

@@ -132,10 +132,20 @@ export const api = {
     call<{ summary: Record<string, number | null>; history: Record<string, (number | null)[]> }>(`/sessions/${id}/summary`),
   compare: (body: Record<string, unknown>) =>
     call<CompareResult>("/compare", { method: "POST", body: JSON.stringify(body) }),
+  ops: (scenario: unknown, ops: Record<string, unknown>[]) =>
+    call<OpsResult>("/scenarios/ops", { method: "POST", body: JSON.stringify({ scenario, ops }) }),
+  scenarioDoc: (source: string, name: string) => call<Record<string, unknown>>(`/scenarios/${source}/${encodeURIComponent(name)}`),
   importScenario: (body: Record<string, unknown>) =>
     call<ImportResult>("/scenarios/import", { method: "POST", body: JSON.stringify(body) }),
   deleteScenario: (name: string) => call<void>(`/scenarios/${encodeURIComponent(name)}`, { method: "DELETE" }),
 };
+
+export interface OpsResult {
+  scenario: Record<string, unknown>;
+  valid: boolean;
+  issues: ImportIssue[];
+  created: { op_index: number; kind: string; id: string }[];
+}
 
 export interface ImportIssue {
   path: string;

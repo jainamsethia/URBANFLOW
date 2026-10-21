@@ -99,6 +99,24 @@ class SessionCreate(BaseModel):
         return self
 
 
+class ScenarioOps(BaseModel):
+    """``POST /scenarios/ops``: editor operations on a scenario document (maybe a draft)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    scenario: dict[str, Any]
+    ops: list[dict[str, Any]] = Field(default_factory=list, max_length=1000)
+
+
+class ScenarioGenerate(BaseModel):
+    """``POST /scenarios/generate``: a generated scenario document (not saved)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    generator: str = Field(min_length=1, max_length=64)
+    params: dict[str, Any] = Field(default_factory=dict)
+
+
 class ScenarioImport(BaseModel):
     """``POST /scenarios/import``: a scenario document or CityFlow files, saved by name."""
 
@@ -329,6 +347,28 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
     @app.post(f"{API}/scenarios/import", status_code=201)
     async def import_scenario(req: ScenarioImport) -> dict[str, Any]:
         return await asyncio.to_thread(_import, req)
+
+    @app.post(f"{API}/scenarios/ops")
+    def scenario_ops(req: ScenarioOps) -> dict[str, Any]:
+        """Apply the operations (all or nothing; 422 naming ``ops[i]...``), then validate
+        the result: its issues come back with it, so a draft can be saved only once valid."""
+        from urbanflow.scenario.ops import apply_ops
+        from urbanflow.scenario.validate import validate_data
+
+        result = apply_ops(req.scenario, req.ops)
+        report = validate_data(result.data)
+        return {
+            "scenario": result.data,
+            "valid": report.ok,
+            "issues": [i.to_dict() for i in report.issues],
+            "created": result.created,
+        }
+
+    @app.post(f"{API}/scenarios/generate")
+    def generate_scenario(req: ScenarioGenerate) -> dict[str, Any]:
+        from urbanflow import generate
+
+        return {"scenario": generate(req.generator, req.params).to_dict()}
 
     @app.delete(f"{API}/scenarios/{{name}}", status_code=204)
     def delete_scenario(name: str) -> Response:

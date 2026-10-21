@@ -4,12 +4,15 @@ Entities live in insertion-ordered dicts keyed by id. Methods return ``self``, v
 their arguments with ``pydantic.validate_call`` and do only local checks (duplicate or
 unknown ids); each problem raises a single-issue
 :class:`~urbanflow.core.errors.ScenarioValidationError`. :meth:`ScenarioBuilder.build`
-runs the full validation. ponytail: the editor-op surface (``apply``, ``OPS`` and the
-op-only methods) lands with ``scenario/ops.py`` in P14 (plan U.3).
+runs the full validation. :meth:`ScenarioBuilder.from_data` and
+:meth:`ScenarioBuilder.to_data` work on *drafts*: scenario documents that need not be valid
+yet (an editor's map with no road), checked entity by entity; :mod:`urbanflow.scenario.ops`
+applies editor operations through them.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import functools
 import inspect
 from collections.abc import Callable, Iterator, Mapping, Sequence
@@ -82,6 +85,18 @@ def _entity[M: BaseModel](model: type[M], data: Mapping[str, Any]) -> M:
         return model.model_validate(data)
     except ValidationError as exc:
         raise ScenarioValidationError(issues_from_pydantic(exc, root=model)) from None
+
+
+def _entity_at[M: BaseModel](model: type[M], data: Any, where: str) -> M:
+    """:func:`_entity` with the entity's place in the document prefixed to issue paths."""
+    try:
+        return _entity(model, data if isinstance(data, Mapping) else {})
+    except ScenarioValidationError as exc:
+        issues = [
+            dataclasses.replace(i, path=where if i.path in ("", "$") else f"{where}.{i.path}")
+            for i in exc.issues
+        ]
+        raise ScenarioValidationError(issues) from None
 
 
 def _set(**values: Any) -> dict[str, Any]:
@@ -175,6 +190,90 @@ class ScenarioBuilder:
         builder._trips = {t.id: t for t in spec.demand.trips}
         builder._transit = {t.id: t for t in spec.demand.transit}
         return builder
+
+    @classmethod
+    def from_data(cls, data: Mapping[str, Any]) -> Self:
+        """A builder from a scenario document that may be incomplete (a draft): every
+        entity is validated on its own; ``ScenarioValidationError`` with document paths
+        (``network.roads[2].lanes``) otherwise. The whole-document rules (at least one road,
+        references, ...) are left to :func:`~urbanflow.scenario.validate.validate_data`."""
+        meta = data.get("meta") or {}
+        builder = cls(str(meta.get("name") or "draft"))
+        builder._meta = _entity_at(MetaSpec, meta, "meta")
+        simulation = dict(data.get("simulation") or {})
+        _entity_at(SimulationSpec, simulation, "simulation")
+        builder._simulation = simulation
+        network = dict(data.get("network") or {})
+        intersections = network.pop("intersections", None) or []
+        roads = network.pop("roads", None) or []
+        builder._network = network
+        demand = data.get("demand") or {}
+        tables: list[tuple[dict[str, Any], type[BaseModel], str, list[Any]]] = [
+            (builder._intersections, IntersectionSpec, "network.intersections", intersections),
+            (builder._roads, RoadSpec, "network.roads", roads),
+            (
+                builder._vehicle_types,
+                VehicleTypeSpec,
+                "vehicle_types",
+                data.get("vehicle_types") or [],
+            ),
+            (builder._flows, FlowSpec, "demand.flows", demand.get("flows") or []),
+            (builder._trips, TripSpec, "demand.trips", demand.get("trips") or []),
+            (builder._transit, TransitLineSpec, "demand.transit", demand.get("transit") or []),
+        ]
+        for table, model, where, items in tables:
+            for k, item in enumerate(items):
+                entity = _entity_at(model, item, f"{where}[{k}]")
+                table[str(getattr(entity, "id"))] = entity  # noqa: B009 (typed as BaseModel)
+        return builder
+
+    def to_data(self) -> dict[str, Any]:
+        """The declared document as JSON-ready data, without the whole-document checks
+        (so a draft with no road yet can be stored and edited)."""
+        major, minor = CURRENT_VERSION
+
+        def dump(entity: BaseModel) -> Any:
+            return entity.model_dump(mode="json", by_alias=True, exclude_unset=True)
+
+        data: dict[str, Any] = {
+            "format": FORMAT,
+            "version": f"{major}.{minor}",
+            "meta": dump(self._meta),
+        }
+        if self._simulation:
+            data["simulation"] = dict(self._simulation)
+        data["network"] = {
+            **self._network,
+            "intersections": [dump(ix) for ix in self._intersections.values()],
+            "roads": [dump(r) for r in self._roads.values()],
+        }
+        if self._vehicle_types:
+            data["vehicle_types"] = [dump(v) for v in self._vehicle_types.values()]
+        demand = {
+            key: [dump(x) for x in table.values()]
+            for key, table in (
+                ("flows", self._flows),
+                ("trips", self._trips),
+                ("transit", self._transit),
+            )
+            if table
+        }
+        if demand:
+            data["demand"] = demand
+        return data
+
+    def metadata(self, **fields: Any) -> Self:
+        """Change the scenario's name, description or tags."""
+        merged = {**self._meta.model_dump(exclude_unset=True), **_set(**fields)}
+        self._meta = _entity(MetaSpec, merged)
+        return self
+
+    def unset(self, kind: EntityKind, id: str, /, *fields: str) -> Self:
+        """Drop fields of an entity so they are derived again (an intersection's kind)."""
+        current: BaseModel = self._get(kind, id)
+        data = {k: v for k, v in current.model_dump(exclude_unset=True).items() if k not in fields}
+        self._table(kind)[id] = _entity(_MODELS[kind], data)
+        return self
 
     # ------------------------------------------------------------------ helpers
     def _table(self, kind: str) -> dict[str, Any]:

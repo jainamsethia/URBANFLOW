@@ -41,12 +41,15 @@ export function StartScreen({
   onCreated,
   onScenariosChanged,
   onHelp,
+  onEdit,
 }: {
   meta: Meta;
   scenarios: ScenarioRef[];
   onCreated: (s: SessionInfo) => void;
   onScenariosChanged: () => Promise<void>;
   onHelp: () => void;
+  /** Open the editor on a map (``null``: a new, empty map). */
+  onEdit: (map: ScenarioRef | null) => void;
 }) {
   const bundled = TOWN_ORDER.flatMap((n) => scenarios.filter((s) => s.source === "bundled" && s.name === n));
   const otherBundled = scenarios.filter((s) => s.source === "bundled" && !TOWN_ORDER.includes(s.name));
@@ -105,12 +108,15 @@ export function StartScreen({
           <div className="mt-2 font-semibold text-slate-900">{t.title}</div>
           <div className="text-sm text-slate-600">{t.blurb}</div>
         </button>
-        {s.source === "workspace" && (
-          <div className="flex gap-3 px-4 pb-3 text-xs">
-            <a className="text-sky-700 underline" href={downloads.scenario("workspace", s.name)}>Download</a>
-            <button className="text-red-700 underline" onClick={() => remove(s.name)}>Remove</button>
-          </div>
-        )}
+        <div className="flex gap-3 px-4 pb-3 text-xs">
+          <button className="text-sky-700 underline" onClick={() => onEdit(s)} title={s.source === "workspace" ? "Change this map" : "Change a copy of this map"}>✏️ Edit</button>
+          {s.source === "workspace" && (
+            <>
+              <a className="text-sky-700 underline" href={downloads.scenario("workspace", s.name)}>Download</a>
+              <button className="text-red-700 underline" onClick={() => remove(s.name)}>Remove</button>
+            </>
+          )}
+        </div>
       </div>
     );
   };
@@ -147,6 +153,11 @@ export function StartScreen({
               </div>
             )}
           </div>
+          <button onClick={() => onEdit(null)} className="rounded-2xl border-2 border-dashed border-slate-300 bg-white/60 p-4 text-left hover:border-sky-400">
+            <div className="text-3xl" aria-hidden>✏️</div>
+            <div className="mt-2 font-semibold text-slate-900">Draw your own map</div>
+            <div className="text-sm text-slate-600">Place junctions, connect them with roads, choose the lights and the traffic.</div>
+          </button>
           <button onClick={() => setImporting(true)} className="rounded-2xl border-2 border-dashed border-slate-300 bg-white/60 p-4 text-left hover:border-sky-400">
             <div className="text-3xl" aria-hidden>⬆️</div>
             <div className="mt-2 font-semibold text-slate-900">Import your own map</div>

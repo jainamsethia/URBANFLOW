@@ -45,6 +45,9 @@ replays and a web workbench.
 - **RL**: `TrafficSignalEnv` (Gymnasium) and `TrafficSignalParallelEnv` (PettingZoo), with
   action masks, several rewards, and random / fixed-cycle / max-pressure / tabular-Q
   baselines.
+- **Map editor** in the workbench: draw junctions and roads, choose lights, lanes, speed
+  limits and traffic, see what still has to be fixed, then save and run; scripted edits use
+  the same operations (`urbanflow.scenario.ops.apply_ops`).
 - **Web workbench** in plain language: pick a map (or import your own), the traffic-light
   strategy and the amount of traffic; a live map with cars, buses and flashing ambulances,
   clickable cars (route ahead) and traffic lights (manual control), a traffic "mood", live
@@ -52,8 +55,7 @@ replays and a web workbench.
   and keyboard shortcuts.
 - **Snapshots** (save/restore any state) and **state digests** for bit-exact reproducibility.
 
-Not built yet (planned): the visual scenario editor, experiment dashboards in the
-workbench and the benchmark suite.
+Not built yet (planned): experiment dashboards in the workbench and the benchmark suite.
 
 ## Quick start with Docker (no Python or Node needed)
 

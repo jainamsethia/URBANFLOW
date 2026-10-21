@@ -26,6 +26,56 @@ assert same.content_hash == scenario.content_hash
 | `name`, `content_hash`, `short_hash`, `issues` | identity and load warnings |
 | `save(path, resolved=False)`, `to_dict()`, `to_json()`, `edit()`, `summary()` | output and editing |
 
+## Editing operations
+
+`urbanflow.scenario.ops.apply_ops(document, ops)` applies a list of editor operations to a
+scenario document, all or nothing, and returns the new document and the ids it created. The
+document may be a draft (a map with no road yet); check the result with
+`urbanflow.scenario.validate.validate_data`.
+
+```python
+from urbanflow.scenario.ops import apply_ops
+from urbanflow.scenario.validate import validate_data
+
+blank = {
+    "format": "urbanflow.scenario",
+    "version": "1.0",
+    "meta": {"name": "drawn"},
+    "network": {"intersections": [], "roads": []},
+}
+result = apply_ops(
+    blank,
+    [
+        {"op": "add_intersection", "point": [-200, 0]},
+        {"op": "add_intersection", "point": [0, 0]},
+        {"op": "add_intersection", "point": [200, 0]},
+        {"op": "add_road", "from": "J1", "to": "J2", "lanes": 2},  # and J2_J1 back
+        {"op": "add_road", "from": "J2", "to": "J3", "lanes": 2},
+        {"op": "set_controller", "intersection": "J2", "controller": "max_pressure"},
+        {"op": "add_flow", "origin": "J1_J2", "destination": "J2_J3", "rate": 400},
+    ],
+)
+assert [c["id"] for c in result.created][:3] == ["J1", "J2", "J3"]
+assert validate_data(result.data).ok
+```
+
+| operation | fields |
+|---|---|
+| `add_intersection` | `point`, optional `id` (default `J{n}`), `kind` (default derived) |
+| `move_intersection` | `id`, `point` (straight roads follow) |
+| `update_intersection` | `id`, `kind` (`auto` derives it again; leaving `signalized` drops the signal) |
+| `delete_intersection` | `id` (its roads too; flows using them are left for validation to report) |
+| `add_road` | `from`, `to`, `lanes` (1), `speed_limit`, `bidirectional` (true), optional `id` |
+| `update_road` / `delete_road` | `id`, `lanes`, `speed_limit`, `name` / `id` |
+| `set_controller` | `intersection`, `controller`, `params` (makes it signalised) |
+| `set_signal_timing` | `intersection`, `green` (every phase), `yellow`, `all_red` |
+| `add_flow` / `update_flow` / `delete_flow` | `origin`, `destination`, `rate` (veh/h), `arrival`, `begin`, `end`, `vehicle_type`, optional `id` |
+| `set_simulation` / `set_metadata` | `duration`, `dt`, `seed` / `name`, `description` |
+
+An invalid operation raises `ScenarioValidationError` with paths such as `ops[3].lanes`, and
+the document is unchanged. Only these operations exist: nothing is looked up or executed by
+name.
+
 ## Deep validation: `urbanflow.check`
 
 ```python
