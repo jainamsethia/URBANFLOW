@@ -55,8 +55,11 @@ replays and a web workbench.
   numbers, strategy comparison with medals, recording, CSV/JSON downloads, a help panel
   and keyboard shortcuts.
 - **Snapshots** (save/restore any state) and **state digests** for bit-exact reproducibility.
+- **Benchmarks**: `urbanflow benchmark` measures steps/s, vehicles per second, real-time
+  factor and memory on fixed grid workloads (1 to 144 junctions), one fresh process per
+  repeat, with a determinism check and `--compare` against a baseline.
 
-Not built yet (planned): the benchmark suite.
+Not built yet (planned): the optional numba backend (`accel="numba"`).
 
 ## Quick start with Docker (no Python or Node needed)
 

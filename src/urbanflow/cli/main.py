@@ -150,6 +150,7 @@ def state(ctx: typer.Context) -> CliState:
 
 def _register_commands() -> None:
     from urbanflow.cli.commands import (
+        benchmark,
         compare,
         doctor,
         experiment,
@@ -173,6 +174,7 @@ def _register_commands() -> None:
         replay,
         compare,
         experiment,
+        benchmark,
         serve,
         doctor,
     ):

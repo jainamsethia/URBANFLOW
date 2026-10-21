@@ -1,0 +1,28 @@
+name: Benchmark
+
+# Not a gate: shared runners are too noisy to fail a build on speed. The JSON report is
+# kept as an artifact so numbers can be compared over time on the same runner type.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quick:
+    name: Quick benchmark (ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          python-version: "3.13"
+      - run: uv sync --locked
+      - run: uv run urbanflow benchmark grid_scaling --quick --repeat 3 -o bench-grid.json
+      - run: uv run urbanflow benchmark overhead --quick --repeat 3 -o bench-overhead.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: benchmark-${{ github.run_id }}
+          path: bench-*.json

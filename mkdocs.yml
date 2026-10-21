@@ -49,5 +49,6 @@ nav:
   - Web workbench: workbench.md
   - Python API: python-api.md
   - Command line: cli.md
+  - Benchmarking: benchmarking.md
   - Troubleshooting: troubleshooting.md
   - Contributing: contributing.md

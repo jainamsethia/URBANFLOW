@@ -8,6 +8,7 @@ Reordering members is therefore a format change; ``tests/unit/core/test_types.py
 
 from __future__ import annotations
 
+import functools
 from enum import StrEnum
 from typing import Any, Final, Self
 
@@ -39,13 +40,19 @@ Handle = int
 """A reusable VehicleTable slot. Never leaves L4/L5 internals; external identity is the uid."""
 
 
+@functools.cache
+def _codes(cls: type[StrEnum]) -> dict[str, int]:
+    """Member name -> code (definition order) of a coded enum, built once per class."""
+    return {m._name_: i for i, m in enumerate(cls)}
+
+
 class _CodedEnum(StrEnum):
     """A ``StrEnum`` whose members also carry a stable ``u8`` code (definition order)."""
 
     @property
     def code(self) -> int:
         """The integer stored in compiled/runtime arrays for this member."""
-        return list(type(self)).index(self)
+        return _codes(type(self))[self._name_]
 
     @classmethod
     def from_code(cls, code: int) -> Self:

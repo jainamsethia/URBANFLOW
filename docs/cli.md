@@ -29,6 +29,9 @@ Results go to stdout; logs, progress and errors go to stderr. `NO_COLOR` is resp
 | 5 | not found (file, generator, bundled scenario) |
 | 6 | simulation error (a feature not available yet, lifecycle misuse) |
 | 7 | invariant violation (`--debug-checks`) |
+| 8 | replay file invalid |
+| 9 | optional dependency missing (`pip install "urbanflow[...]"`) |
+| 10 | `benchmark --compare`: a case got slower than the baseline |
 | 130 | interrupted |
 
 ## Scenarios
@@ -250,6 +253,25 @@ uv run urbanflow experiment run examples/experiment_comparison/controllers.json 
   are listed as missing.
 - `export ID [-o DIR] [--format csv|json]`: `<name>-<id>-runs.<fmt>` (one row per run with
   every summary metric) and `<name>-<id>-comparison.<fmt>`.
+
+### `urbanflow benchmark [TARGET...]`
+
+Measures simulation speed on fixed workloads; see [Benchmarking](benchmarking.md).
+`TARGET` is a suite (`grid_scaling`, the default, `vehicle_sweep`, `overhead`) or a
+scenario file; several may be given.
+
+- `--list`: the suites, their cases and this machine's key.
+- `--quick`: 60 s warm-up and 300 s timed per case (else 300 s and 1500 s).
+- `--repeat N` (5): repeats per case, each in a fresh process; `--case NAME` (repeatable)
+  measures only those cases.
+- `-o FILE`: write the JSON report; `--json`: print only the report.
+- `--compare BASELINE.json [--threshold 0.10]`: exit 10 when a case's median
+  vehicle-steps/s fell by more than the threshold with non-overlapping quartiles.
+- `--profile DIR`: a cProfile file of each case's timed loop.
+
+```bash
+urbanflow benchmark grid_scaling --quick --case g4 --case g8 --repeat 3
+```
 
 ## Workbench
 
